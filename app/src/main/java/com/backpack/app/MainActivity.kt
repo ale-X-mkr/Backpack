@@ -56,6 +56,7 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.location.LocationComponentActivationOptions
 import org.maplibre.android.location.LocationComponentOptions
+import org.maplibre.android.location.OnLocationCameraTransitionListener
 import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
@@ -171,16 +172,25 @@ class MainActivity : AppCompatActivity() {
     private val backdropColor by lazy { ContextCompat.getColor(this, R.color.rg_control_backdrop) }
 
     private val locationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val fine = result[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseOnly = !fine && result[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (fine) {
             LocationHub.acquire(this, LocationHub.LEASE_UI)
             map?.style?.let { activateLocationPuck(it) }
             if (!LocationHub.isGpsEnabled(this)) showError("GPS is off -- turn on Location")
+        } else if (coarseOnly) {
+            showError("Precise location needed -- GPS navigation can't work with approximate location")
         } else {
             showError("Location permission denied -- no position, no navigation")
         }
     }
+
+    /** Android 12+ only shows the dialog when FINE and COARSE are asked together. */
+    private fun requestLocationPermission() = locationPermissionLauncher.launch(
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+    )
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -196,6 +206,7 @@ class MainActivity : AppCompatActivity() {
         loadSettings()
         planner = RoutePlanner(this)
         layers = MapLayers(this)
+        NavigationEngine.warmUp(this)
 
         mapView = findViewById(R.id.map)
         statusStrip = findViewById(R.id.status_strip)
@@ -251,7 +262,7 @@ class MainActivity : AppCompatActivity() {
         syncDrivingModeUI()
 
         if (!LocationHub.hasPermission(this)) {
-            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            requestLocationPermission()
         }
     }
 
@@ -261,6 +272,10 @@ class MainActivity : AppCompatActivity() {
         LocationHub.addListener(uiFixListener)
         NavigationEngine.addListener(navListener)
         if (LocationHub.hasPermission(this)) LocationHub.acquire(this, LocationHub.LEASE_UI)
+        if (navUiActive) {
+            handler.removeCallbacks(deadReckoningRunnable)
+            handler.postDelayed(deadReckoningRunnable, 1000L)
+        }
     }
 
     override fun onResume() {
@@ -418,7 +433,7 @@ class MainActivity : AppCompatActivity() {
         lastRealLocationAtMs = System.currentTimeMillis()
         if (plausible) {
             if (isGpsDegraded) clearGpsWarning()
-            if (puckActive()) map?.locationComponent?.forceLocationUpdate(location)
+            if (puckActive()) map?.locationComponent?.forceLocationUpdate(withHeading(location))
             if (currentMode == ModeUi.DRIVING) {
                 maybeQuerySpeedLimit(location)
                 updateSpeedSignDisplay(location)
@@ -430,6 +445,19 @@ class MainActivity : AppCompatActivity() {
             // and off-route detection keep using the last good fix.
             showGpsWarning()
         }
+    }
+
+    private var lastBearing: Float? = null
+
+    /** Near standstill GPS drops the bearing (reported as 0 = north), which
+     *  would spin the arrow and the map at every red light: keep the last one. */
+    private fun withHeading(location: Location): Location {
+        if (location.hasBearing() && location.hasSpeed() && location.speed > 0.7f) {
+            lastBearing = location.bearing
+            return location
+        }
+        val b = lastBearing ?: return location
+        return Location(location).apply { bearing = b }
     }
 
     private fun currentPosition(): LatLon? = LocationHub.lastGoodFix?.let { LatLon(it.latitude, it.longitude) }
@@ -451,13 +479,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun centerOnMyLocation() {
         if (!LocationHub.hasPermission(this)) {
-            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            requestLocationPermission()
             return
         }
         val m = map ?: return
         if (navUiActive && puckActive()) {
             // Back to following after the map was moved by hand.
-            m.locationComponent.cameraMode = CameraMode.TRACKING_GPS
+            followPosition(null)
             return
         }
         val current = LocationHub.lastGoodFix
@@ -697,7 +725,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (!LocationHub.hasPermission(this)) {
-            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            requestLocationPermission()
             return
         }
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -726,18 +754,25 @@ class MainActivity : AppCompatActivity() {
         handler.postDelayed(deadReckoningRunnable, 1000L)
 
         val m = map ?: return
-        if (puckActive()) {
-            val lc = m.locationComponent
-            lc.cameraMode = CameraMode.TRACKING_GPS
-            // Position arrow in the lower part of the screen: more road ahead.
-            lc.paddingWhileTracking(doubleArrayOf(0.0, resources.displayMetrics.heightPixels * 0.35, 0.0, 0.0))
-            lc.tiltWhileTracking(if (currentMode == ModeUi.DRIVING) 45.0 else 25.0)
-            if (first) {
-                lastTrackingZoom = 18.0
-                lc.zoomWhileTracking(18.0)
-            }
-        }
+        if (puckActive()) followPosition(if (first) 18.0 else null)
         NavigationEngine.lastProgress?.let { p -> NavigationEngine.route?.let { onNavProgress(p, it) } }
+    }
+
+    /** Camera follows the arrow, heading-up. Zoom and tilt are part of the
+     *  transition itself (MapLibre ignores them while a transition runs);
+     *  the arrow is moved to the lower part of the screen once it ends. */
+    private fun followPosition(zoom: Double?) {
+        val lc = map?.locationComponent ?: return
+        if (zoom != null) lastTrackingZoom = zoom
+        val tilt = if (currentMode == ModeUi.DRIVING) 45.0 else 25.0
+        lc.setCameraMode(CameraMode.TRACKING_GPS, 750L, zoom, null, tilt, object : OnLocationCameraTransitionListener {
+            override fun onLocationCameraTransitionFinished(cameraMode: Int) {
+                if (navUiActive) {
+                    lc.paddingWhileTracking(doubleArrayOf(0.0, resources.displayMetrics.heightPixels * 0.35, 0.0, 0.0))
+                }
+            }
+            override fun onLocationCameraTransitionCanceled(cameraMode: Int) {}
+        })
     }
 
     private fun stopNavigationUi() {
@@ -756,12 +791,14 @@ class MainActivity : AppCompatActivity() {
         navInstructionIcon.visibility = View.GONE
         navInstructionBar.visibility = View.GONE
         val m = map ?: return
-        if (puckActive()) {
+        if (puckActive() && m.locationComponent.cameraMode != CameraMode.NONE) {
+            // Padding can only be changed while still tracking.
+            m.locationComponent.paddingWhileTracking(doubleArrayOf(0.0, 0.0, 0.0, 0.0), 0L)
             m.locationComponent.cameraMode = CameraMode.NONE
-            m.locationComponent.paddingWhileTracking(doubleArrayOf(0.0, 0.0, 0.0, 0.0))
         }
         m.animateCamera(CameraUpdateFactory.newCameraPosition(
-            CameraPosition.Builder().target(m.cameraPosition.target).zoom(m.cameraPosition.zoom).bearing(0.0).tilt(0.0).build()
+            CameraPosition.Builder().target(m.cameraPosition.target).zoom(m.cameraPosition.zoom)
+                .bearing(0.0).tilt(0.0).padding(0.0, 0.0, 0.0, 0.0).build()
         ))
     }
 
@@ -1379,7 +1416,8 @@ class MainActivity : AppCompatActivity() {
     private fun buildRequest(from: LatLon, to: LatLon): RouteRequest = RouteRequest(
         from = from,
         to = to,
-        waypoints = TripState.waypoints.toList(),
+        // Mid-trip: stops already passed are not sent again.
+        waypoints = TripState.waypoints.drop(NavigationEngine.passedStops()),
         mode = currentMode.mode,
         preference = currentPreference.pref,
         avoidTolls = avoidTolls,

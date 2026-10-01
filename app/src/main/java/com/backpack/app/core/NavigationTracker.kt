@@ -100,7 +100,11 @@ class NavigationTracker(
 
         val remainingS = remainingSeconds(along, next)
 
-        if (!arrivedFlag && (toEnd < ARRIVE_RADIUS_M || (!isOff && remaining < ARRIVE_RADIUS_M))) {
+        // Near the end point AND near the end along the route: a round trip
+        // (start == destination) or a road passing close to the destination
+        // earlier must not count as arrival.
+        val nearEndAlong = !isOff && remaining < ARRIVE_ALONG_M
+        if (!arrivedFlag && ((toEnd < ARRIVE_RADIUS_M && nearEndAlong) || (!isOff && remaining < ARRIVE_RADIUS_M))) {
             arrivedFlag = true
             return Progress(snap, along, remaining, 0.0, -1, 0.0, null, false, stepAdvanced, false, true)
         }
@@ -175,6 +179,7 @@ class NavigationTracker(
     companion object {
         const val PASSED_MARGIN_M = 8.0
         const val ARRIVE_RADIUS_M = 25.0
+        const val ARRIVE_ALONG_M = 150.0
 
         fun lowerFirst(s: String): String =
             if (s.isEmpty()) s else s.substring(0, 1).lowercase() + s.substring(1)

@@ -196,6 +196,20 @@ class CoreTest {
         assertEquals(1, t.passedStops())
     }
 
+    @Test fun roundTripDoesNotArriveAtTheStart() {
+        // Out 1 km north and back: start == destination.
+        val pts = (0..10).map { Geo.project(origin, 0.0, it * 100.0) } +
+            (9 downTo 0).map { Geo.project(origin, 0.0, it * 100.0 + 0.5) }
+        val steps = listOf(
+            NavStep("Head north", Maneuver.DEPART, 1000.0, 100.0, 0, 10),
+            NavStep("Make a U-turn", Maneuver.UTURN, 1000.0, 100.0, 10, 20),
+            NavStep("Arrive", Maneuver.GOAL, 0.0, 0.0, 20, 20)
+        )
+        val t = NavigationTracker(RouteResult(pts, 2000.0, 200.0, steps = steps), TravelMode.WALKING, true)
+        assertFalse(t.update(fixAt(origin, 1.4f)).arrived)
+        assertFalse(t.update(fixAt(Geo.project(origin, 0.0, 10.0), 1.4f)).arrived)
+    }
+
     @Test fun spokenDistances() {
         assertEquals("300 meters", Speech.distance(312.0, true))
         assertEquals("40 meters", Speech.distance(38.0, true))

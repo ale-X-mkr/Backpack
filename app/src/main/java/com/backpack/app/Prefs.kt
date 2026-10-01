@@ -53,10 +53,13 @@ object Prefs {
         settings(c).getString(SettingsActivity.KEY_ORS_URL, "")?.trim()?.trimEnd('/')
             ?.ifEmpty { null } ?: DEFAULT_ORS_URL
 
-    /** Own key from Settings first, then the two built-in keys. */
+    /** Own key from Settings first, then the two built-in keys. The
+     *  built-in keys are only ever sent to openrouteservice.org itself,
+     *  never to a custom server set in Settings. */
     fun orsKeys(c: Context): List<String> {
         val own = settings(c).getString(SettingsActivity.KEY_ORS_KEY, "")?.trim().orEmpty()
-        return listOf(own, BuildConfig.ORS_KEY_1, BuildConfig.ORS_KEY_2).filter { it.isNotEmpty() }.distinct()
+        val builtIn = if (orsBaseUrl(c) == DEFAULT_ORS_URL) listOf(BuildConfig.ORS_KEY_1, BuildConfig.ORS_KEY_2) else emptyList()
+        return (listOf(own) + builtIn).filter { it.isNotEmpty() }.distinct()
     }
 
     fun routeOptions(c: Context): RouteOptions = RouteOptions.fromJson(toggles(c).getString(KEY_ROUTE_OPTIONS, null))

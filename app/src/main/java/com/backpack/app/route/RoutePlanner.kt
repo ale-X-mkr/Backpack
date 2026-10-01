@@ -67,6 +67,7 @@ class RoutePlanner(context: Context) {
         val lock = Any()
         var withTolls: Outcome? = null
         var withoutTolls: Outcome? = null
+        var finished = false
 
         fun tryFinish() {
             val wt: Outcome
@@ -74,6 +75,9 @@ class RoutePlanner(context: Context) {
             synchronized(lock) {
                 wt = withTolls ?: return
                 wo = withoutTolls ?: return
+                // Both answers can land at the same moment: deliver once.
+                if (finished) return
+                finished = true
             }
             val a = wt.routes?.firstOrNull()
             val b = wo.routes?.firstOrNull()
@@ -179,7 +183,10 @@ class RoutePlanner(context: Context) {
     fun geocode(text: String, focus: LatLon?, keyIndex: Int = 0, callback: GeocodeCallback) {
         val keys = Prefs.orsKeys(app)
         val encoded = java.net.URLEncoder.encode(text, "UTF-8")
-        val focusPart = focus?.let { "&focus.point.lat=${it.lat}&focus.point.lon=${it.lon}" } ?: ""
+        // Nearby results first, but only a ~1 km area is sent, not the exact position.
+        val focusPart = focus?.let {
+            "&focus.point.lat=%.2f&focus.point.lon=%.2f".format(java.util.Locale.ROOT, it.lat, it.lon)
+        } ?: ""
         val keyPart = keys.getOrNull(keyIndex)?.let { "&api_key=$it" } ?: ""
         val url = "${Prefs.orsBaseUrl(app)}/geocode/search?text=$encoded&size=1$focusPart$keyPart"
         http.newCall(Request.Builder().url(url).build()).enqueue(object : Callback {

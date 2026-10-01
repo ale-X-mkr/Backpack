@@ -12,6 +12,7 @@ import com.backpack.app.core.RouteResult
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.Layer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
@@ -67,41 +68,48 @@ class MapLayers(private val context: Context) {
         style.addSource(GeoJsonSource(SRC_PINS))
         style.addSource(GeoJsonSource(SRC_WARN))
 
+        // Keep everything under the position arrow: after a style change
+        // MapLibre has already put its location layers back before we get here.
+        val firstLocationLayer = style.layers.firstOrNull { it.id.startsWith("mapbox-location-") }?.id
+        fun add(layer: Layer) {
+            if (firstLocationLayer != null) style.addLayerBelow(layer, firstLocationLayer) else style.addLayer(layer)
+        }
+
         // Width grows with zoom so the line reads at city and motorway scale.
         fun width(base: Float) = Expression.interpolate(
             Expression.exponential(1.5f), Expression.zoom(),
             Expression.stop(8, base * 0.5f), Expression.stop(14, base), Expression.stop(18, base * 2.2f)
         )
-        style.addLayer(LineLayer(LAYER_ALT_CASING, SRC_ALT).withProperties(
+        add(LineLayer(LAYER_ALT_CASING, SRC_ALT).withProperties(
             PropertyFactory.lineColor(casing), PropertyFactory.lineWidth(width(9f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             PropertyFactory.lineOpacity(0.8f)
         ))
-        style.addLayer(LineLayer(LAYER_ALT, SRC_ALT).withProperties(
+        add(LineLayer(LAYER_ALT, SRC_ALT).withProperties(
             PropertyFactory.lineColor(alt), PropertyFactory.lineWidth(width(6f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
-        style.addLayer(LineLayer(LAYER_ROUTE_CASING, SRC_ROUTE).withProperties(
+        add(LineLayer(LAYER_ROUTE_CASING, SRC_ROUTE).withProperties(
             PropertyFactory.lineColor(casing), PropertyFactory.lineWidth(width(11f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
-        style.addLayer(LineLayer(LAYER_ROUTE, SRC_ROUTE).withProperties(
+        add(LineLayer(LAYER_ROUTE, SRC_ROUTE).withProperties(
             PropertyFactory.lineColor(primary), PropertyFactory.lineWidth(width(7f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
-        style.addLayer(SymbolLayer(LAYER_POI, SRC_POI).withProperties(
+        add(SymbolLayer(LAYER_POI, SRC_POI).withProperties(
             PropertyFactory.iconImage(Expression.get("icon")),
             PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
             PropertyFactory.iconAllowOverlap(true),
             PropertyFactory.iconIgnorePlacement(true)
         ))
-        style.addLayer(SymbolLayer(LAYER_PINS, SRC_PINS).withProperties(
+        add(SymbolLayer(LAYER_PINS, SRC_PINS).withProperties(
             PropertyFactory.iconImage(Expression.get("icon")),
             PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
             PropertyFactory.iconAllowOverlap(true),
             PropertyFactory.iconIgnorePlacement(true)
         ))
-        style.addLayer(SymbolLayer(LAYER_WARN, SRC_WARN).withProperties(
+        add(SymbolLayer(LAYER_WARN, SRC_WARN).withProperties(
             PropertyFactory.iconImage(ICON_WARN),
             PropertyFactory.iconAnchor(Property.ICON_ANCHOR_CENTER),
             PropertyFactory.iconOpacity(0.75f),

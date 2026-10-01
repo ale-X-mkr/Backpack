@@ -49,6 +49,7 @@ object NavigationEngine {
     private var request: RouteRequest? = null
     private var lastRerouteAtMs = 0L
     private var rerouting = false
+    private var arrived = false
 
     var isActive = false
         private set
@@ -118,19 +119,31 @@ object NavigationEngine {
         route = null
         lastProgress = null
         plan = null
+        pendingSpeech = null
         tts?.stop()
         for (l in listeners.toList()) l.onStopped()
     }
 
+    /** Intermediate stops already passed on the current route. */
+    fun passedStops(): Int = if (isActive) tracker?.passedStops() ?: 0 else 0
+
+    /** Start the voice engine early (it initialises asynchronously), so the
+     *  first instruction of the first trip is not lost. */
+    fun warmUp(context: Context) {
+        if (app == null) app = context.applicationContext
+        initTts(context.applicationContext)
+    }
+
     private fun setRoute(r: RouteResult) {
         route = r
+        arrived = false
         val c = app ?: return
         tracker = NavigationTracker(r, request?.mode ?: com.backpack.app.core.TravelMode.DRIVING, Prefs.useMetric(c))
         lastProgress = null
     }
 
     private fun onFix(location: Location) {
-        if (!isActive) return
+        if (!isActive || arrived) return
         val t = tracker ?: return
         val r = route ?: return
         val fix = Fix(
@@ -146,6 +159,8 @@ object NavigationEngine {
         for (l in listeners.toList()) l.onProgress(p, r)
 
         if (p.arrived) {
+            // Freeze on "Arrived" for the last 4 s instead of flickering back.
+            arrived = true
             speak("You have arrived")
             for (l in listeners.toList()) l.onArrived()
             main.postDelayed({ if (isActive && route === r) stop() }, 4000L)
@@ -187,6 +202,7 @@ object NavigationEngine {
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var pendingSpeech: String? = null
     private var focusRequest: AudioFocusRequest? = null
 
     private fun initTts(c: Context) {
@@ -209,12 +225,17 @@ object NavigationEngine {
                     @Deprecated("Deprecated in Java")
                     override fun onError(utteranceId: String?) = abandonFocus()
                 })
+                // Said while the voice was still starting up.
+                main.post { pendingSpeech?.let { pendingSpeech = null; if (isActive) speak(it) } }
             }
         }
     }
 
     fun speak(text: String) {
-        if (!ttsReady) return
+        if (!ttsReady) {
+            pendingSpeech = text
+            return
+        }
         requestFocus()
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "nav")
     }
