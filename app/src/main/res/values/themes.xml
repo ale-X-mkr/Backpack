@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.Backpack" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/backpack_ink</item>
+        <item name="colorPrimaryDark">@color/backpack_ink</item>
+        <item name="colorAccent">@color/backpack_accent</item>
+        <item name="android:windowBackground">@color/backpack_bg</item>
+        <item name="android:fontFamily">sans-serif-condensed</item>
+        <item name="fontFamily">sans-serif-condensed</item>
+    </style>
+</resources>

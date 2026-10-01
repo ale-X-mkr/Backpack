@@ -1,0 +1,8 @@
+<resources>
+    <!-- Technical/minimalist palette: neutral dark ink, off-white background, single restrained accent.
+         No mascot colors, no gradient/candy styling. -->
+    <color name="backpack_ink">#1A1D21</color>
+    <color name="backpack_bg">#B8BCC0</color>
+    <color name="backpack_accent">#2B6CB0</color>
+    <color name="backpack_text_secondary">#5A6169</color>
+</resources>

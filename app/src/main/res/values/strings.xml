@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Backpack</string>
+    <string name="locate_button_label">Center on my location</string>
+    <string name="mode_walk_label">Walking</string>
+    <string name="mode_bike_label">Cycling</string>
+    <string name="mode_car_label">Driving</string>
+    <string name="preference_fastest_label">Fastest</string>
+    <string name="preference_shortest_label">Shortest</string>
+    <string name="preference_recommended_label">Balanced</string>
+    <string name="avoid_tolls_label">Avoid tolls</string>
+    <string name="urgency_label">Time value mode</string>
+</resources>
