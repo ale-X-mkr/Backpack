@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <org.osmdroid.views.MapView
+    <org.maplibre.android.maps.MapView
         android:id="@+id/map"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
@@ -171,7 +171,7 @@
         android:background="@drawable/search_input_background"
         android:hint="Search for a destination..."
         android:textSize="16sp"
-        android:textColor="@color/backpack_ink"
+        android:textColor="#FF1A1A1A"
         android:textColorHint="#6B7280"
         android:paddingHorizontal="12dp"
         android:paddingVertical="4dp"
@@ -227,6 +227,22 @@
         android:elevation="0dp"
         android:stateListAnimator="@null" />
 
+    <!-- Route options (avoid motorways/ferries/steps, bike type, hills...) -->
+    <ImageButton
+        android:id="@+id/route_options_button"
+        android:scaleType="fitCenter"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="272dp"
+        android:layout_marginEnd="8dp"
+        android:src="@drawable/ic_route_options"
+        android:background="@drawable/icon_backdrop"
+        android:padding="6dp"
+        android:contentDescription="Route options"
+        android:elevation="0dp"
+        android:stateListAnimator="@null" />
+
     <!-- Alternative route chips, stacked vertically below the
          preference toggle. Background color (not text color) shows
          which one is primary, to avoid the confusing "text swaps
@@ -236,7 +252,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:layout_marginTop="272dp"
+        android:layout_marginTop="325dp"
         android:layout_marginEnd="8dp"
         android:orientation="vertical"
         android:visibility="gone" />
@@ -314,7 +330,7 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:text="--"
-            android:textColor="@color/backpack_ink"
+            android:textColor="#FF1A1A1A"
             android:textSize="24sp"
             android:textStyle="bold" />
 
@@ -386,7 +402,7 @@
         android:layout_width="44dp"
         android:layout_height="44dp"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="24dp"
         android:layout_marginEnd="40dp"
         android:src="@drawable/ic_navigation_go"
         android:background="@drawable/icon_backdrop"
@@ -402,7 +418,7 @@
         android:layout_width="44dp"
         android:layout_height="44dp"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="24dp"
+        android:layout_marginBottom="32dp"
         android:layout_marginEnd="100dp"
         android:src="@drawable/ic_clear_route"
         android:background="@drawable/icon_backdrop"
@@ -411,5 +427,20 @@
         android:elevation="0dp"
         android:stateListAnimator="@null"
         android:visibility="gone" />
+
+    <!-- Map credit, always visible (OpenStreetMap ODbL + OpenMapTiles
+         CC-BY require it). Tap for all credits and links. -->
+    <TextView
+        android:id="@+id/credit_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="2dp"
+        android:background="@drawable/credit_background"
+        android:paddingHorizontal="6dp"
+        android:paddingVertical="1dp"
+        android:text="\u00a9 OpenStreetMap contributors \u00a9 OpenMapTiles"
+        android:textColor="@color/credit_text"
+        android:textSize="10sp" />
 
 </FrameLayout>

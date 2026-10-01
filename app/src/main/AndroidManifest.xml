@@ -1,21 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Needed to download OSM map tiles. Location permission comes in a
-         later step once we actually use the user's position for routing. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- GPS chip only. COARSE is declared because Android 12+ requires it
+         alongside FINE; the app never uses network/Wi-Fi location. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Navigation keeps running with the screen off (visible notification).
+         No ACCESS_BACKGROUND_LOCATION: the service is started from the
+         open app, which Android allows for a location foreground service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <application
-        android:allowBackup="true"
+        android:name=".BackpackApp"
+        android:allowBackup="false"
         android:label="Backpack"
         android:theme="@style/Theme.Backpack"
         android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustNothing">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -25,6 +37,11 @@
         <activity
             android:name=".SettingsActivity"
             android:exported="false" />
+
+        <service
+            android:name=".nav.NavigationService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
     </application>
 

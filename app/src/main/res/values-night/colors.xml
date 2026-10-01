@@ -1,0 +1,25 @@
+<resources>
+    <color name="rg_active">#FFB03A3A</color>
+    <color name="rg_active_soft">#E0B03A3A</color>
+    <color name="rg_icon_inactive">#FFD6D6D6</color>
+    <color name="rg_inactive_soft">#E0505050</color>
+    <color name="rg_control_backdrop">#59BDBDBD</color>
+    <color name="rg_control_edge">#40303030</color>
+    <color name="rg_text">#FFEEEEEE</color>
+    <color name="rg_text_secondary">#FFB0B0B0</color>
+    <color name="rg_popup_bg">#F5303030</color>
+    <color name="rg_popup_band">#FF3E3E3E</color>
+    <color name="rg_chip_off">#FF555555</color>
+    <color name="rg_divider">#33FFFFFF</color>
+    <color name="rg_window_bg">#FF202020</color>
+    <color name="route_primary">#FFB03A3A</color>
+    <color name="route_casing">#FF1A1A1A</color>
+    <color name="route_alt">#FF7A7A7A</color>
+    <color name="credit_bg">#B3202020</color>
+    <color name="credit_text">#FFCCCCCC</color>
+
+    <color name="backpack_ink">#FFEEEEEE</color>
+    <color name="backpack_bg">#FF202020</color>
+    <color name="backpack_accent">#FFB03A3A</color>
+    <color name="backpack_text_secondary">#FFB0B0B0</color>
+</resources>

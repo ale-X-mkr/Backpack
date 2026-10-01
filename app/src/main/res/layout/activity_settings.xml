@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#B8BCC0">
+    android:background="@color/rg_window_bg">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -13,11 +13,12 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="CONTROLS"
+            android:id="@+id/settings_title"
+            android:text="SETTINGS"
             android:textSize="18sp"
             android:textStyle="bold"
             android:letterSpacing="0.1"
-            android:textColor="#1A1D21"
+            android:textColor="@color/rg_text"
             android:layout_marginBottom="14dp" />
 
         <TextView
@@ -26,7 +27,7 @@
             android:text="DISPLAY"
             android:textSize="12sp"
             android:letterSpacing="0.08"
-            android:textColor="#3A3D40" />
+            android:textColor="@color/rg_text_secondary" />
 
         <RadioGroup
             android:id="@+id/display_group"
@@ -42,8 +43,8 @@
                 android:layout_height="wrap_content"
                 android:text="Day"
                 android:textSize="15sp"
-                android:textColor="#1A1D21"
-                android:buttonTint="#2B6CB0"
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active"
                 android:layout_marginEnd="16dp" />
 
             <RadioButton
@@ -52,8 +53,8 @@
                 android:layout_height="wrap_content"
                 android:text="Night"
                 android:textSize="15sp"
-                android:textColor="#1A1D21"
-                android:buttonTint="#2B6CB0"
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active"
                 android:layout_marginEnd="16dp" />
 
             <RadioButton
@@ -62,10 +63,65 @@
                 android:layout_height="wrap_content"
                 android:text="Auto"
                 android:textSize="15sp"
-                android:textColor="#1A1D21"
-                android:buttonTint="#2B6CB0" />
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active" />
 
         </RadioGroup>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="MAP STYLE (DAY)"
+            android:textSize="12sp"
+            android:letterSpacing="0.08"
+            android:textColor="@color/rg_text_secondary" />
+
+        <RadioGroup
+            android:id="@+id/style_group"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="2dp">
+
+            <RadioButton
+                android:id="@+id/style_liberty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Liberty"
+                android:textSize="15sp"
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active"
+                android:layout_marginEnd="16dp" />
+
+            <RadioButton
+                android:id="@+id/style_bright"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Bright"
+                android:textSize="15sp"
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active"
+                android:layout_marginEnd="16dp" />
+
+            <RadioButton
+                android:id="@+id/style_positron"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Light grey"
+                android:textSize="15sp"
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active" />
+
+        </RadioGroup>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Maps by OpenFreeMap (no account, no key, no cookies). Night always uses the dark map."
+            android:textSize="11sp"
+            android:textColor="@color/rg_text_secondary"
+            android:layout_marginBottom="14dp" />
 
         <TextView
             android:layout_width="wrap_content"
@@ -73,7 +129,7 @@
             android:text="DISTANCE UNIT"
             android:textSize="12sp"
             android:letterSpacing="0.08"
-            android:textColor="#3A3D40" />
+            android:textColor="@color/rg_text_secondary" />
 
         <RadioGroup
             android:id="@+id/unit_group"
@@ -89,8 +145,8 @@
                 android:layout_height="wrap_content"
                 android:text="Kilometers"
                 android:textSize="15sp"
-                android:textColor="#1A1D21"
-                android:buttonTint="#2B6CB0"
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active"
                 android:layout_marginEnd="16dp" />
 
             <RadioButton
@@ -99,8 +155,8 @@
                 android:layout_height="wrap_content"
                 android:text="Miles"
                 android:textSize="15sp"
-                android:textColor="#1A1D21"
-                android:buttonTint="#2B6CB0" />
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active" />
 
         </RadioGroup>
 
@@ -110,7 +166,7 @@
             android:text="TIME VALUE (EUR/HOUR) -- Weekend / Work / Emergency"
             android:textSize="12sp"
             android:letterSpacing="0.08"
-            android:textColor="#3A3D40"
+            android:textColor="@color/rg_text_secondary"
             android:layout_marginBottom="4dp" />
 
         <LinearLayout
@@ -126,8 +182,8 @@
                 android:inputType="numberDecimal"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#2B6CB0"
-                android:backgroundTint="#2B6CB0"
+                android:textColor="@color/rg_active"
+                android:backgroundTint="@color/rg_active"
                 android:layout_marginEnd="12dp" />
 
             <EditText
@@ -137,8 +193,8 @@
                 android:inputType="numberDecimal"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#2B6CB0"
-                android:backgroundTint="#2B6CB0"
+                android:textColor="@color/rg_active"
+                android:backgroundTint="@color/rg_active"
                 android:layout_marginEnd="12dp" />
 
             <EditText
@@ -148,8 +204,8 @@
                 android:inputType="numberDecimal"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#2B6CB0"
-                android:backgroundTint="#2B6CB0" />
+                android:textColor="@color/rg_active"
+                android:backgroundTint="@color/rg_active" />
 
         </LinearLayout>
 
@@ -159,7 +215,7 @@
             android:text="TOLL ESTIMATE (EUR/KM)"
             android:textSize="12sp"
             android:letterSpacing="0.08"
-            android:textColor="#3A3D40"
+            android:textColor="@color/rg_text_secondary"
             android:layout_marginBottom="4dp" />
 
         <EditText
@@ -169,8 +225,8 @@
             android:inputType="numberDecimal"
             android:textSize="18sp"
             android:textStyle="bold"
-            android:textColor="#2B6CB0"
-            android:backgroundTint="#2B6CB0"
+            android:textColor="@color/rg_active"
+            android:backgroundTint="@color/rg_active"
             android:layout_marginBottom="20dp" />
 
         <TextView
@@ -179,7 +235,7 @@
             android:text="MAP LAYERS"
             android:textSize="12sp"
             android:letterSpacing="0.08"
-            android:textColor="#3A3D40"
+            android:textColor="@color/rg_text_secondary"
             android:layout_marginTop="6dp" />
 
         <TextView
@@ -187,7 +243,7 @@
             android:layout_height="wrap_content"
             android:text="Default POI category on launch"
             android:textSize="13sp"
-            android:textColor="#3A3D40"
+            android:textColor="@color/rg_text_secondary"
             android:layout_marginTop="4dp" />
 
         <RadioGroup
@@ -204,8 +260,8 @@
                 android:layout_height="wrap_content"
                 android:text="Off"
                 android:textSize="15sp"
-                android:textColor="#1A1D21"
-                android:buttonTint="#2B6CB0" />
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active" />
 
             <RadioButton
                 android:id="@+id/default_poi_fuel"
@@ -213,8 +269,8 @@
                 android:layout_height="wrap_content"
                 android:text="Fuel/Charging"
                 android:textSize="15sp"
-                android:textColor="#1A1D21"
-                android:buttonTint="#2B6CB0" />
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active" />
 
             <RadioButton
                 android:id="@+id/default_poi_food"
@@ -222,8 +278,8 @@
                 android:layout_height="wrap_content"
                 android:text="Food"
                 android:textSize="15sp"
-                android:textColor="#1A1D21"
-                android:buttonTint="#2B6CB0" />
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active" />
 
             <RadioButton
                 android:id="@+id/default_poi_emergency"
@@ -231,18 +287,61 @@
                 android:layout_height="wrap_content"
                 android:text="Emergency"
                 android:textSize="15sp"
-                android:textColor="#1A1D21"
-                android:buttonTint="#2B6CB0" />
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active" />
 
         </RadioGroup>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Note: this sets which POI category the app starts with each time (still overridden by whatever you pick during a session, and by Emergency mode auto-switching). The base map's own detail -- road labels, place names baked into the tiles -- can't be filtered with the current map source; that would need a different tile provider, not a setting."
+            android:text="Sets which POI category the app starts with (still overridden by what you pick during a session, and by Emergency mode)."
             android:textSize="11sp"
-            android:textColor="#5A6169"
+            android:textColor="@color/rg_text_secondary"
             android:layout_marginTop="2dp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ADVANCED (LEAVE EMPTY FOR DEFAULTS)"
+            android:textSize="12sp"
+            android:letterSpacing="0.08"
+            android:textColor="@color/rg_text_secondary"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/ors_url"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Routing server (default api.openrouteservice.org)"
+            android:inputType="textUri"
+            android:textSize="14sp"
+            android:textColor="@color/rg_text"
+            android:textColorHint="@color/rg_text_secondary"
+            android:backgroundTint="@color/rg_active" />
+
+        <EditText
+            android:id="@+id/ors_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Own openrouteservice key"
+            android:inputType="textNoSuggestions"
+            android:textSize="14sp"
+            android:textColor="@color/rg_text"
+            android:textColorHint="@color/rg_text_secondary"
+            android:backgroundTint="@color/rg_active" />
+
+        <EditText
+            android:id="@+id/custom_style"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Own map style URL (day)"
+            android:inputType="textUri"
+            android:textSize="14sp"
+            android:textColor="@color/rg_text"
+            android:textColorHint="@color/rg_text_secondary"
+            android:backgroundTint="@color/rg_active"
             android:layout_marginBottom="16dp" />
 
         <Button
@@ -254,7 +353,8 @@
             android:letterSpacing="0.08"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
-            android:backgroundTint="#2B6CB0" />
+            android:textStyle="bold"
+            android:backgroundTint="@color/rg_active" />
 
     </LinearLayout>
 
