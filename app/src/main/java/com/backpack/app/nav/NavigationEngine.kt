@@ -124,8 +124,14 @@ object NavigationEngine {
         for (l in listeners.toList()) l.onStopped()
     }
 
-    /** Intermediate stops already passed on the current route. */
-    fun passedStops(): Int = if (isActive) tracker?.passedStops() ?: 0 else 0
+    /** Stops not yet visited, from the engine's own (possibly rerouted)
+     *  request; null when not navigating. */
+    fun remainingStops(): List<LatLon>? {
+        if (!isActive) return null
+        val req = request ?: return null
+        val passed = (tracker?.passedStops() ?: 0).coerceAtMost(req.waypoints.size)
+        return req.waypoints.drop(passed)
+    }
 
     /** Start the voice engine early (it initialises asynchronously), so the
      *  first instruction of the first trip is not lost. */

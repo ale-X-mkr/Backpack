@@ -409,7 +409,7 @@ class MainActivity : AppCompatActivity() {
         lc.isLocationComponentEnabled = true
         lc.renderMode = RenderMode.GPS
         lc.cameraMode = CameraMode.NONE
-        LocationHub.lastGoodFix?.let { lc.forceLocationUpdate(it) }
+        LocationHub.lastGoodFix?.let { lc.forceLocationUpdate(withHeading(it)) }
         if (NavigationEngine.isActive) startNavigationUi()
     }
 
@@ -447,16 +447,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var lastBearing: Float? = null
-
     /** Near standstill GPS drops the bearing (reported as 0 = north), which
      *  would spin the arrow and the map at every red light: keep the last one. */
     private fun withHeading(location: Location): Location {
-        if (location.hasBearing() && location.hasSpeed() && location.speed > 0.7f) {
-            lastBearing = location.bearing
-            return location
-        }
-        val b = lastBearing ?: return location
+        if (location.hasBearing() && location.hasSpeed() && location.speed > 0.7f) return location
+        val b = LocationHub.lastMovingBearing ?: return location
         return Location(location).apply { bearing = b }
     }
 
@@ -768,6 +763,10 @@ class MainActivity : AppCompatActivity() {
         lc.setCameraMode(CameraMode.TRACKING_GPS, 750L, zoom, null, tilt, object : OnLocationCameraTransitionListener {
             override fun onLocationCameraTransitionFinished(cameraMode: Int) {
                 if (navUiActive) {
+                    // No position yet = no transition = zoom/tilt not applied.
+                    val cp = map?.cameraPosition
+                    if (zoom != null && cp != null && Math.abs(cp.zoom - zoom) > 0.1) lc.zoomWhileTracking(zoom)
+                    if (cp != null && Math.abs(cp.tilt - tilt) > 1.0) lc.tiltWhileTracking(tilt)
                     lc.paddingWhileTracking(doubleArrayOf(0.0, resources.displayMetrics.heightPixels * 0.35, 0.0, 0.0))
                 }
             }
@@ -791,11 +790,8 @@ class MainActivity : AppCompatActivity() {
         navInstructionIcon.visibility = View.GONE
         navInstructionBar.visibility = View.GONE
         val m = map ?: return
-        if (puckActive() && m.locationComponent.cameraMode != CameraMode.NONE) {
-            // Padding can only be changed while still tracking.
-            m.locationComponent.paddingWhileTracking(doubleArrayOf(0.0, 0.0, 0.0, 0.0), 0L)
-            m.locationComponent.cameraMode = CameraMode.NONE
-        }
+        if (puckActive()) m.locationComponent.cameraMode = CameraMode.NONE
+        // The camera reset below also clears the navigation padding.
         m.animateCamera(CameraUpdateFactory.newCameraPosition(
             CameraPosition.Builder().target(m.cameraPosition.target).zoom(m.cameraPosition.zoom)
                 .bearing(0.0).tilt(0.0).padding(0.0, 0.0, 0.0, 0.0).build()
@@ -1416,8 +1412,8 @@ class MainActivity : AppCompatActivity() {
     private fun buildRequest(from: LatLon, to: LatLon): RouteRequest = RouteRequest(
         from = from,
         to = to,
-        // Mid-trip: stops already passed are not sent again.
-        waypoints = TripState.waypoints.drop(NavigationEngine.passedStops()),
+        // Mid-trip: only the stops not visited yet.
+        waypoints = NavigationEngine.remainingStops() ?: TripState.waypoints.toList(),
         mode = currentMode.mode,
         preference = currentPreference.pref,
         avoidTolls = avoidTolls,

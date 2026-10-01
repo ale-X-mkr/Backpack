@@ -45,6 +45,9 @@ object LocationHub {
         private set
     var lastGoodFix: Location? = null
         private set
+    /** Last bearing measured while actually moving (survives screen rebuilds). */
+    var lastMovingBearing: Float? = null
+        private set
 
     private val gpsListener = object : LocationListener {
         override fun onLocationChanged(location: Location) = deliver(location)
@@ -137,7 +140,10 @@ object LocationHub {
         lastDeliveredTime = location.time
         lastFix = location
         val plausible = isPlausible(location)
-        if (plausible) lastGoodFix = location
+        if (plausible) {
+            lastGoodFix = location
+            if (location.hasBearing() && location.hasSpeed() && location.speed > 0.7f) lastMovingBearing = location.bearing
+        }
         for (l in listeners.toList()) l.onFix(location, plausible)
     }
 

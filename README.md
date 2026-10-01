@@ -1,34 +1,49 @@
-# Backpack -- Step 38: POI mixing bug fixed properly, toll colors, wider alt route
+# Backpack 0.4.0
 
-## Available POI categories (restating, as asked)
-Fuel/Charging, Food, Lodging, Parking, Toilets, Emergency
-(hospital/police/fire station).
+Private, open-source GPS navigation for Android. Nothing from Google:
+no Play Services, no Google servers, no Material library.
 
-## The "categories mixing" bug: real cause, fixed properly
-A side effect of last round's fix: I'd removed the strict category
-check so a slow-but-successful response could still render (fixing
-"always shows nothing"), but that meant a STALE response for a
-category you'd already switched away from could arrive late and
-overwrite what the newer selection had just shown -- exactly the
-"mixed when changing" symptom, and also explains phantom "not found"
-messages when the real, current category actually had results.
+## What changed since Step 38
+- **Map:** MapLibre Native (BSD) with OpenFreeMap vector maps (no account,
+  no key, no cookies). Real night map with Day / Night / Auto. Style
+  choice in Settings (Liberty / Bright / Light grey). The
+  "© OpenStreetMap contributors © OpenMapTiles" credit is always visible;
+  tap it to see all credits.
+- **Position:** GPS chip only. Network / Wi-Fi location removed. GPS fixes
+  from other apps are reused for free (passive provider, GPS fixes only).
+- **Navigation keeps going with the screen off** (notification with the
+  next turn, distance, arrival time and Stop). Swiping the app away stops it.
+- **Voice:** announced before the turn ("In 300 meters, turn right onto…"),
+  then again at the turn. Two turns close together are said together.
+  Music gets quieter during instructions.
+- **Turn icons** come from the route data, not guessed from English text.
+- **Off route** is measured to the road segment, not the nearest point.
+  A reroute skips stops you already visited.
+- **Route options button** (sliders icon, right column): avoid motorways,
+  ferries, fords and steps; car or motorbike; bike type (City / Road /
+  Mountain / E-bike) and hills (Flat → Any); Walk or Hike with green or
+  quiet streets; prefer paved roads (picks the alternative with the least
+  unpaved road, max +25 % time). Route chips show "% unpaved".
+- **Fixed:** Start now navigates the route you selected, not always the first.
+- The trip survives rotation and day/night switches.
+- Colours match RedGRPS (active dark red #8A0000, night #B03A3A).
+- The openrouteservice keys moved from the code to `local.properties`
+  (`ors.key1`, `ors.key2`). Settings → Advanced: own routing server, own
+  key, own map style. The built-in keys are never sent to a custom server.
+- App data is no longer included in Android/Google backups (`allowBackup=false`).
 
-Fixed with a proper request-generation counter: every query gets a
-sequence number, and only the single most recent one is ever allowed
-to render, full stop. An older, slower response is now silently
-discarded the moment a newer one has been requested, regardless of
-whether that older one happened to succeed.
+## Unchanged on purpose
+Toll cost estimate and the Balanced toll-vs-time choice (Weekend / Work /
+Emergency), speed-limit sign and alarm, screen dimming, POI categories,
+max 2 stops, alternative-route chips, all icons.
 
-## Toll icon: colored now, backdrop not icon (learned from POI)
-Reddish backdrop when tolls are allowed (the "on"/active state),
-blueish-gray when avoided (deselected) -- matching the same convention
-as every other toggle. Applied to the backdrop rather than tinting the
-icon itself, since that's exactly what caused the POI icon bug a few
-rounds back (tinting flattens internal detail).
+## Build
+- Kotlin 2.3.20 (needed by MapLibre 13.x), Java 17, compileSdk 35, targetSdk 34.
+- If Android Studio offers to update the Android Gradle Plugin, accept.
+- Unit tests for the routing and navigation core: `app/src/test` (13 tests).
 
-## Alternative route line widened
-9f, up from 6f -- should be much easier to actually see on the map now.
-
-## On the P2P location-sharing module -- separate message follows
-This is a genuinely large new feature with a real technical constraint
-worth discussing before I write any code -- see next message.
+## Known limits
+- Routing and address search still go to openrouteservice.org (it sees the
+  start and end of each route). A self-hosted server can be set in Settings.
+- openrouteservice cannot hard-avoid unpaved roads and has no motorbike profile.
+- Slight / keep turns use the normal left/right icon (no new icons added).
