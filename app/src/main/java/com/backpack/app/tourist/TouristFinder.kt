@@ -36,7 +36,7 @@ class TouristFinder {
 
     fun alongRoute(points: List<com.backpack.app.core.LatLon>, mode: TravelMode, callback: ResultCallback) {
         val line = Polyline(points)
-        val query = Tourist.corridorQuery(Tourist.sampleLine(points), Tourist.corridorRadius(mode))
+        val query = Tourist.corridorQuery(Tourist.sampleLine(Tourist.trimEnds(points)), Tourist.corridorRadius(mode))
         run(query, line, ROUTE_LIMIT, callback)
     }
 
@@ -78,7 +78,7 @@ class TouristFinder {
                 .addHeader("User-Agent", USER_AGENT)
                 .addHeader("Accept", "application/json")
                 .build()
-            RoutePlanner.http.newCall(req).enqueue(object : Callback {
+            http.newCall(req).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) = finish(null)
                 override fun onResponse(call: Call, response: Response) {
                     val body = response.use { if (it.isSuccessful) it.body?.string() else null }
@@ -102,7 +102,7 @@ class TouristFinder {
             .addHeader("Accept", "application/json")
             .post(FormBody.Builder().add("data", query).build())
             .build()
-        RoutePlanner.http.newCall(req).enqueue(object : Callback {
+        http.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 if (!useMirror) overpass(query, true, callback) else callback(null, "Places search failed -- check the connection")
             }
@@ -122,6 +122,12 @@ class TouristFinder {
     }
 
     companion object {
+        /** Overpass answers only when the whole query is done (up to its
+         *  25 s timeout): wait longer than the routing client does. */
+        private val http = RoutePlanner.http.newBuilder()
+            .readTimeout(40, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+
         const val USER_AGENT = "Backpack/0.7 (private Android navigation app; OpenStreetMap data)"
         private const val MAX_CANDIDATES = 150
         private const val ROUTE_LIMIT = 25

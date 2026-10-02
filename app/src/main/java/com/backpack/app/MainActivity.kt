@@ -809,41 +809,55 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Search in flight (not stored in TripState: a rebuilt screen searches again).
+    private var touristPendingRoute: Any? = null
+    private var touristPendingCenter: LatLon? = null
+
     /** Along the selected route when there is one, else in the visible area
      *  (re-searched when the map moved more than ~1 km). */
     private fun refreshTourist(force: Boolean = false) {
         if (!touristOn) return
         val m = map ?: return
-        val route = TripState.plan?.routes?.getOrNull(TripState.selectedIndex)
+        val route = selectedRoute()
         if (route != null && route.points.size >= 2) {
-            if (!force && touristRouteKey === route) return
-            touristRouteKey = route
-            touristAreaCenter = null
-            touristFinder.alongRoute(route.points, currentMode.mode) { pois, error -> onTouristResults(pois, error, true) }
+            if (!force && (touristRouteKey === route || touristPendingRoute === route)) return
+            touristPendingRoute = route
+            touristPendingCenter = null
+            touristFinder.alongRoute(route.points, currentMode.mode) { pois, error ->
+                onTouristResults(pois, error, route, null, announce = true)
+            }
             return
         }
-        touristRouteKey = null
         val target = m.cameraPosition.target ?: return
         val center = LatLon(target.latitude, target.longitude)
-        if (!force && touristAreaCenter?.let { Geo.distance(it, center) < 1000.0 } == true) return
-        touristAreaCenter = center
+        val near = { c: LatLon? -> c != null && Geo.distance(c, center) < 1000.0 }
+        if (!force && touristRouteKey == null && (near(touristAreaCenter) || near(touristPendingCenter))) return
+        touristPendingRoute = null
+        touristPendingCenter = center
         val box = m.projection.visibleRegion.latLngBounds
         val maxSpan = 25000.0 / 111000.0
         val latSpan = (box.latitudeNorth - box.latitudeSouth).coerceIn(0.0, maxSpan)
         val lonSpan = (box.longitudeEast - box.longitudeWest).coerceIn(0.0, maxSpan)
         touristFinder.inBox(center.lat - latSpan / 2, center.lon - lonSpan / 2, center.lat + latSpan / 2, center.lon + lonSpan / 2) { pois, error ->
-            onTouristResults(pois, error, false)
+            onTouristResults(pois, error, null, center, announce = force)
         }
     }
 
-    private fun onTouristResults(pois: List<TouristPoi>?, error: String?, alongRoute: Boolean) {
+    private fun onTouristResults(pois: List<TouristPoi>?, error: String?, routeKey: Any?, center: LatLon?, announce: Boolean) {
         if (!touristOn || isDestroyed) return
+        touristPendingRoute = null
+        touristPendingCenter = null
         if (pois == null) {
             showError(error ?: "Places search failed")
             return
         }
+        // Remember what was searched only once it succeeded.
         touristResults = pois
+        touristRouteKey = routeKey
+        touristAreaCenter = center
         layers.setTourist(pois)
+        if (!announce) return
+        val alongRoute = routeKey != null
         showMessage(
             when {
                 pois.isEmpty() -> if (alongRoute) "No well-known places along this route" else "No well-known places here"
@@ -857,14 +871,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun selectedRoute(): RouteResult? = TripState.plan?.routes?.getOrNull(TripState.selectedIndex)
 
+    /** The route places are measured on: the one being navigated, else the selected one. */
+    private fun touristRoute(): RouteResult? = (if (NavigationEngine.isActive) NavigationEngine.route else null) ?: selectedRoute()
+
+    /** (metres ahead of you -- or from the start when not navigating --, metres off the route). */
+    private fun aheadOnRoute(poi: TouristPoi): Pair<Double, Double>? {
+        val r = touristRoute() ?: return null
+        val snap = r.line.snap(poi.point) ?: return null
+        val progress = if (NavigationEngine.isActive) NavigationEngine.lastProgress?.alongM ?: 0.0 else 0.0
+        return Pair(snap.alongM - progress, snap.offsetM)
+    }
+
     private fun showTouristList() {
-        val route = selectedRoute()
-        val p = Popup(this, if (touristRouteKey != null) "Along your route" else "Well-known places here")
-        val sorted = if (touristRouteKey != null) touristResults.sortedBy { it.alongM } else touristResults
-        for (poi in sorted) {
-            val where = if (route != null && touristRouteKey != null) {
-                " \u00b7 at ${Speech.shortDistance(poi.alongM, useMetric)} \u00b7 \u2248 +" +
-                    Tourist.minutesLabel(Tourist.estimateDetourSeconds(poi.offsetM, currentMode.mode))
+        val onRoute = touristRoute() != null && TripState.destination != null
+        val p = Popup(this, if (onRoute) "Along your route" else "Well-known places here")
+        // While navigating, places already behind you are left out.
+        val rows = touristResults.map { it to aheadOnRoute(it) }
+            .filter { (_, a) -> !onRoute || a == null || a.first > -50.0 }
+            .sortedBy { (_, a) -> if (onRoute) a?.first ?: Double.MAX_VALUE else 0.0 }
+        if (rows.isEmpty()) p.text("No places ahead on your route.")
+        for ((poi, a) in rows) {
+            val where = if (onRoute && a != null) {
+                " \u00b7 in ${Speech.shortDistance(a.first.coerceAtLeast(0.0), useMetric)} \u00b7 \u2248 +" +
+                    Tourist.minutesLabel(Tourist.estimateDetourSeconds(a.second, currentMode.mode))
             } else ""
             p.text("${starsText(poi.stars)}${poi.name}\n${poi.category.label}$where", 14f).apply {
                 setPadding(0, dp(6), 0, dp(6))
@@ -879,13 +908,15 @@ class MainActivity : AppCompatActivity() {
         val p = Popup(this, poi.name)
         val known = if (poi.sitelinks > 0) " \u00b7 written about on ${poi.sitelinks} Wikipedia/Wikimedia sites" else ""
         p.text("${starsText(poi.stars)}${poi.category.label}$known")
-        val route = selectedRoute()
+        val route = touristRoute()
         val end = TripState.destination
-        var detourText: TextView? = null
-        if (route != null && end != null) {
-            val estimate = Tourist.estimateDetourSeconds(poi.offsetM, currentMode.mode)
-            detourText = p.text("On your route at ${Speech.shortDistance(poi.alongM, useMetric)} \u00b7 " +
-                "${Speech.shortDistance(poi.offsetM, useMetric)} away \u00b7 \u2248 +${Tourist.minutesLabel(estimate)}")
+        val ahead = aheadOnRoute(poi)
+        val passed = NavigationEngine.isActive && ahead != null && ahead.first < -50.0
+        if (route != null && end != null && ahead != null && !passed) {
+            val estimate = Tourist.estimateDetourSeconds(ahead.second, currentMode.mode)
+            val where = "In ${Speech.shortDistance(ahead.first.coerceAtLeast(0.0), useMetric)} on your route \u00b7 " +
+                "${Speech.shortDistance(ahead.second, useMetric)} off it"
+            val detourText = p.text("$where \u00b7 \u2248 +${Tourist.minutesLabel(estimate)}")
             // Exact extra time from the router, same rules as the trip.
             val start = (if (NavigationEngine.isActive) currentPosition() else null) ?: resolveStartPoint()
             val stops = Tourist.insertStop(NavigationEngine.remainingStops() ?: TripState.waypoints, poi.point, route.line)
@@ -894,10 +925,11 @@ class MainActivity : AppCompatActivity() {
                 detourPlanner.plan(buildRequest(start, end, stops)) { plan, _ ->
                     val r = plan?.routes?.getOrNull(plan.primaryIndex) ?: return@plan
                     val extra = (r.durationSeconds - current).coerceAtLeast(0.0)
-                    detourText?.text = "On your route at ${Speech.shortDistance(poi.alongM, useMetric)} \u00b7 " +
-                        "+${Tourist.minutesLabel(extra)} as a stop"
+                    detourText.text = "$where \u00b7 +${Tourist.minutesLabel(extra)} as a stop"
                 }
             }
+        } else if (passed) {
+            p.text("Already passed on your route.")
         }
         poi.wikipediaUrl?.let { url ->
             p.button("Wikipedia") {
@@ -905,9 +937,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
         if (end != null) {
-            p.button("Add as stop", primary = true) { p.dismiss(); addTouristStop(poi) }
+            if (!passed) p.button("Add as stop", primary = true) { p.dismiss(); addTouristStop(poi) }
         } else {
-            p.button("Go here", primary = true) { p.dismiss(); handleDestinationTap(poi.point) }
+            p.button("Go here", primary = true) {
+                p.dismiss()
+                // A destination, not a stop, even if stop mode was armed.
+                if (waypointModeArmed) {
+                    waypointModeArmed = false
+                    setIconActive(findViewById(R.id.waypoint_button), false)
+                }
+                handleDestinationTap(poi.point)
+            }
         }
         p.button("Close") { p.dismiss() }
         p.dialog.setOnDismissListener { detourPlanner.cancel() }
@@ -917,12 +957,17 @@ class MainActivity : AppCompatActivity() {
     /** Adds the place as a stop, in the right order along the route. */
     private fun addTouristStop(poi: TouristPoi) {
         val end = TripState.destination ?: return
+        val ahead = aheadOnRoute(poi)
+        if (NavigationEngine.isActive && ahead != null && ahead.first < -50.0) {
+            showMessage("${poi.name} is already behind you")
+            return
+        }
         val existing = NavigationEngine.remainingStops() ?: TripState.waypoints.toList()
         if (existing.size >= maxWaypoints) {
             showMessage("Maximum $maxWaypoints stops reached")
             return
         }
-        val stops = Tourist.insertStop(existing, poi.point, selectedRoute()?.line)
+        val stops = Tourist.insertStop(existing, poi.point, touristRoute()?.line)
         TripState.waypoints.clear()
         TripState.waypoints.addAll(stops)
         refreshPins()
@@ -1087,7 +1132,9 @@ class MainActivity : AppCompatActivity() {
         override fun onRerouted(plan: RoutePlan) {
             TripState.plan = plan
             TripState.selectedIndex = plan.primaryIndex
-            drawPlan(plan, plan.primaryIndex, fit = false, note = plan.note)
+            // No new places search on a reroute: places are measured on the
+            // current route anyway (see aheadOnRoute).
+            drawPlan(plan, plan.primaryIndex, fit = false, note = plan.note, tourist = false)
         }
         override fun onRerouteFailed(error: String) = showError(error)
         override fun onArrived() {
@@ -1728,7 +1775,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun drawPlan(plan: RoutePlan, selectedIndex: Int, fit: Boolean, note: String?) {
+    private fun drawPlan(plan: RoutePlan, selectedIndex: Int, fit: Boolean, note: String?, tourist: Boolean = true) {
         val results = plan.routes
         if (results.isEmpty() || results[0].points.isEmpty()) {
             showError("Route returned no geometry")
@@ -1753,7 +1800,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.clear_route_button).visibility = View.VISIBLE
 
         if (fit) fitCamera(results)
-        refreshTourist()
+        if (tourist) refreshTourist()
     }
 
     private fun distanceLabel(m: Double): String {

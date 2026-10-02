@@ -89,9 +89,15 @@ class TouristSearchSunTest {
         assertEquals(pts.first(), sampled.first())
         assertEquals(pts.last(), sampled.last())
         val q = Tourist.corridorQuery(sampled.take(2), 4000)
-        assertTrue(q.contains("nwr(around:4000,45.00000,6.00000,"))
+        assertTrue(q.contains("nwr(around:4000,45.000,6.000,"))
+        assertTrue(q.contains("out center tags;"))
         assertTrue(q.contains("out center tags"))
         assertEquals(4, Regex("nwr\\(around").findAll(q).count())
+        val trimmed = Tourist.trimEnds(pts)
+        assertTrue(Geo.distance(trimmed.first(), pts.first()) >= 500.0)
+        assertTrue(Geo.distance(trimmed.last(), pts.last()) >= 500.0)
+        val short = pts.take(20) // 1.9 km: kept whole
+        assertEquals(short, Tourist.trimEnds(short))
     }
 
     @Test fun placeOnRouteDetourAndStopOrder() {

@@ -74,16 +74,20 @@
         android:clipToPadding="false"
         android:orientation="horizontal">
 
+        <!-- 82dp frame pulled 30dp left: the car keeps its place (30dp in),
+             the toll sits in the extra space on its left and stays tappable. -->
         <FrameLayout
-            android:layout_width="52dp"
+            android:layout_width="82dp"
             android:layout_height="38dp"
-            android:clipChildren="false">
+            android:layout_marginStart="-30dp">
 
             <ImageButton
                 android:id="@+id/mode_toggle_button"
                 android:scaleType="fitCenter"
                 android:layout_width="38dp"
                 android:layout_height="38dp"
+                android:layout_gravity="start"
+                android:layout_marginStart="30dp"
                 android:src="@drawable/ic_mode_walking"
                 android:background="@drawable/icon_backdrop"
                 android:padding="4dp"
@@ -97,7 +101,6 @@
                 android:layout_width="26dp"
                 android:layout_height="26dp"
                 android:layout_gravity="start|center_vertical"
-                android:translationX="-30dp"
                 android:src="@drawable/ic_toll_on"
                 android:background="@drawable/icon_backdrop"
                 android:padding="3dp"
@@ -384,7 +387,7 @@
             android:id="@+id/speed_limit_sign"
             android:layout_width="36dp"
             android:layout_height="36dp"
-            android:layout_gravity="top|start"
+            android:layout_gravity="top|end"
             android:background="@drawable/speed_limit_background"
             android:elevation="2dp"
             android:gravity="center"

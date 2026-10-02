@@ -60,7 +60,7 @@ object Tourist {
 
     private const val FILTERS = """
  ["tourism"~"^(attraction|museum|gallery|viewpoint|theme_park|zoo|aquarium)$"]["wikidata"];
- ["historic"~"^(castle|monument|ruins|archaeological_site|fort|manor|city_gate|memorial|palace|tower|monastery)$"]["wikidata"];
+ ["historic"~"^(castle|monument|ruins|archaeological_site|fort|manor|city_gate|palace|tower|monastery)$"]["wikidata"];
  ["natural"~"^(peak|waterfall|cave_entrance|volcano|glacier|arch|beach|gorge)$"]["wikidata"];
  ["amenity"="place_of_worship"]["building"~"^(cathedral|basilica)$"]["wikidata"];"""
 
@@ -71,9 +71,11 @@ object Tourist {
         TravelMode.DRIVING -> 4000
     }
 
-    /** Overpass query for places within [radius] m of the route line. */
+    /** Overpass query for places within [radius] m of the route line.
+     *  Coordinates rounded to 3 decimals (~100 m): the corridor is wider
+     *  than that, and the exact start / end of the trip is not sent. */
     fun corridorQuery(line: List<LatLon>, radius: Int): String {
-        val coords = line.joinToString(",") { "%.5f,%.5f".format(java.util.Locale.ROOT, it.lat, it.lon) }
+        val coords = line.joinToString(",") { "%.3f,%.3f".format(java.util.Locale.ROOT, it.lat, it.lon) }
         return query("nwr(around:$radius,$coords)")
     }
 
@@ -83,7 +85,22 @@ object Tourist {
 
     private fun query(selector: String): String {
         val parts = FILTERS.trim().lines().joinToString("\n") { " $selector${it.trim()}" }
-        return "[out:json][timeout:25];\n(\n$parts\n);\nout center tags 300;"
+        // No result cap: Overpass returns in id order (points before areas), so a
+        // cap would cut castles and cathedrals mapped as areas before ranking.
+        return "[out:json][timeout:25];\n(\n$parts\n);\nout center tags;"
+    }
+
+    /**
+     * Privacy: leaves out the first and last [trimM] metres of a route
+     * (your home or hotel is usually one end) when the route is long
+     * enough to still have a corridor afterwards.
+     */
+    fun trimEnds(points: List<LatLon>, trimM: Double = 500.0): List<LatLon> {
+        if (points.size < 2) return points
+        val line = Polyline(points)
+        if (line.length < trimM * 6) return points
+        val kept = points.indices.filter { line.cumulative[it] >= trimM && line.cumulative[it] <= line.length - trimM }
+        return if (kept.size >= 2) kept.map { points[it] } else points
     }
 
     /**
