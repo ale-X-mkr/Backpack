@@ -15,6 +15,11 @@ object TripState {
     var plan: RoutePlan? = null
     var selectedIndex: Int = 0
 
+    // Tourist mode results and what they were searched for.
+    var touristResults: List<com.backpack.app.core.TouristPoi> = emptyList()
+    var touristRouteKey: Any? = null
+    var touristAreaCenter: LatLon? = null
+
     fun clear() {
         customStart = null
         destination = null

@@ -9,9 +9,12 @@ import androidx.core.graphics.drawable.toBitmap
 import com.backpack.app.R
 import com.backpack.app.core.LatLon
 import com.backpack.app.core.RouteResult
+import com.backpack.app.core.TouristCategory
+import com.backpack.app.core.TouristPoi
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.Layer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
@@ -38,6 +41,7 @@ class MapLayers(private val context: Context) {
     private var pins: List<Pin> = emptyList()
     private var pois: List<Pin> = emptyList()
     private var warning: LatLon? = null
+    private var tourist: List<TouristPoi> = emptyList()
 
     /** Icon names usable in [Pin.icon], mapped to the app's own drawables. */
     private val iconRes = mapOf(
@@ -67,6 +71,7 @@ class MapLayers(private val context: Context) {
         style.addSource(GeoJsonSource(SRC_POI))
         style.addSource(GeoJsonSource(SRC_PINS))
         style.addSource(GeoJsonSource(SRC_WARN))
+        style.addSource(GeoJsonSource(SRC_TOUR))
 
         // Keep everything under the position arrow: after a style change
         // MapLibre has already put its location layers back before we get here.
@@ -96,6 +101,41 @@ class MapLayers(private val context: Context) {
         add(LineLayer(LAYER_ROUTE, SRC_ROUTE).withProperties(
             PropertyFactory.lineColor(primary), PropertyFactory.lineWidth(width(7f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
+        ))
+        // Tourist places: coloured dot by kind, bigger when better known,
+        // name under the well-known ones (and all of them when zoomed in).
+        val night = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        add(CircleLayer(LAYER_TOUR, SRC_TOUR).withProperties(
+            PropertyFactory.circleColor(Expression.match(
+                Expression.get("cat"), Expression.color(CAT_COLORS.getValue(TouristCategory.SIGHT)),
+                *TouristCategory.values().map { Expression.stop(it.name, Expression.color(CAT_COLORS.getValue(it))) }.toTypedArray()
+            )),
+            PropertyFactory.circleRadius(Expression.interpolate(
+                Expression.linear(), Expression.toNumber(Expression.get("stars")),
+                Expression.stop(0, 6f), Expression.stop(3, 11f)
+            )),
+            PropertyFactory.circleStrokeColor(if (night) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()),
+            PropertyFactory.circleStrokeWidth(2f)
+        ))
+        add(SymbolLayer(LAYER_TOUR_LABEL, SRC_TOUR).withProperties(
+            PropertyFactory.textField(Expression.step(
+                Expression.zoom(),
+                Expression.switchCase(
+                    Expression.gte(Expression.toNumber(Expression.get("stars")), Expression.literal(1)),
+                    Expression.get("name"), Expression.literal("")
+                ),
+                Expression.stop(13, Expression.get("name"))
+            )),
+            PropertyFactory.textFont(arrayOf("Noto Sans Regular")),
+            PropertyFactory.textSize(11f),
+            PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
+            PropertyFactory.textOffset(arrayOf(0f, 1.1f)),
+            PropertyFactory.textMaxWidth(8f),
+            PropertyFactory.textOptional(true),
+            PropertyFactory.textColor(if (night) 0xFFEEEEEE.toInt() else 0xFF1A1A1A.toInt()),
+            PropertyFactory.textHaloColor(if (night) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()),
+            PropertyFactory.textHaloWidth(1.5f)
         ))
         add(SymbolLayer(LAYER_POI, SRC_POI).withProperties(
             PropertyFactory.iconImage(Expression.get("icon")),
@@ -137,6 +177,32 @@ class MapLayers(private val context: Context) {
         pushPoints(SRC_POI, pois)
     }
 
+    fun setTourist(list: List<TouristPoi>) {
+        tourist = list
+        pushTourist()
+    }
+
+    /** Key of the tourist place under the finger, or null. */
+    fun touristAt(map: MapLibreMap, screen: PointF): String? {
+        val r = 16f * context.resources.displayMetrics.density
+        val box = RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r)
+        return map.queryRenderedFeatures(box, LAYER_TOUR).firstOrNull()?.getStringProperty("key")
+    }
+
+    private fun pushTourist() {
+        val s = style ?: return
+        if (!s.isFullyLoaded) return
+        val features = tourist.map { p ->
+            Feature.fromGeometry(Point.fromLngLat(p.point.lon, p.point.lat)).also {
+                it.addStringProperty("key", p.key)
+                it.addStringProperty("name", p.name)
+                it.addStringProperty("cat", p.category.name)
+                it.addNumberProperty("stars", p.stars)
+            }
+        }
+        s.getSourceAs<GeoJsonSource>(SRC_TOUR)?.setGeoJson(FeatureCollection.fromFeatures(features))
+    }
+
     fun setWarning(at: LatLon?) {
         warning = at
         pushWarning()
@@ -155,6 +221,7 @@ class MapLayers(private val context: Context) {
         pushPoints(SRC_PINS, pins)
         pushPoints(SRC_POI, pois)
         pushWarning()
+        pushTourist()
     }
 
     private fun pushRoutes() {
@@ -203,6 +270,17 @@ class MapLayers(private val context: Context) {
         private const val SRC_POI = "bp-poi"
         private const val SRC_PINS = "bp-pins"
         private const val SRC_WARN = "bp-warn"
+        private const val SRC_TOUR = "bp-tourist"
+        private const val LAYER_TOUR = "bp-tourist-dots"
+        private const val LAYER_TOUR_LABEL = "bp-tourist-labels"
+
+        val CAT_COLORS = mapOf(
+            TouristCategory.SIGHT to 0xFF8A0000.toInt(),
+            TouristCategory.MUSEUM to 0xFF6A1B9A.toInt(),
+            TouristCategory.HISTORIC to 0xFF8D5524.toInt(),
+            TouristCategory.VIEWPOINT to 0xFF00796B.toInt(),
+            TouristCategory.NATURE to 0xFF2E7D32.toInt()
+        )
         private const val LAYER_ALT_CASING = "bp-alt-casing"
         const val LAYER_ALT = "bp-alt"
         private const val LAYER_ROUTE_CASING = "bp-route-casing"

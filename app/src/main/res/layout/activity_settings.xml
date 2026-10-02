@@ -29,6 +29,12 @@
             android:letterSpacing="0.08"
             android:textColor="@color/rg_text_secondary" />
 
+        <!-- Sunset = night map from sunset to sunrise at your position. -->
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none">
+
         <RadioGroup
             android:id="@+id/display_group"
             android:layout_width="wrap_content"
@@ -61,12 +67,24 @@
                 android:id="@+id/display_auto"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Auto"
+                android:text="Sunset"
                 android:textSize="15sp"
                 android:textColor="@color/rg_text"
                 android:buttonTint="@color/rg_active" />
 
+            <RadioButton
+                android:id="@+id/display_system"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="System"
+                android:textSize="15sp"
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active"
+                android:layout_marginStart="16dp" />
+
         </RadioGroup>
+
+        </HorizontalScrollView>
 
         <TextView
             android:layout_width="wrap_content"

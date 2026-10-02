@@ -30,7 +30,9 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_ORS_KEY = "ors_key"
         const val DISPLAY_MODE_DAY = "day"
         const val DISPLAY_MODE_NIGHT = "night"
+        /** Night map from sunset to sunrise at your position. */
         const val DISPLAY_MODE_AUTO = "auto"
+        const val DISPLAY_MODE_SYSTEM = "system"
 
         const val DEFAULT_VALUE_WEEKEND = 10.0
         const val DEFAULT_VALUE_WORK = 20.0
@@ -50,6 +52,7 @@ class SettingsActivity : AppCompatActivity() {
         when (prefs.getString(KEY_DISPLAY_MODE, DISPLAY_MODE_AUTO)) {
             DISPLAY_MODE_DAY -> displayGroup.check(R.id.display_day)
             DISPLAY_MODE_NIGHT -> displayGroup.check(R.id.display_night)
+            DISPLAY_MODE_SYSTEM -> displayGroup.check(R.id.display_system)
             else -> displayGroup.check(R.id.display_auto)
         }
 
@@ -96,6 +99,7 @@ class SettingsActivity : AppCompatActivity() {
             val displayMode = when (displayGroup.checkedRadioButtonId) {
                 R.id.display_day -> DISPLAY_MODE_DAY
                 R.id.display_night -> DISPLAY_MODE_NIGHT
+                R.id.display_system -> DISPLAY_MODE_SYSTEM
                 else -> DISPLAY_MODE_AUTO
             }
             val mapStyle = when (styleGroup.checkedRadioButtonId) {

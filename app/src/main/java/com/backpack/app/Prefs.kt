@@ -2,7 +2,10 @@ package com.backpack.app
 
 import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
+import com.backpack.app.core.LatLon
 import com.backpack.app.core.RouteOptions
+import com.backpack.app.core.SunPosition
+import com.backpack.app.location.LocationHub
 
 /** One place for settings that several classes read. Keys stay those of
  *  SettingsActivity so existing saved values keep working. */
@@ -24,12 +27,24 @@ object Prefs {
     private fun settings(c: Context) = c.getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
     private fun toggles(c: Context) = c.getSharedPreferences(TOGGLES, Context.MODE_PRIVATE)
 
-    /** Day / Night / Auto now drives the whole app, map included. */
+    /**
+     * Day / Night / Auto / System drives the whole app, map included.
+     * Auto = night map from sunset to sunrise where you are (sun position
+     * computed on the phone). System = follow the phone's dark theme.
+     * Changing the mode makes Android rebuild the screens (route is kept).
+     */
     fun applyNightMode(c: Context) {
         val mode = when (settings(c).getString(SettingsActivity.KEY_DISPLAY_MODE, SettingsActivity.DISPLAY_MODE_AUTO)) {
             SettingsActivity.DISPLAY_MODE_DAY -> AppCompatDelegate.MODE_NIGHT_NO
             SettingsActivity.DISPLAY_MODE_NIGHT -> AppCompatDelegate.MODE_NIGHT_YES
-            else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            SettingsActivity.DISPLAY_MODE_SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+            else -> {
+                val pos = LocationHub.lastGoodFix?.let { LatLon(it.latitude, it.longitude) }
+                    ?: camera(c)?.let { LatLon(it.first, it.second) }
+                if (pos == null) AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+                else if (SunPosition.isNight(pos.lat, pos.lon, System.currentTimeMillis())) AppCompatDelegate.MODE_NIGHT_YES
+                else AppCompatDelegate.MODE_NIGHT_NO
+            }
         }
         if (AppCompatDelegate.getDefaultNightMode() != mode) AppCompatDelegate.setDefaultNightMode(mode)
     }
