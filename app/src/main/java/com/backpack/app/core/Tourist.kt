@@ -79,6 +79,16 @@ object Tourist {
         return query("nwr(around:$radius,$coords)")
     }
 
+    /** Same, around several route lines at once (one request for all
+     *  alternatives, used by the Weekend sights preference). */
+    fun corridorQueryMulti(lines: List<List<LatLon>>, radius: Int): String {
+        val selectors = lines.filter { it.isNotEmpty() }.map { line ->
+            "nwr(around:$radius," + line.joinToString(",") { "%.3f,%.3f".format(java.util.Locale.ROOT, it.lat, it.lon) } + ")"
+        }
+        val parts = selectors.flatMap { sel -> FILTERS.trim().lines().map { " $sel${it.trim()}" } }.joinToString("\n")
+        return "[out:json][timeout:25];\n(\n$parts\n);\nout center tags;"
+    }
+
     /** Overpass query for places inside a box. */
     fun boxQuery(south: Double, west: Double, north: Double, east: Double): String =
         query("nwr(%.5f,%.5f,%.5f,%.5f)".format(java.util.Locale.ROOT, south, west, north, east))
@@ -217,6 +227,52 @@ object Tourist {
     fun minutesLabel(seconds: Double): String {
         val m = (seconds / 60.0).roundToInt()
         return if (m < 1) "< 1 min" else if (m < 60) "$m min" else "%d h %02d".format(m / 60, m % 60)
+    }
+
+    /** Result of the Weekend sights preference. */
+    data class ScenicChoice(val index: Int, val places: Int, val basePlaces: Int, val extraSeconds: Double)
+
+    /** Sights score of one route: well-known places within [radius] of it,
+     *  better known places count more (1 + stars each). */
+    fun score(route: Polyline, pois: List<TouristPoi>, radius: Int): Pair<Double, Int> {
+        var s = 0.0
+        var n = 0
+        for (p in pois) {
+            val snap = route.snap(p.point) ?: continue
+            if (snap.offsetM <= radius) { s += 1.0 + p.stars; n++ }
+        }
+        return Pair(s, n)
+    }
+
+    /**
+     * Weekend: among the alternatives, the one passing clearly more
+     * well-known places (≥ 2 more points and ≥ 25 % more), if it takes at
+     * most [maxExtraFraction] more time than the current choice. Null when
+     * the current choice stays.
+     */
+    fun scenicChoice(
+        routes: List<RouteResult>,
+        current: Int,
+        pois: List<TouristPoi>,
+        radius: Int,
+        maxExtraFraction: Double
+    ): ScenicChoice? {
+        if (routes.size < 2 || maxExtraFraction <= 0.0 || pois.isEmpty()) return null
+        val base = routes.getOrNull(current) ?: return null
+        val (baseScore, baseCount) = score(base.line, pois, radius)
+        var best: ScenicChoice? = null
+        var bestScore = baseScore
+        for (i in routes.indices) {
+            if (i == current) continue
+            val r = routes[i]
+            if (r.durationSeconds > base.durationSeconds * (1.0 + maxExtraFraction)) continue
+            val (s, n) = score(r.line, pois, radius)
+            if (s >= baseScore + 2.0 && s >= baseScore * 1.25 && s > bestScore) {
+                bestScore = s
+                best = ScenicChoice(i, n, baseCount, (r.durationSeconds - base.durationSeconds).coerceAtLeast(0.0))
+            }
+        }
+        return best
     }
 
     /** Where a new stop goes among existing ones: ordered along the route. */

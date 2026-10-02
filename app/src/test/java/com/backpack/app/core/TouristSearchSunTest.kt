@@ -143,3 +143,44 @@ class TouristSearchSunTest {
         assertNotNull(Geocode.parseCoordinates(" 1;2 "))
     }
 }
+
+class WeekendAndOverpassTest {
+    private val start = LatLon(45.0, 6.0)
+
+    private fun route(bearing: Double, km: Int, minutes: Double): RouteResult {
+        val pts = (0..km * 10).map { Geo.project(start, bearing, it * 100.0) }
+        return RouteResult(pts, km * 1000.0, minutes * 60)
+    }
+
+    private fun poi(i: Int, p: LatLon, links: Int) =
+        TouristPoi("n$i", "P$i", p, TouristCategory.SIGHT, "Q$i", null, sitelinks = links)
+
+    @Test fun scenicChoicePrefersRouteWithMoreSightsWithinTimeLimit() {
+        val fast = route(0.0, 10, 10.0)     // north
+        val scenic = route(20.0, 10, 11.5)  // a bit east, +15 %
+        val sights = (1..4).map { poi(it, Geo.project(start, 20.0, it * 2000.0), 20) } // ★★ each, on the scenic one
+        val c = Tourist.scenicChoice(listOf(fast, scenic), 0, sights, 400, 0.20)
+        org.junit.Assert.assertNotNull(c)
+        org.junit.Assert.assertEquals(1, c!!.index)
+        org.junit.Assert.assertEquals(4, c.places)
+        org.junit.Assert.assertEquals(90.0, c.extraSeconds, 0.1)
+        // Over the time limit: stays on the fast one.
+        org.junit.Assert.assertNull(Tourist.scenicChoice(listOf(fast, scenic), 0, sights, 400, 0.10))
+        // Off (0 %): nothing changes.
+        org.junit.Assert.assertNull(Tourist.scenicChoice(listOf(fast, scenic), 0, sights, 400, 0.0))
+        // A single extra place is not "clearly more".
+        org.junit.Assert.assertNull(Tourist.scenicChoice(listOf(fast, scenic), 0, sights.take(1).map { it.copy(sitelinks = 0) }, 400, 0.2))
+    }
+
+    @Test fun multiCorridorQueryHasAllLines() {
+        val q = Tourist.corridorQueryMulti(listOf(listOf(start, Geo.project(start, 0.0, 500.0)), listOf(start)), 1500)
+        org.junit.Assert.assertEquals(8, Regex("nwr\\(around:1500,").findAll(q).count())
+    }
+
+    @Test fun overpassRuntimeErrorIsAFailure() {
+        org.junit.Assert.assertNotNull(OverpassCheck.runtimeError(
+            """{"version":0.6,"elements":[],"remark":"runtime error: Query timed out in \"query\" at line 3 after 26 seconds."}"""))
+        org.junit.Assert.assertNull(OverpassCheck.runtimeError("""{"elements":[{"type":"node"}]}"""))
+        org.junit.Assert.assertNull(OverpassCheck.runtimeError("""{"elements":[],"remark":"something harmless"}"""))
+    }
+}

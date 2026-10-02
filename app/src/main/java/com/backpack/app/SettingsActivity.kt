@@ -28,6 +28,9 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_CUSTOM_STYLE = "custom_style_url"
         const val KEY_ORS_URL = "ors_url"
         const val KEY_ORS_KEY = "ors_key"
+        const val KEY_OVERPASS_URL = "overpass_url"
+        const val KEY_SIGHTS_MAX_PCT = "weekend_sights_max_pct"
+        const val DEFAULT_SIGHTS_MAX_PCT = 20
         const val DISPLAY_MODE_DAY = "day"
         const val DISPLAY_MODE_NIGHT = "night"
         /** Night map from sunset to sunrise at your position. */
@@ -70,6 +73,7 @@ class SettingsActivity : AppCompatActivity() {
         when (prefs.getString(KEY_DEFAULT_POI, "NONE")) {
             "FUEL" -> defaultPoiGroup.check(R.id.default_poi_fuel)
             "FOOD" -> defaultPoiGroup.check(R.id.default_poi_food)
+            "SIGHTS" -> defaultPoiGroup.check(R.id.default_poi_sights)
             "EMERGENCY" -> defaultPoiGroup.check(R.id.default_poi_emergency)
             else -> defaultPoiGroup.check(R.id.default_poi_off)
         }
@@ -81,6 +85,8 @@ class SettingsActivity : AppCompatActivity() {
         val orsUrlField = findViewById<EditText>(R.id.ors_url)
         val orsKeyField = findViewById<EditText>(R.id.ors_key)
         val customStyleField = findViewById<EditText>(R.id.custom_style)
+        val overpassField = findViewById<EditText>(R.id.overpass_url)
+        val sightsMaxField = findViewById<EditText>(R.id.sights_max_pct)
 
         weekendField.setText(prefs.getFloat(KEY_VALUE_WEEKEND, DEFAULT_VALUE_WEEKEND.toFloat()).toString())
         workField.setText(prefs.getFloat(KEY_VALUE_WORK, DEFAULT_VALUE_WORK.toFloat()).toString())
@@ -89,6 +95,8 @@ class SettingsActivity : AppCompatActivity() {
         orsUrlField.setText(prefs.getString(KEY_ORS_URL, ""))
         orsKeyField.setText(prefs.getString(KEY_ORS_KEY, ""))
         customStyleField.setText(prefs.getString(KEY_CUSTOM_STYLE, ""))
+        overpassField.setText(prefs.getString(KEY_OVERPASS_URL, ""))
+        sightsMaxField.setText(prefs.getInt(KEY_SIGHTS_MAX_PCT, DEFAULT_SIGHTS_MAX_PCT).toString())
 
         findViewById<Button>(R.id.save_button).setOnClickListener {
             val weekend = weekendField.text.toString().toFloatOrNull() ?: DEFAULT_VALUE_WEEKEND.toFloat()
@@ -110,10 +118,17 @@ class SettingsActivity : AppCompatActivity() {
             val defaultPoi = when (defaultPoiGroup.checkedRadioButtonId) {
                 R.id.default_poi_fuel -> "FUEL"
                 R.id.default_poi_food -> "FOOD"
+                R.id.default_poi_sights -> "SIGHTS"
                 R.id.default_poi_emergency -> "EMERGENCY"
                 else -> "NONE"
             }
             val orsUrl = orsUrlField.text.toString().trim()
+            val overpassUrl = overpassField.text.toString().trim()
+            if (overpassUrl.isNotEmpty() && !overpassUrl.startsWith("https://") && !overpassUrl.startsWith("http://")) {
+                Toast.makeText(this, "Overpass server must start with https://", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val sightsMax = (sightsMaxField.text.toString().toIntOrNull() ?: DEFAULT_SIGHTS_MAX_PCT).coerceIn(0, 100)
             if (orsUrl.isNotEmpty() && !orsUrl.startsWith("https://") && !orsUrl.startsWith("http://")) {
                 Toast.makeText(this, "Routing server must start with https://", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -131,6 +146,8 @@ class SettingsActivity : AppCompatActivity() {
                 .putString(KEY_ORS_URL, orsUrl)
                 .putString(KEY_ORS_KEY, orsKeyField.text.toString().trim())
                 .putString(KEY_CUSTOM_STYLE, customStyleField.text.toString().trim())
+                .putString(KEY_OVERPASS_URL, overpassUrl)
+                .putInt(KEY_SIGHTS_MAX_PCT, sightsMax)
                 .apply()
 
             Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()

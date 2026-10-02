@@ -250,6 +250,33 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:text="WEEKEND: SIGHTS ROUTE, MAX EXTRA TIME (%)"
+            android:textSize="12sp"
+            android:letterSpacing="0.08"
+            android:textColor="@color/rg_text_secondary"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/sights_max_pct"
+            android:layout_width="100dp"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/rg_active"
+            android:backgroundTint="@color/rg_active" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="In Weekend mode, take an alternative route passing clearly more well-known places if it is at most this much slower. 0 = off."
+            android:textSize="11sp"
+            android:textColor="@color/rg_text_secondary"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:text="MAP LAYERS"
             android:textSize="12sp"
             android:letterSpacing="0.08"
@@ -300,6 +327,15 @@
                 android:buttonTint="@color/rg_active" />
 
             <RadioButton
+                android:id="@+id/default_poi_sights"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Sights"
+                android:textSize="15sp"
+                android:textColor="@color/rg_text"
+                android:buttonTint="@color/rg_active" />
+
+            <RadioButton
                 android:id="@+id/default_poi_emergency"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -345,6 +381,17 @@
             android:layout_height="wrap_content"
             android:hint="Own openrouteservice key"
             android:inputType="textNoSuggestions"
+            android:textSize="14sp"
+            android:textColor="@color/rg_text"
+            android:textColorHint="@color/rg_text_secondary"
+            android:backgroundTint="@color/rg_active" />
+
+        <EditText
+            android:id="@+id/overpass_url"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Own Overpass server (places), tried first"
+            android:inputType="textUri"
             android:textSize="14sp"
             android:textColor="@color/rg_text"
             android:textColorHint="@color/rg_text_secondary"

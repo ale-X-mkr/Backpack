@@ -162,7 +162,7 @@ object TollBalance {
         }
         val primary = if (takeToll) withToll else withoutToll
         val secondary = if (takeToll) withoutToll else withToll
-        return RoutePlan(listOf(primary, secondary), 0, note)
+        return RoutePlan(listOf(primary, secondary), 0, note, tollDecision = true)
     }
 }
 

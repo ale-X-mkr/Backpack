@@ -68,7 +68,14 @@ class RouteResult(
 
 /** What the planner returns: all candidate routes, which one is primary,
  *  and an optional explanation (toll decision, paved preference...). */
-data class RoutePlan(val routes: List<RouteResult>, val primaryIndex: Int, val note: String?)
+data class RoutePlan(
+    val routes: List<RouteResult>,
+    val primaryIndex: Int,
+    val note: String?,
+    /** True when the Balanced toll rule chose the primary route: the
+     *  Weekend sights preference never overrides that decision. */
+    val tollDecision: Boolean = false
+)
 
 /** Everything needed to (re)compute a route. Snapshotted when navigation
  *  starts, so a reroute uses exactly the same rules as the original

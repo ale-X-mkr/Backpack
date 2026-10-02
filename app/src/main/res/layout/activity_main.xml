@@ -74,10 +74,10 @@
         android:clipToPadding="false"
         android:orientation="horizontal">
 
-        <!-- 82dp frame pulled 30dp left: the car keeps its place (30dp in),
-             the toll sits in the extra space on its left and stays tappable. -->
+        <!-- 68dp frame pulled 30dp left: car at 30dp in, toll in the extra
+             space on its left (tappable). Gaps car|urgency|poi are equal. -->
         <FrameLayout
-            android:layout_width="82dp"
+            android:layout_width="68dp"
             android:layout_height="38dp"
             android:layout_marginStart="-30dp">
 
@@ -145,23 +145,6 @@
 
 
     </LinearLayout>
-
-    <!-- Tourist mode (left column, so the top row and the car stay where
-         they are): tap = on/off, long press = list of places. -->
-    <ImageButton
-        android:id="@+id/tourist_button"
-        android:scaleType="fitCenter"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
-        android:layout_gravity="top|start"
-        android:layout_marginTop="166dp"
-        android:layout_marginStart="8dp"
-        android:src="@drawable/ic_tourist"
-        android:background="@drawable/icon_backdrop"
-        android:padding="7dp"
-        android:contentDescription="Tourist mode"
-        android:elevation="0dp"
-        android:stateListAnimator="@null" />
 
     <!-- ===== ZONE: right column ===== -->
 
@@ -268,6 +251,23 @@
         android:elevation="0dp"
         android:stateListAnimator="@null" />
 
+    <!-- During navigation: look for another route from where you are. -->
+    <ImageButton
+        android:id="@+id/alt_route_button"
+        android:scaleType="fitCenter"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="272dp"
+        android:layout_marginEnd="8dp"
+        android:src="@drawable/ic_alt_route"
+        android:background="@drawable/icon_backdrop"
+        android:padding="6dp"
+        android:contentDescription="Find an alternative route"
+        android:elevation="0dp"
+        android:stateListAnimator="@null"
+        android:visibility="gone" />
+
     <!-- Alternative route chips, stacked vertically below the
          preference toggle. Background color (not text color) shows
          which one is primary, to avoid the confusing "text swaps
@@ -322,83 +322,9 @@
 
     <!-- ===== ZONE: bottom-left, settings (swapped with speed sign) ===== -->
 
-    <ImageButton
-        android:id="@+id/settings_button"
-        android:scaleType="fitCenter"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:layout_gravity="bottom|start"
-        android:layout_marginBottom="26dp"
-        android:layout_marginStart="16dp"
-        android:src="@drawable/ic_settings"
-        android:background="@drawable/icon_backdrop"
-        android:padding="4dp"
-        android:contentDescription="Settings"
-        android:elevation="0dp"
-        android:stateListAnimator="@null" />
 
     <!-- ===== ZONE: bottom-right, live driving info ===== -->
 
-    <!-- Current speed circle (ring colour = speed vs limit, same rules as
-         before) with the road's speed-limit sign on top of it. -->
-    <FrameLayout
-        android:id="@+id/speed_widget"
-        android:layout_width="84dp"
-        android:layout_height="84dp"
-        android:layout_gravity="bottom|end"
-        android:layout_marginBottom="16dp"
-        android:layout_marginEnd="8dp"
-        android:clipChildren="false"
-        android:visibility="gone">
-
-        <LinearLayout
-            android:id="@+id/speed_sign"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
-            android:layout_gravity="bottom|end"
-            android:background="@drawable/speed_sign_background"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/speed_sign_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:includeFontPadding="false"
-                android:text="0"
-                android:textColor="#FF1A1A1A"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/speed_unit_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:includeFontPadding="false"
-                android:text="km/h"
-                android:textColor="#FF555555"
-                android:textSize="9sp" />
-
-        </LinearLayout>
-
-        <!-- Speed-limit sign: white, red ring, black number. Hidden when the
-             road's limit is unknown. -->
-        <TextView
-            android:id="@+id/speed_limit_sign"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_gravity="top|end"
-            android:background="@drawable/speed_limit_background"
-            android:elevation="2dp"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:text=""
-            android:textColor="#FF000000"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:visibility="gone" />
-
-    </FrameLayout>
 
     <!-- ===== ZONE: bottom-center, route result + primary action ===== -->
 
@@ -460,37 +386,153 @@
 
     </LinearLayout>
 
-    <ImageButton
-        android:id="@+id/nav_go_button"
-        android:scaleType="fitCenter"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="26dp"
-        android:layout_marginStart="60dp"
-        android:src="@drawable/ic_navigation_go"
-        android:background="@drawable/icon_backdrop"
-        android:padding="8dp"
-        android:contentDescription="Start navigation"
-        android:elevation="0dp"
-        android:stateListAnimator="@null"
-        android:visibility="gone" />
 
-    <ImageButton
-        android:id="@+id/clear_route_button"
-        android:scaleType="fitCenter"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="26dp"
-        android:layout_marginEnd="60dp"
-        android:src="@drawable/ic_clear_route"
-        android:background="@drawable/icon_backdrop"
-        android:padding="6dp"
-        android:contentDescription="Clear route"
-        android:elevation="0dp"
-        android:stateListAnimator="@null"
-        android:visibility="gone" />
+
+    <!-- ===== ZONE: bottom bar: 4 equal slots (settings | clear | go | speed),
+         centres 48dp above the bottom; empty slots keep their place. ===== -->
+    <LinearLayout
+        android:id="@+id/bottom_bar"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="16dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="horizontal">
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clipChildren="false">
+
+            <ImageButton
+                android:id="@+id/settings_button"
+                android:scaleType="fitCenter"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_settings"
+                android:background="@drawable/icon_backdrop"
+                android:padding="4dp"
+                android:contentDescription="Settings"
+                android:elevation="0dp"
+                android:stateListAnimator="@null" />
+
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clipChildren="false">
+
+            <ImageButton
+                android:id="@+id/clear_route_button"
+                android:scaleType="fitCenter"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_clear_route"
+                android:background="@drawable/icon_backdrop"
+                android:padding="6dp"
+                android:contentDescription="Clear route"
+                android:elevation="0dp"
+                android:stateListAnimator="@null"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clipChildren="false">
+
+            <ImageButton
+                android:id="@+id/nav_go_button"
+                android:scaleType="fitCenter"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_navigation_go"
+                android:background="@drawable/icon_backdrop"
+                android:padding="8dp"
+                android:contentDescription="Start navigation"
+                android:elevation="0dp"
+                android:stateListAnimator="@null"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clipChildren="false">
+
+                <!-- Current speed circle (ring colour = speed vs limit, same rules as
+             before) with the road's speed-limit sign on top of it. -->
+        <FrameLayout
+            android:id="@+id/speed_widget"
+            android:layout_width="84dp"
+            android:layout_height="84dp"
+            android:layout_gravity="bottom|center_horizontal"
+            android:clipChildren="false"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/speed_sign"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:layout_gravity="bottom|center_horizontal"
+                android:background="@drawable/speed_sign_background"
+                android:gravity="center"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/speed_sign_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:text="0"
+                    android:textColor="#FF1A1A1A"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/speed_unit_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:text="km/h"
+                    android:textColor="#FF555555"
+                    android:textSize="9sp" />
+
+            </LinearLayout>
+
+            <!-- Speed-limit sign: white, red ring, black number. Hidden when the
+                 road's limit is unknown. -->
+            <TextView
+                android:id="@+id/speed_limit_sign"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="top|end"
+                android:background="@drawable/speed_limit_background"
+                android:elevation="2dp"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text=""
+                android:textColor="#FF000000"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+        </FrameLayout>
+
+    </LinearLayout>
 
     <!-- Search suggestions (Photon), under the search box. -->
     <ScrollView

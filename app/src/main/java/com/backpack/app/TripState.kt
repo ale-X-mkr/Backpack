@@ -17,6 +17,8 @@ object TripState {
 
     // Tourist mode results and what they were searched for.
     var touristResults: List<com.backpack.app.core.TouristPoi> = emptyList()
+    /** Everything found (scored), re-ranked locally when another route is picked. */
+    var touristCandidates: List<com.backpack.app.core.TouristPoi> = emptyList()
     var touristRouteKey: Any? = null
     var touristAreaCenter: LatLon? = null
 
