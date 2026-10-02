@@ -20,6 +20,8 @@ object TripState {
     /** Everything found (scored), re-ranked locally when another route is picked. */
     var touristCandidates: List<com.backpack.app.core.TouristPoi> = emptyList()
     var touristRouteKey: Any? = null
+    /** Plan already given the Weekend sights choice (applied at most once). */
+    var scenicCheckedPlan: Any? = null
     var touristAreaCenter: LatLon? = null
 
     fun clear() {

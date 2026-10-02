@@ -46,20 +46,27 @@ class TouristFinder(context: Context) {
         // Rounded (~100 m) and without the first / last stretch: the exact
         // start and end of the trip are not sent.
         val sampled = lines.map { Tourist.sampleLine(Tourist.trimEnds(it, minOf(500.0, radius / 2.0)), maxPoints = if (lines.size > 1) 50 else 80) }
-        run(Tourist.corridorQueryMulti(sampled, radius), lines.firstOrNull()?.let { Polyline(it) }, onSwitch, callback)
+        run(Tourist.corridorQueryMulti(sampled, radius), lines.filter { it.size >= 2 }.map { Polyline(it) }, onSwitch, callback)
     }
 
     fun inBox(south: Double, west: Double, north: Double, east: Double, onSwitch: () -> Unit, callback: ResultCallback) {
-        run(Tourist.boxQuery(south, west, north, east), null, onSwitch, callback)
+        run(Tourist.boxQuery(south, west, north, east), emptyList(), onSwitch, callback)
     }
 
-    private fun run(query: String, line: Polyline?, onSwitch: () -> Unit, callback: ResultCallback) {
+    private fun run(query: String, lines: List<Polyline>, onSwitch: () -> Unit, callback: ResultCallback) {
         val gen = ++generation
         val deliver = ResultCallback { pois, error -> main.post { if (gen == generation) callback.onResult(pois, error) } }
         OverpassClient.query(app, query, onSwitch = { if (gen == generation) onSwitch() }) { body, failure ->
             if (gen != generation) return@query
             if (body == null) { deliver.onResult(null, failure?.message ?: "Places search failed"); return@query }
-            val found = try { Tourist.placeOnRoute(Tourist.parseOverpass(body), line) } catch (e: Exception) { null }
+            // Distance to the NEAREST route line: the cap below must not
+            // favour places along the first route over the alternatives.
+            val found = try {
+                Tourist.parseOverpass(body).map { p ->
+                    val best = lines.mapNotNull { it.snap(p.point) }.minByOrNull { it.offsetM }
+                    if (best == null) p else p.copy(offsetM = best.offsetM, alongM = best.alongM)
+                }
+            } catch (e: Exception) { null }
             if (found == null) { deliver.onResult(null, OverpassClient.Failure.BAD_ANSWER.message); return@query }
             if (found.isEmpty()) { deliver.onResult(emptyList(), null); return@query }
             // Keep the Wikidata request small: with a Wikipedia tag first, then

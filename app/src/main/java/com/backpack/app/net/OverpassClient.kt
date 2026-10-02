@@ -96,6 +96,8 @@ object OverpassClient {
                 val body = response.use { if (it.isSuccessful) it.body?.string() else null }
                 when {
                     body == null -> next(if (code == 504) Failure.TIMEOUT else Failure.BUSY)
+                    // Not JSON (e.g. a wrong own-server URL returning a web page).
+                    !body.trimStart().startsWith("{") -> next(Failure.BAD_ANSWER)
                     OverpassCheck.runtimeError(body) != null -> next(Failure.TIMEOUT)
                     else -> main.post { done(body, null) }
                 }

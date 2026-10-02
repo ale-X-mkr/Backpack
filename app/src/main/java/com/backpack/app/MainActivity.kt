@@ -167,6 +167,8 @@ class MainActivity : AppCompatActivity() {
     private var lastOverpassQueryAtMs = 0L
     private var lastKnownSpeedLimit: Int? = null
     private var lastSpeedLimitOkAtMs = 0L
+    private var speedLimitInFlight = false
+    private var speedLimitSeq = 0
     private val handler = Handler(Looper.getMainLooper())
     private var blinkOn = true
     private var isBlinking = false
@@ -272,6 +274,7 @@ class MainActivity : AppCompatActivity() {
         setupUrgencyButton()
         setupRouteOptionsButton()
         setupAltRouteButton()
+        touristWasOn = touristOn
         refreshModeButtonHighlight()
         refreshPreferenceHighlight()
         syncDrivingModeUI()
@@ -383,7 +386,8 @@ class MainActivity : AppCompatActivity() {
                 showTouristPlace(tourist)
                 return@addOnMapClickListener true
             }
-            val idx = layers.alternativeAt(m, screen)
+            // While navigating, grey lines are only offered from "find alternative route".
+            val idx = if (!NavigationEngine.isActive || altChoiceOpen) layers.alternativeAt(m, screen) else null
             if (idx != null) {
                 promoteRouteToPrimary(idx)
             } else {
@@ -815,9 +819,22 @@ class MainActivity : AppCompatActivity() {
     private var touristPendingRoute: Any? = null
     private var touristPendingCenter: LatLon? = null
 
-    /** Called when Weekend or the Sights category is switched on or off. */
+    /** Places-on state the screen last acted on (Weekend or Sights). */
+    private var touristWasOn = false
+
+    /** Called after Weekend or the POI category changed: acts only when
+     *  "well-known places on" actually switched (no new search when going
+     *  from Fuel to Food in Weekend, for example). */
     private fun touristModeChanged() {
-        if (touristOn) {
+        val now = touristOn
+        if (now == touristWasOn) {
+            if (now && currentPoiCategory == PoiCategory.SIGHTS) {
+                setPoiButtonStatus(findViewById(R.id.poi_toggle_button), touristResults.isNotEmpty())
+            }
+            return
+        }
+        touristWasOn = now
+        if (now) {
             refreshTourist(force = true)
         } else {
             touristFinder.cancel()
@@ -856,9 +873,12 @@ class MainActivity : AppCompatActivity() {
             touristPendingCenter = null
             val scenic = urgencyMode == UrgencyMode.WEEKEND && !NavigationEngine.isActive && !plan.tollDecision &&
                 plan.routes.size > 1 && sightsMaxFraction() > 0.0
-            val lines = if (scenic) plan.routes.map { it.points } else listOf(route.points)
+            // All routes of the plan before Go (picking another chip then
+            // needs no new search); only the followed one while navigating.
+            val lines = if (navUiActive) listOf(route.points) else plan.routes.map { it.points }
+            val startIndex = TripState.selectedIndex
             touristFinder.alongRoutes(lines, currentMode.mode, { onPlacesServerSwitch() }) { all, error ->
-                onTouristCandidates(all, error, plan, null, announce = true, scenic = scenic)
+                onTouristCandidates(all, error, plan, null, announce = true, scenic = scenic, startIndex = startIndex)
             }
             return
         }
@@ -878,7 +898,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun onTouristCandidates(all: List<TouristPoi>?, error: String?, plan: RoutePlan?, center: LatLon?, announce: Boolean, scenic: Boolean) {
+    private fun onTouristCandidates(
+        all: List<TouristPoi>?, error: String?, plan: RoutePlan?, center: LatLon?,
+        announce: Boolean, scenic: Boolean, startIndex: Int = -1
+    ) {
         if (!touristOn || isDestroyed) return
         touistClearPending()
         if (all == null) {
@@ -896,7 +919,12 @@ class MainActivity : AppCompatActivity() {
         touristRouteKey = plan
         touristAreaCenter = center
         var note: String? = null
-        if (scenic && plan != null && plan === TripState.plan) {
+        // The sights route is chosen once per plan, only before Go, and never
+        // over a route the user picked while the search was running.
+        if (scenic && plan != null && plan === TripState.plan && !NavigationEngine.isActive &&
+            TripState.selectedIndex == startIndex && TripState.scenicCheckedPlan !== plan
+        ) {
+            TripState.scenicCheckedPlan = plan
             val choice = Tourist.scenicChoice(plan.routes, TripState.selectedIndex, all,
                 Tourist.corridorRadius(currentMode.mode), sightsMaxFraction())
             if (choice != null) {
@@ -1200,6 +1228,7 @@ class MainActivity : AppCompatActivity() {
         override fun onProgress(progress: Progress, route: RouteResult) = onNavProgress(progress, route)
         override fun onRerouting() = showMessage("Off route, recalculating...")
         override fun onRerouted(plan: RoutePlan) {
+            if (altChoiceOpen) closeAltChoice(restore = false)
             TripState.plan = plan
             TripState.selectedIndex = plan.primaryIndex
             // No new places search on a reroute: places are measured on the
@@ -1268,7 +1297,7 @@ class MainActivity : AppCompatActivity() {
     private fun adaptTrackingZoom(location: Location) {
         if (currentMode != ModeUi.DRIVING || !location.hasSpeed() || !puckActive()) return
         val lc = map?.locationComponent ?: return
-        if (lc.cameraMode != CameraMode.TRACKING_GPS) return
+        if (lc.cameraMode != CameraMode.TRACKING_GPS && lc.cameraMode != CameraMode.TRACKING_GPS_NORTH) return
         val zoom = (18.0 - location.speed * 3.6 / 30.0).coerceIn(14.0, 18.0)
         if (Math.abs(zoom - lastTrackingZoom) >= 0.3) {
             lastTrackingZoom = zoom
@@ -1283,6 +1312,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.alt_route_button).visibility = if (navigating) View.VISIBLE else View.GONE
         if (navigating) findViewById<View>(R.id.route_options_row).visibility = View.GONE
         else TripState.plan?.let { populateRouteOptionsRow(it.routes, TripState.selectedIndex) }
+        redrawRouteLines()
         findViewById<View>(R.id.mode_row).visibility = visibility
         findViewById<View>(R.id.waypoint_button).visibility = visibility
         findViewById<View>(R.id.search_button).visibility = visibility
@@ -1625,13 +1655,18 @@ class MainActivity : AppCompatActivity() {
     /** Overpass maxspeed of the nearest road, at most every 15 s, Driving only. */
     private fun maybeQuerySpeedLimit(location: Location) {
         val now = System.currentTimeMillis()
-        if (now - lastOverpassQueryAtMs < 15000L) return
+        if (now - lastOverpassQueryAtMs < 15000L || speedLimitInFlight) return
         lastOverpassQueryAtMs = now
+        speedLimitInFlight = true
+        val seq = ++speedLimitSeq
         val query = "[out:json][timeout:10];way(around:25,${location.latitude},${location.longitude})[\"highway\"][\"maxspeed\"];out tags 3;"
         // Quick (15 s, one round) and silent: a busy server must not cover the
         // screen with errors every 15 s. The last known limit is kept for 2 min.
         OverpassClient.query(this, query, quick = true) { body, _ ->
-            if (isDestroyed) return@query
+            speedLimitInFlight = false
+            if (isDestroyed || seq != speedLimitSeq) return@query
+            // An answer older than 20 s is about a road already behind you.
+            if (body != null && System.currentTimeMillis() - now > 20_000L) return@query
             if (body == null) {
                 if (System.currentTimeMillis() - lastSpeedLimitOkAtMs > 120_000L) lastKnownSpeedLimit = null
                 return@query
@@ -1837,6 +1872,7 @@ class MainActivity : AppCompatActivity() {
                 showError(error ?: "Route request failed")
                 return@plan
             }
+            if (navigating && altChoiceOpen) closeAltChoice(restore = false)
             TripState.plan = plan
             TripState.selectedIndex = plan.primaryIndex
             drawPlan(plan, plan.primaryIndex, fit = !navigating, note = plan.note)
@@ -1852,7 +1888,7 @@ class MainActivity : AppCompatActivity() {
         }
         val sel = selectedIndex.coerceIn(0, results.size - 1)
         TripState.selectedIndex = sel
-        layers.setRoutes(results, sel)
+        drawRouteLines(results, sel)
         val primary = results[sel]
 
         routeInfoDist.text = distanceLabel(primary.distanceMeters)
@@ -1870,6 +1906,19 @@ class MainActivity : AppCompatActivity() {
 
         if (fit) fitCamera(results)
         if (tourist) refreshTourist()
+    }
+
+    /** After Go only the followed route is drawn (grey alternatives come back
+     *  with "find alternative route"). */
+    private fun drawRouteLines(results: List<RouteResult>, sel: Int) {
+        if (navUiActive && !altChoiceOpen) layers.setRoutes(listOf(results[sel]), 0)
+        else layers.setRoutes(results, sel)
+    }
+
+    private fun redrawRouteLines() {
+        val plan = TripState.plan ?: return
+        if (plan.routes.isEmpty()) return
+        drawRouteLines(plan.routes, TripState.selectedIndex.coerceIn(0, plan.routes.size - 1))
     }
 
     private fun distanceLabel(m: Double): String {
@@ -1935,11 +1984,15 @@ class MainActivity : AppCompatActivity() {
         if (index !in plan.routes.indices) return
         TripState.selectedIndex = index
         if (NavigationEngine.isActive) {
-            // Picked from "find alternative route": switch, chips go away.
-            NavigationEngine.switchRoute(plan, index, altRequests[index])
-            altChoiceOpen = false
-            altRequests = emptyMap()
-            drawPlan(plan, index, fit = false, note = "Route switched", tourist = false)
+            // Only from "find alternative route" (taps are ignored otherwise).
+            val req = altRequests[index]
+            if (!altChoiceOpen || req == null) return
+            val single = RoutePlan(listOf(plan.routes[index]), 0, null)
+            NavigationEngine.switchRoute(single, 0, req)
+            closeAltChoice(restore = false)
+            TripState.plan = single
+            TripState.selectedIndex = 0
+            drawPlan(single, 0, fit = false, note = "Route switched", tourist = false)
             return
         }
         drawPlan(plan, index, fit = false, note = "Manually selected route")
@@ -1955,15 +2008,24 @@ class MainActivity : AppCompatActivity() {
     private fun setupAltRouteButton() {
         findViewById<ImageButton>(R.id.alt_route_button).apply {
             setIconActive(this, false)
-            setOnClickListener { if (altChoiceOpen) closeAltChoice() else findAlternatives() }
+            setOnClickListener { if (altChoiceOpen) closeAltChoice(restore = true) else findAlternatives() }
         }
     }
 
-    private fun closeAltChoice() {
+    /** Closes the choice. [restore]: back to the route being followed
+     *  (when the user closes it without picking). */
+    private fun closeAltChoice(restore: Boolean) {
         altChoiceOpen = false
         altRequests = emptyMap()
         setIconActive(findViewById(R.id.alt_route_button), false)
         findViewById<View>(R.id.route_options_row).visibility = View.GONE
+        if (restore && NavigationEngine.isActive) {
+            val r = NavigationEngine.route ?: return
+            val single = RoutePlan(listOf(r), 0, null)
+            TripState.plan = single
+            TripState.selectedIndex = 0
+            drawPlan(single, 0, fit = false, note = null, tourist = false)
+        }
     }
 
     /**
@@ -1985,9 +2047,25 @@ class MainActivity : AppCompatActivity() {
         var resA: RoutePlan? = null
         var resB: RoutePlan? = null
         var answers = 0
+        // What is left of the followed route, from here: chip 0 and the
+        // "same route" check use this, not the whole trip.
+        val progress = NavigationEngine.lastProgress
+        val left = if (progress != null && progress.snap != null && current.distanceMeters > 0) {
+            val f = (progress.remainingM / current.distanceMeters).coerceIn(0.0, 1.0)
+            RouteResult(
+                listOf(from) + current.points.drop(progress.snap.segmentIndex + 1),
+                progress.remainingM, progress.remainingS,
+                current.tollDistanceMeters * f, current.unpavedDistanceMeters * f
+            )
+        } else current
         fun finish() {
             if (++answers < 2 || !NavigationEngine.isActive) return
-            val routes = mutableListOf(current)
+            if (NavigationEngine.route !== current) {
+                // Rerouted meanwhile: these answers are about an old situation.
+                setIconActive(findViewById(R.id.alt_route_button), false)
+                return
+            }
+            val routes = mutableListOf(left)
             val reqs = mutableMapOf<Int, RouteRequest>()
             fun addDistinct(r: RouteResult, req: RouteRequest) {
                 val same = routes.any {
