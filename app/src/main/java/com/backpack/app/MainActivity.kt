@@ -1237,6 +1237,7 @@ class MainActivity : AppCompatActivity() {
         }
         override fun onRerouteFailed(error: String) = showError(error)
         override fun onArrived() {
+            if (altChoiceOpen) closeAltChoice(restore = true)
             navDistanceText.text = ""
             statusStrip.text = "Arrived"
             navInstructionIcon.setImageResource(R.drawable.ic_nav_arrive)
@@ -1244,6 +1245,7 @@ class MainActivity : AppCompatActivity() {
             wakeDisplay()
         }
         override fun onStopped() {
+            if (altChoiceOpen) closeAltChoice(restore = true)
             if (navUiActive) stopNavigationUi()
         }
     }
@@ -1995,12 +1997,17 @@ class MainActivity : AppCompatActivity() {
             drawPlan(single, 0, fit = false, note = "Route switched", tourist = false)
             return
         }
+        // A manual pick is final for this plan: the Weekend sights choice won't override it.
+        TripState.scenicCheckedPlan = plan
         drawPlan(plan, index, fit = false, note = "Manually selected route")
     }
 
     // ---------- Find alternative route (during navigation) ----------
 
     private var altChoiceOpen = false
+    /** Route being followed when the choice opened (to restore it even if
+     *  navigation stopped meanwhile). */
+    private var altOriginalRoute: RouteResult? = null
     private var altRequests: Map<Int, RouteRequest> = emptyMap()
     private val altPlannerA by lazy { RoutePlanner(this) }
     private val altPlannerB by lazy { RoutePlanner(this) }
@@ -2019,8 +2026,10 @@ class MainActivity : AppCompatActivity() {
         altRequests = emptyMap()
         setIconActive(findViewById(R.id.alt_route_button), false)
         findViewById<View>(R.id.route_options_row).visibility = View.GONE
-        if (restore && NavigationEngine.isActive) {
-            val r = NavigationEngine.route ?: return
+        val original = altOriginalRoute
+        altOriginalRoute = null
+        if (restore) {
+            val r = NavigationEngine.route ?: original ?: return
             val single = RoutePlan(listOf(r), 0, null)
             TripState.plan = single
             TripState.selectedIndex = 0
@@ -2063,6 +2072,7 @@ class MainActivity : AppCompatActivity() {
             if (NavigationEngine.route !== current) {
                 // Rerouted meanwhile: these answers are about an old situation.
                 setIconActive(findViewById(R.id.alt_route_button), false)
+                showMessage("Route changed meanwhile -- tap again for alternatives")
                 return
             }
             val routes = mutableListOf(left)
@@ -2084,6 +2094,7 @@ class MainActivity : AppCompatActivity() {
             val plan = RoutePlan(routes.take(4), 0, null)
             altRequests = reqs
             altChoiceOpen = true
+            altOriginalRoute = current
             TripState.plan = plan
             TripState.selectedIndex = 0
             drawPlan(plan, 0, fit = false, note = "Tap a route to switch (yours is highlighted)", tourist = false)

@@ -1,6 +1,33 @@
-# Backpack 0.7.0
+# Backpack 0.8.0
 
-## New in 0.7.0
+## New in 0.8.0
+- **Weekend = well-known places.** Weekend (urgency button) shows the
+  well-known places along your route or in view; Work / Emergency hide
+  them. Hold the urgency button for the list. The camera button is gone.
+  With alternatives, Weekend picks the route passing clearly more
+  well-known places if it costs at most the extra time set in Settings
+  (default 20 %, 0 = off). It never overrides the Balanced toll choice or
+  a route you picked yourself, and never changes the route after Go.
+- **Sights** is a new category on the POI button (same places, any mode).
+- **Places search more robust:** your own server (Settings, optional), then
+  overpass-api.de, then overpass.private.coffee (the former
+  kumi.systems); long timeout; a "busy" or hidden-timeout answer moves to
+  the next server; one more round after 3 s; errors offer "tap to retry".
+  Speed-limit lookups: one at a time, quiet, late answers ignored.
+- **Position arrow 170 %.**
+- **Compass removed.** While navigating, the locate button switches
+  "your direction up" / "north up" (tap again after moving the map by hand
+  to follow again).
+- **Top row:** urgency button exactly midway between car and POI.
+  **Bottom row:** settings, clear, go and speed in 4 equal slots.
+- **After Go:** only your route is drawn, alternative chips disappear, and
+  a "find alternative route" button appears: it looks for other routes
+  from where you are (router alternatives + the other preference) and
+  shows them as chips next to what is left of yours; tap one to switch,
+  tap the button again to close.
+
+
+## 0.7.0
 - **Tourist mode** (camera button, left side). Tap = on/off, hold = list.
   Shows well-known places along your route (or in the visible area without
   a route): sights, museums, historic places, viewpoints, nature. Only
