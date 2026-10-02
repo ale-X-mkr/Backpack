@@ -389,13 +389,15 @@
 
 
     <!-- ===== ZONE: bottom bar: 4 equal slots (settings | clear | go | speed),
-         centres 48dp above the bottom; empty slots keep their place. ===== -->
+         84dp tall (the speed widget with its limit sign fits inside, nothing
+         clipped), centres 6 + 42 = 48dp above the bottom; empty slots keep
+         their place. ===== -->
     <LinearLayout
         android:id="@+id/bottom_bar"
         android:layout_width="match_parent"
-        android:layout_height="64dp"
+        android:layout_height="84dp"
         android:layout_gravity="bottom"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="6dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:orientation="horizontal">
@@ -477,7 +479,7 @@
             android:id="@+id/speed_widget"
             android:layout_width="84dp"
             android:layout_height="84dp"
-            android:layout_gravity="bottom|center_horizontal"
+            android:layout_gravity="center"
             android:clipChildren="false"
             android:visibility="gone">
 
@@ -485,7 +487,7 @@
                 android:id="@+id/speed_sign"
                 android:layout_width="64dp"
                 android:layout_height="64dp"
-                android:layout_gravity="bottom|center_horizontal"
+                android:layout_gravity="center"
                 android:background="@drawable/speed_sign_background"
                 android:gravity="center"
                 android:orientation="vertical">
