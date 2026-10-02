@@ -848,10 +848,16 @@ class MainActivity : AppCompatActivity() {
         touristPendingRoute = null
         touristPendingCenter = null
         if (pois == null) {
+            // Remember the failed search too: no retry on every map move.
+            // Turning tourist mode off and on searches again.
+            touristResults = emptyList()
+            touristRouteKey = routeKey
+            touristAreaCenter = center
+            layers.setTourist(emptyList())
             showError(error ?: "Places search failed")
             return
         }
-        // Remember what was searched only once it succeeded.
+        // Remember what was searched once it has answered.
         touristResults = pois
         touristRouteKey = routeKey
         touristAreaCenter = center

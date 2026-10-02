@@ -36,7 +36,10 @@ class TouristFinder {
 
     fun alongRoute(points: List<com.backpack.app.core.LatLon>, mode: TravelMode, callback: ResultCallback) {
         val line = Polyline(points)
-        val query = Tourist.corridorQuery(Tourist.sampleLine(Tourist.trimEnds(points)), Tourist.corridorRadius(mode))
+        val radius = Tourist.corridorRadius(mode)
+        // Trim no more than half the search width: places at the ends are still found.
+        val trimmed = Tourist.trimEnds(points, minOf(500.0, radius / 2.0))
+        val query = Tourist.corridorQuery(Tourist.sampleLine(trimmed), radius)
         run(query, line, ROUTE_LIMIT, callback)
     }
 
@@ -53,9 +56,13 @@ class TouristFinder {
             val found = try { Tourist.placeOnRoute(Tourist.parseOverpass(body), line) } catch (e: Exception) { null }
             if (found == null) { deliver.onResult(null, "Couldn't read the places answer"); return@overpass }
             if (found.isEmpty()) { deliver.onResult(emptyList(), null); return@overpass }
-            // Keep the request small: closest to the route (or with a Wikipedia tag) first.
-            val candidates = found.sortedWith(compareBy<TouristPoi> { if (it.wikipedia != null) 0 else 1 }.thenBy { it.offsetM })
-                .take(MAX_CANDIDATES)
+            // Keep the request small: with a Wikipedia tag first, then areas
+            // (castles, cathedrals...) before points, then closest to the route.
+            val candidates = found.sortedWith(
+                compareBy<TouristPoi> { if (it.wikipedia != null) 0 else 1 }
+                    .thenBy { if (it.key.startsWith("n")) 1 else 0 }
+                    .thenBy { it.offsetM }
+            ).take(MAX_CANDIDATES)
             popularity(candidates.map { it.wikidata }) { links ->
                 val scored = candidates.map { p ->
                     // Wikidata unreachable: fall back to "has a Wikipedia tag".
@@ -129,7 +136,7 @@ class TouristFinder {
             .build()
 
         const val USER_AGENT = "Backpack/0.7 (private Android navigation app; OpenStreetMap data)"
-        private const val MAX_CANDIDATES = 150
+        private const val MAX_CANDIDATES = 300
         private const val ROUTE_LIMIT = 25
         private const val AREA_LIMIT = 20
     }

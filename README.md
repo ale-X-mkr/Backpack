@@ -1,9 +1,34 @@
-# Backpack 0.4.0
+# Backpack 0.7.0
+
+## New in 0.7.0
+- **Tourist mode** (camera button, left side). Tap = on/off, hold = list.
+  Shows well-known places along your route (or in the visible area without
+  a route): sights, museums, historic places, viewpoints, nature. Only
+  places with a Wikidata entry, ranked by how many Wikipedia/Wikimedia
+  sites write about them (★ to ★★★). Tap a dot: kind, how well known,
+  distance ahead, extra minutes (estimate, then the exact value from the
+  router), Wikipedia link, **Add as stop** (put in the right order, max 2
+  stops) or **Go here**. While navigating, only places ahead of you.
+  Privacy: the route sent to OpenStreetMap's Overpass server is rounded to
+  ~100 m and leaves out its first and last part; Wikidata only receives
+  the list of place ids.
+- **Search with suggestions while typing** (Photon, open source, OSM data);
+  Enter / search button takes the first result. Nominatim (OSM Foundation)
+  as a fallback on Enter only. Typed coordinates ("45.19, 5.72") work
+  without any server. Location bias sent rounded to ~1 km.
+- **Night mode by sunset**: Settings → Display → Sunset switches to the night
+  map from sunset to sunrise where you are (computed on the phone, checked
+  every minute). System = follow the phone's dark theme.
+- **Speed**: smaller current-speed circle (your speed, ring colour as
+  before) with the road's speed-limit sign on top of it; the limit sign is
+  hidden when the road's limit is unknown. Alarm rules unchanged.
+- Bottom buttons on one line; toll button now left of the car (car unmoved).
+
 
 Private, open-source GPS navigation for Android. Nothing from Google:
 no Play Services, no Google servers, no Material library.
 
-## What changed since Step 38
+## 0.4.0 (changes since Step 38)
 - **Map:** MapLibre Native (BSD) with OpenFreeMap vector maps (no account,
   no key, no cookies). Real night map with Day / Night / Auto. Style
   choice in Settings (Liberty / Bright / Light grey). The
