@@ -24,17 +24,24 @@ class Popup(private val context: Context, title: String) {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(14), dp(6), dp(14), dp(6))
     }
+    /** Fixed area under the title (tabs of a multipage popup); hidden while empty. */
+    val header: LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(10), dp(6), dp(10), dp(0))
+        visibility = View.GONE
+    }
     private val buttons = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
         setPadding(dp(8), dp(4), dp(8), dp(10))
     }
 
+    private val root: LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        background = ContextCompat.getDrawable(context, R.drawable.popup_background)
+    }
+
     init {
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            background = ContextCompat.getDrawable(context, R.drawable.popup_background)
-        }
         root.addView(TextView(context).apply {
             text = title
             textSize = 15f
@@ -43,6 +50,7 @@ class Popup(private val context: Context, title: String) {
             background = ContextCompat.getDrawable(context, R.drawable.popup_band)
             setPadding(dp(14), dp(9), dp(14), dp(9))
         })
+        root.addView(header)
         root.addView(ScrollView(context).apply { addView(body) }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
         ))
@@ -52,10 +60,17 @@ class Popup(private val context: Context, title: String) {
             (context.resources.displayMetrics.widthPixels * 0.9).toInt().coerceAtMost(dp(420)),
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
-        // Body scrolls but the popup never grows past 80 % of the screen.
+        fit()
+    }
+
+    /** Body scrolls but the popup never grows past 80 % of the screen
+     *  (called again when a multipage popup changes page). */
+    fun fit() {
+        val w = dialog.window ?: return
+        w.setLayout(w.attributes.width.takeIf { it > 0 } ?: ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         root.post {
             val max = (context.resources.displayMetrics.heightPixels * 0.8).toInt()
-            if (root.height > max) dialog.window?.setLayout(dialog.window!!.attributes.width, max)
+            if (root.height > max) w.setLayout(w.attributes.width, max)
         }
     }
 
@@ -134,6 +149,76 @@ class Popup(private val context: Context, title: String) {
         body.addView(row)
     }
 
+    /** A text field with a small label; [onChange] gets the trimmed text on every edit. */
+    fun field(label: String, value: String, hint: String = "", inputType: Int = android.text.InputType.TYPE_CLASS_TEXT, onChange: (String) -> Unit): android.widget.EditText {
+        body.addView(TextView(context).apply {
+            text = label
+            textSize = 12f
+            setTextColor(color(R.color.rg_text_secondary))
+            setPadding(0, dp(6), 0, 0)
+        })
+        val e = android.widget.EditText(context).apply {
+            setText(value)
+            this.hint = hint
+            this.inputType = inputType
+            textSize = 14f
+            setSingleLine(true)
+            setTextColor(color(R.color.rg_text))
+            setHintTextColor(color(R.color.rg_text_secondary))
+            backgroundTintList = android.content.res.ColorStateList.valueOf(color(R.color.rg_active))
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) = onChange(s?.toString()?.trim().orEmpty())
+            })
+        }
+        body.addView(e)
+        return e
+    }
+
+    /** Tappable text that opens [url] in the browser (underlined, active colour). */
+    fun link(text: String, url: String, sizeSp: Float = 13f): TextView = TextView(context).apply {
+        this.text = android.text.SpannableString(text).also {
+            it.setSpan(android.text.style.UnderlineSpan(), 0, text.length, 0)
+        }
+        textSize = sizeSp
+        setTextColor(color(R.color.rg_active))
+        setPadding(0, dp(4), 0, dp(4))
+        setOnClickListener {
+            try {
+                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+            } catch (e: Exception) { }
+        }
+        body.addView(this)
+    }
+
+    /** A small button inside the body (not in the bottom row). */
+    fun bodyButton(label: String, onClick: () -> Unit): TextView {
+        val row = FlowRow(context)
+        val b = TextView(context).apply {
+            text = label
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(5), dp(12), dp(5))
+            setTextColor(color(R.color.rg_text))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(color(R.color.rg_popup_band))
+                setStroke(dp(1), color(R.color.rg_chip_off))
+            }
+            setOnClickListener { onClick(); refreshAll() }
+        }
+        row.addView(b)
+        body.addView(row)
+        return b
+    }
+
+    /** Empties the body (multipage popups rebuild it per page). */
+    fun clearBody() {
+        body.removeAllViews()
+        refreshers.clear()
+    }
+
     private val refreshers = mutableListOf<() -> Unit>()
     private fun refreshAll() = refreshers.forEach { it() }
 
@@ -159,7 +244,7 @@ class Popup(private val context: Context, title: String) {
     fun show() = dialog.show()
     fun dismiss() = dialog.dismiss()
 
-    private fun styleChip(chip: TextView, on: Boolean) {
+    fun styleChip(chip: TextView, on: Boolean) {
         chip.setTextColor(if (on) 0xFFFFFFFF.toInt() else color(R.color.rg_text))
         chip.setTypeface(Typeface.create("sans-serif-condensed", if (on) Typeface.BOLD else Typeface.NORMAL))
         chip.background = GradientDrawable().apply {

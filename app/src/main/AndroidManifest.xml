@@ -20,6 +20,8 @@
         android:name=".BackpackApp"
         android:allowBackup="false"
         android:label="Backpack"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:theme="@style/Theme.Backpack"
         android:supportsRtl="true">
 
@@ -33,10 +35,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".SettingsActivity"
-            android:exported="false" />
 
         <service
             android:name=".nav.NavigationService"

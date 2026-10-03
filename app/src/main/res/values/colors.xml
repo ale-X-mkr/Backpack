@@ -25,4 +25,9 @@
     <color name="backpack_bg">#FFE6E6E6</color>
     <color name="backpack_accent">#FF8A0000</color>
     <color name="backpack_text_secondary">#FF555555</color>
+    <!-- 1.0.0 -->
+    <color name="rg_go_backdrop">#B38A0000</color>
+    <color name="search_frame">#B3505050</color>
+    <color name="route_chip_bg">#E6F2F2F2</color>
+    <color name="route_chip_text">#FF1A1A1A</color>
 </resources>

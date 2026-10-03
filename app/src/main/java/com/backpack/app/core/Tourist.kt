@@ -27,7 +27,9 @@ data class TouristPoi(
     /** Distance from the route line (0 without a route). */
     val offsetM: Double = 0.0,
     /** Position along the route (0 without a route). */
-    val alongM: Double = 0.0
+    val alongM: Double = 0.0,
+    /** Article found through Wikidata when the OSM data has no wikipedia tag. */
+    val articleUrl: String? = null
 ) {
     /** 0..3 stars from how widely it is written about. */
     val stars: Int get() = when {
@@ -38,15 +40,10 @@ data class TouristPoi(
     }
 
     /** Wikipedia article URL from the wikipedia tag, if present. */
-    val wikipediaUrl: String? get() {
-        val w = wikipedia ?: return null
-        val i = w.indexOf(':')
-        if (i <= 0 || i >= w.length - 1) return null
-        val lang = w.substring(0, i)
-        if (!lang.all { it.isLetter() || it == '-' }) return null
-        val title = w.substring(i + 1).replace(' ', '_')
-        return "https://$lang.wikipedia.org/wiki/" + java.net.URLEncoder.encode(title, "UTF-8").replace("+", "_")
-    }
+    val wikipediaUrl: String? get() = Places.wikipediaUrl(wikipedia)
+
+    /** Wikipedia article when tagged, else the Wikidata page (every place here has one). */
+    val readMoreUrl: String? get() = wikipediaUrl ?: articleUrl ?: wikidata.takeIf { it.isNotBlank() }?.let { "https://www.wikidata.org/wiki/$it" }
 }
 
 /**
@@ -87,6 +84,57 @@ object Tourist {
         }
         val parts = selectors.flatMap { sel -> FILTERS.trim().lines().map { " $sel${it.trim()}" } }.joinToString("\n")
         return "[out:json][timeout:25];\n(\n$parts\n);\nout center tags;"
+    }
+
+    /** One request for several map squares (cheaper for the server than a
+     *  query around a route line, and cached per square on the phone). */
+    fun tileQuery(tiles: List<Tile>): String {
+        val parts = tiles.flatMap { t -> FILTERS.trim().lines().map { " nwr${t.bbox}${it.trim()}" } }.joinToString("\n")
+        return "[out:json][timeout:25];\n(\n$parts\n);\nout center tags;"
+    }
+
+    /** How far ahead along a route places are looked for at once, by mode. */
+    fun searchAheadM(mode: TravelMode): Double = when (mode) {
+        TravelMode.WALKING -> 15_000.0
+        TravelMode.CYCLING -> 60_000.0
+        TravelMode.DRIVING -> 120_000.0
+    }
+
+    // ---------- Cache format (sitelinks are cached apart) ----------
+
+    fun toJson(list: List<TouristPoi>): String {
+        val a = org.json.JSONArray()
+        for (p in list) {
+            val o = JSONObject().put("k", p.key).put("n", p.name).put("a", p.point.lat).put("o", p.point.lon)
+                .put("c", p.category.name).put("d", p.wikidata)
+            p.wikipedia?.let { o.put("w", it) }
+            a.put(o)
+        }
+        return a.toString()
+    }
+
+    fun fromJson(text: String): List<TouristPoi> {
+        val a = org.json.JSONArray(text)
+        val out = mutableListOf<TouristPoi>()
+        for (i in 0 until a.length()) {
+            val o = a.optJSONObject(i) ?: continue
+            val cat = TouristCategory.values().firstOrNull { it.name == o.optString("c", "") } ?: continue
+            out.add(TouristPoi(o.optString("k", ""), o.optString("n", ""), LatLon(o.optDouble("a"), o.optDouble("o")),
+                cat, o.optString("d", ""), o.optString("w", "").ifBlank { null }))
+        }
+        return out
+    }
+
+    /** Groups places by square; every queried square gets an entry (maybe empty). */
+    fun byTile(pois: List<TouristPoi>, queried: List<Tile>): Map<Tile, List<TouristPoi>> {
+        val wanted = queried.toSet()
+        val out = LinkedHashMap<Tile, MutableList<TouristPoi>>()
+        for (t in queried) out[t] = mutableListOf()
+        for (p in pois) {
+            val t = Tiles.of(p.point)
+            if (t in wanted) out.getValue(t).add(p)
+        }
+        return out
     }
 
     /** Overpass query for places inside a box. */
@@ -195,6 +243,30 @@ object Tourist {
             val id = keys.next()
             val links = entities.optJSONObject(id)?.optJSONObject("sitelinks") ?: continue
             out[id] = links.length()
+        }
+        return out
+    }
+
+    /** Popularity of a place and the best Wikipedia article to read about it. */
+    data class SiteInfo(val sitelinks: Int, val articleUrl: String?)
+
+    /**
+     * id -> sitelink count + article in the first of [languages] that has
+     * one (e.g. the phone's language, then English).
+     */
+    fun parseSiteInfo(body: String, languages: List<String>): Map<String, SiteInfo> {
+        val entities = JSONObject(body).optJSONObject("entities") ?: return emptyMap()
+        val out = HashMap<String, SiteInfo>()
+        val keys = entities.keys()
+        while (keys.hasNext()) {
+            val id = keys.next()
+            val links = entities.optJSONObject(id)?.optJSONObject("sitelinks") ?: continue
+            var url: String? = null
+            for (lang in languages) {
+                val title = links.optJSONObject(lang.replace('-', '_') + "wiki")?.optString("title", "").orEmpty()
+                if (title.isNotBlank()) { url = Places.wikipediaUrl("$lang:$title"); break }
+            }
+            out[id] = SiteInfo(links.length(), url)
         }
         return out
     }

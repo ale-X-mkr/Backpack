@@ -8,7 +8,7 @@ import com.backpack.app.core.SunPosition
 import com.backpack.app.location.LocationHub
 
 /** One place for settings that several classes read. Keys stay those of
- *  SettingsActivity so existing saved values keep working. */
+ *  Settings so existing saved values keep working. */
 object Prefs {
     private const val TOGGLES = "backpack_toggle_state"
     private const val KEY_ROUTE_OPTIONS = "route_options"
@@ -24,7 +24,7 @@ object Prefs {
     const val STYLE_POSITRON = "https://tiles.openfreemap.org/styles/positron"
     const val STYLE_DARK = "https://tiles.openfreemap.org/styles/dark"
 
-    private fun settings(c: Context) = c.getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
+    private fun settings(c: Context) = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
     private fun toggles(c: Context) = c.getSharedPreferences(TOGGLES, Context.MODE_PRIVATE)
 
     /**
@@ -34,10 +34,10 @@ object Prefs {
      * Changing the mode makes Android rebuild the screens (route is kept).
      */
     fun applyNightMode(c: Context) {
-        val mode = when (settings(c).getString(SettingsActivity.KEY_DISPLAY_MODE, SettingsActivity.DISPLAY_MODE_AUTO)) {
-            SettingsActivity.DISPLAY_MODE_DAY -> AppCompatDelegate.MODE_NIGHT_NO
-            SettingsActivity.DISPLAY_MODE_NIGHT -> AppCompatDelegate.MODE_NIGHT_YES
-            SettingsActivity.DISPLAY_MODE_SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        val mode = when (settings(c).getString(Settings.KEY_DISPLAY_MODE, Settings.DISPLAY_MODE_AUTO)) {
+            Settings.DISPLAY_MODE_DAY -> AppCompatDelegate.MODE_NIGHT_NO
+            Settings.DISPLAY_MODE_NIGHT -> AppCompatDelegate.MODE_NIGHT_YES
+            Settings.DISPLAY_MODE_SYSTEM -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
             else -> {
                 val pos = LocationHub.lastGoodFix?.let { LatLon(it.latitude, it.longitude) }
                     ?: camera(c)?.let { LatLon(it.first, it.second) }
@@ -54,10 +54,10 @@ object Prefs {
             android.content.res.Configuration.UI_MODE_NIGHT_YES
 
     fun mapStyleUrl(c: Context): String {
-        val custom = settings(c).getString(SettingsActivity.KEY_CUSTOM_STYLE, "")?.trim().orEmpty()
+        val custom = settings(c).getString(Settings.KEY_CUSTOM_STYLE, "")?.trim().orEmpty()
         if (custom.isNotEmpty() && !isNight(c)) return custom
         if (isNight(c)) return STYLE_DARK
-        return when (settings(c).getString(SettingsActivity.KEY_MAP_STYLE, "liberty")) {
+        return when (settings(c).getString(Settings.KEY_MAP_STYLE, "liberty")) {
             "bright" -> STYLE_BRIGHT
             "positron" -> STYLE_POSITRON
             else -> STYLE_LIBERTY
@@ -65,14 +65,14 @@ object Prefs {
     }
 
     fun orsBaseUrl(c: Context): String =
-        settings(c).getString(SettingsActivity.KEY_ORS_URL, "")?.trim()?.trimEnd('/')
+        settings(c).getString(Settings.KEY_ORS_URL, "")?.trim()?.trimEnd('/')
             ?.ifEmpty { null } ?: DEFAULT_ORS_URL
 
     /** Own key from Settings first, then the two built-in keys. The
      *  built-in keys are only ever sent to openrouteservice.org itself,
      *  never to a custom server set in Settings. */
     fun orsKeys(c: Context): List<String> {
-        val own = settings(c).getString(SettingsActivity.KEY_ORS_KEY, "")?.trim().orEmpty()
+        val own = settings(c).getString(Settings.KEY_ORS_KEY, "")?.trim().orEmpty()
         val builtIn = if (orsBaseUrl(c) == DEFAULT_ORS_URL) listOf(BuildConfig.ORS_KEY_1, BuildConfig.ORS_KEY_2) else emptyList()
         return (listOf(own) + builtIn).filter { it.isNotEmpty() }.distinct()
     }
@@ -102,5 +102,18 @@ object Prefs {
         )
     }
 
-    fun useMetric(c: Context) = settings(c).getBoolean(SettingsActivity.KEY_UNIT_METRIC, true)
+    fun useMetric(c: Context) = settings(c).getBoolean(Settings.KEY_UNIT_METRIC, true)
+
+    /** Navigation tilt in degrees for [driving]; Auto = 45° driving, 25° otherwise. */
+    fun navTilt(c: Context, driving: Boolean): Double {
+        val t = settings(c).getInt(Settings.KEY_NAV_TILT, -1)
+        return if (t < 0) (if (driving) 45.0 else 25.0) else t.coerceIn(0, 60).toDouble()
+    }
+
+    /** Zoom levels added to the navigation zoom (+1 closer, -1 farther). */
+    fun navZoomOffset(c: Context): Double = settings(c).getInt(Settings.KEY_NAV_ZOOM, 0).coerceIn(-2, 2).toDouble()
+
+    fun voiceOn(c: Context) = settings(c).getBoolean(Settings.KEY_VOICE, true)
+
+    fun alarmSound(c: Context) = settings(c).getBoolean(Settings.KEY_ALARM_SOUND, true)
 }

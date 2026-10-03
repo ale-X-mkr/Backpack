@@ -5,129 +5,287 @@ import android.os.Handler
 import android.os.Looper
 import com.backpack.app.core.LatLon
 import com.backpack.app.core.Polyline
+import com.backpack.app.core.SpeedLimits
+import com.backpack.app.core.Tile
+import com.backpack.app.core.Tiles
 import com.backpack.app.core.Tourist
 import com.backpack.app.core.TouristPoi
 import com.backpack.app.core.TravelMode
 import com.backpack.app.net.OverpassClient
+import com.backpack.app.net.TileCache
 import com.backpack.app.route.RoutePlanner
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Request
 import okhttp3.Response
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Well-known places (Weekend mode and the Sights POI category), network side.
- * 1. Overpass (OpenStreetMap data, via OverpassClient: several servers,
- *    retries): places with a Wikidata entry around one or more route lines,
- *    or inside the visible map area.
- * 2. Wikidata: how many Wikipedia/Wikimedia sites write about each one.
- *    Wikidata receives only the list of place ids.
- * Answers with ALL scored candidates (≤ 300); the caller places them on a
- * route, picks the sights route and ranks. Only the newest search answers;
- * callbacks on the main thread.
+ *
+ * 1.0.0: fetched per map square (~5 km) and kept on the phone for two
+ * weeks. A route asks only for the squares it crosses that are not known
+ * yet (up to [Tourist.searchAheadM] ahead), with one light Overpass request
+ * per 25 squares; the server learns which squares, not the route line.
+ * Wikidata gives how widely each place is written about and the Wikipedia
+ * article to read; those answers are kept for a month.
+ *
+ * Answers with every place within the corridor of the given lines (or in
+ * the box). Only the newest search answers; callbacks on the main thread.
  */
 class TouristFinder(context: Context) {
 
     fun interface ResultCallback {
-        fun onResult(pois: List<TouristPoi>?, error: String?)
+        /** [coveredM]: how far along the first line the search reached (route searches). */
+        fun onResult(pois: List<TouristPoi>?, error: String?, coveredM: Double)
     }
 
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
+    private val cache = TileCache.of(app, "sights", 14L * DAY_MS)
     @Volatile private var generation = 0
 
     fun cancel() { generation++ }
 
-    /** Around one or more route lines (the alternatives, for Weekend). */
-    fun alongRoutes(lines: List<List<LatLon>>, mode: TravelMode, onSwitch: () -> Unit, callback: ResultCallback) {
-        val radius = Tourist.corridorRadius(mode)
-        // Rounded (~100 m) and without the first / last stretch: the exact
-        // start and end of the trip are not sent.
-        val sampled = lines.map { Tourist.sampleLine(Tourist.trimEnds(it, minOf(500.0, radius / 2.0)), maxPoints = if (lines.size > 1) 50 else 80) }
-        // Matching uses thinned lines (≤ 400 points): accurate enough for a
-        // corridor several hundred metres wide, and fast.
-        val matchLines = lines.filter { it.size >= 2 }.map { Polyline(Tourist.sampleLine(it, maxPoints = 400, minStepM = 50.0)) }
-        run(Tourist.corridorQueryMulti(sampled, radius), matchLines, onSwitch, callback)
+    /**
+     * Around one or more route lines, from [fromM] metres along them (your
+     * position while navigating) up to the mode's search distance ahead.
+     */
+    fun alongRoutes(lines: List<List<LatLon>>, mode: TravelMode, fromM: Double, onSwitch: () -> Unit, callback: ResultCallback) {
+        val gen = ++generation
+        val radius = Tourist.corridorRadius(mode).toDouble()
+        val ahead = Tourist.searchAheadM(mode)
+        worker.execute {
+            val full = lines.filter { it.size >= 2 }.map { Polyline(it) }
+            val parts = full.map { SpeedLimits.section(it, fromM, ahead) }
+            val coveredM = full.firstOrNull()?.let { minOf(it.length, fromM + ahead) } ?: 0.0
+            val tiles = Tiles.alongLines(parts, radius).take(MAX_TILES)
+            // Matching on thinned lines (≤ 400 points): accurate enough for a
+            // corridor several hundred metres wide, and fast.
+            val match = parts.map { Polyline(Tourist.sampleLine(it, maxPoints = 400, minStepM = 50.0)) }
+            load(gen, tiles, match, radius, coveredM, onSwitch, callback)
+        }
     }
 
     fun inBox(south: Double, west: Double, north: Double, east: Double, onSwitch: () -> Unit, callback: ResultCallback) {
-        run(Tourist.boxQuery(south, west, north, east), emptyList(), onSwitch, callback)
-    }
-
-    private fun run(query: String, lines: List<Polyline>, onSwitch: () -> Unit, callback: ResultCallback) {
         val gen = ++generation
-        val deliver = ResultCallback { pois, error -> main.post { if (gen == generation) callback.onResult(pois, error) } }
-        OverpassClient.query(app, query, onSwitch = { if (gen == generation) onSwitch() }) { body, failure ->
-            if (gen != generation) return@query
-            // Parsing and matching can take a while: not on the screen's thread.
-            worker.execute { process(gen, body, failure, lines, deliver) }
+        worker.execute {
+            val tiles = Tiles.inBox(south, west, north, east, max = 16)
+            load(gen, tiles, emptyList(), 0.0, 0.0, onSwitch, callback, box = doubleArrayOf(south, west, north, east))
         }
     }
 
-    private fun process(gen: Int, body: String?, failure: OverpassClient.Failure?, lines: List<Polyline>, deliver: ResultCallback) {
-        if (gen != generation) return
-        if (body == null) { deliver.onResult(null, failure?.message ?: "Places search failed"); return }
-        // Distance to the NEAREST route line: the cap below must not
-        // favour places along the first route over the alternatives.
-        val found = try {
-            Tourist.parseOverpass(body).map { p ->
-                val best = lines.mapNotNull { it.snap(p.point) }.minByOrNull { it.offsetM }
-                if (best == null) p else p.copy(offsetM = best.offsetM, alongM = best.alongM)
+    /** Worker thread: cached squares, then the missing ones from Overpass. */
+    private fun load(
+        gen: Int, tiles: List<Tile>, lines: List<Polyline>, radius: Double, coveredM: Double,
+        onSwitch: () -> Unit, callback: ResultCallback, box: DoubleArray? = null
+    ) {
+        val deliver = { pois: List<TouristPoi>?, error: String? ->
+            main.post { if (gen == generation) callback.onResult(pois, error, coveredM) }
+        }
+        val found = ArrayList<TouristPoi>()
+        val missing = ArrayList<Tile>()
+        for (t in tiles) {
+            val text = cache.get(t)
+            val list = text?.let { try { Tourist.fromJson(it) } catch (e: Exception) { null } }
+            if (list == null) missing.add(t) else found.addAll(list)
+        }
+        var error: String? = null
+        // Squares another search is already fetching: wait for those instead
+        // of asking the server twice.
+        val waitFor = missing.mapNotNull { t -> inFlight[t]?.let { t to it } }
+        val toFetch = missing.filter { !inFlight.containsKey(it) }
+        // One request at a time (public servers allow 2 at once per user):
+        // every square is marked first so other searches wait for it.
+        val chunks = toFetch.chunked(TILES_PER_REQUEST).map { chunk ->
+            val latch = CountDownLatch(1)
+            chunk.forEach { inFlight[it] = latch }
+            chunk to latch
+        }
+        fun release(from: Int) {
+            for (k in from until chunks.size) {
+                val (chunk, latch) = chunks[k]
+                chunk.forEach { inFlight.remove(it, latch) }
+                latch.countDown()
             }
-        } catch (e: Exception) { null }
-        if (found == null) { deliver.onResult(null, OverpassClient.Failure.BAD_ANSWER.message); return }
-        if (found.isEmpty()) { deliver.onResult(emptyList(), null); return }
+        }
+        for ((k, pair) in chunks.withIndex()) {
+            val (chunk, latch) = pair
+            // Replaced, or the servers already failed: don't ask again now.
+            if (gen != generation || error != null) { release(k); break }
+            val outcome = fetch(chunk, latch) { main.post { if (gen == generation) onSwitch() } }
+            if (!await(gen, latch)) { release(k + 1); return }
+            val failure = outcome.get()
+            if (failure != null) { error = failure; continue }
+            for (t in chunk) cache.get(t)?.let { text -> try { found.addAll(Tourist.fromJson(text)) } catch (e: Exception) { } }
+        }
+        for ((t, latch) in waitFor) {
+            if (!await(gen, latch)) return
+            val list = cache.get(t)?.let { try { Tourist.fromJson(it) } catch (e: Exception) { null } }
+            if (list != null) found.addAll(list) else if (error == null) error = "Places search failed"
+        }
+        if (gen != generation) return
+        if (found.isEmpty() && error != null) { deliver(null, error); return }
+
+        // Inside the corridor (or the box) only; distance to the NEAREST line,
+        // so places along an alternative count as much as along the first route.
+        val inside = found.distinctBy { it.wikidata }.mapNotNull { p ->
+            if (lines.isEmpty()) {
+                if (box != null && (p.point.lat < box[0] || p.point.lat > box[2] || p.point.lon < box[1] || p.point.lon > box[3])) null else p
+            } else {
+                val best = lines.mapNotNull { it.snap(p.point) }.minByOrNull { it.offsetM }
+                if (best == null || best.offsetM > radius * 1.05) null else p.copy(offsetM = best.offsetM, alongM = best.alongM)
+            }
+        }
+        withPopularity(gen, inside) { scored -> deliver(scored, error) }
+    }
+
+    /** Sitelink counts + article links, from the phone first, Wikidata for the rest. */
+    private fun withPopularity(gen: Int, pois: List<TouristPoi>, done: (List<TouristPoi>) -> Unit) {
+        val known = SiteInfoStore.load(app)
         // Keep the Wikidata request small: with a Wikipedia tag first, then
         // areas (castles, cathedrals...) before points, then closest to the route.
-        val candidates = found.sortedWith(
-            compareBy<TouristPoi> { if (it.wikipedia != null) 0 else 1 }
+        val ask = pois.filter { it.wikidata !in known }
+            .sortedWith(compareBy<TouristPoi> { if (it.wikipedia != null) 0 else 1 }
                 .thenBy { if (it.key.startsWith("n")) 1 else 0 }
-                .thenBy { it.offsetM }
-        ).take(MAX_CANDIDATES)
-        popularity(candidates.map { it.wikidata }) { links ->
-            deliver.onResult(candidates.map { p ->
-                // Wikidata unreachable: fall back to "has a Wikipedia tag".
-                p.copy(sitelinks = links?.get(p.wikidata) ?: if (p.wikipedia != null) 1 else 0)
-            }, null)
+                .thenBy { it.offsetM })
+            .take(MAX_WIKIDATA).map { it.wikidata }.distinct()
+        fun finish(info: Map<String, Tourist.SiteInfo>) {
+            done(pois.map { p ->
+                val i = info[p.wikidata] ?: known[p.wikidata]
+                // Unknown (Wikidata unreachable): "has a Wikipedia tag" counts as known.
+                p.copy(sitelinks = i?.sitelinks ?: if (p.wikipedia != null) 1 else 0, articleUrl = i?.articleUrl)
+            })
         }
-    }
-
-    /** Sitelink counts for all ids (batches of 50, in parallel); null if every batch failed. */
-    private fun popularity(ids: List<String>, done: (Map<String, Int>?) -> Unit) {
-        val batches = ids.chunked(50)
-        val result = HashMap<String, Int>()
+        if (ask.isEmpty() || gen != generation) { finish(emptyMap()); return }
+        val batches = ask.chunked(50)
+        val result = HashMap<String, Tourist.SiteInfo>()
         val left = AtomicInteger(batches.size)
-        var anyOk = false
-        val lock = Any()
+        val langs = listOf(java.util.Locale.getDefault().language, "en").filter { it.isNotBlank() }.distinct()
         for (batch in batches) {
             val req = Request.Builder().url(Tourist.wikidataUrl(batch))
                 .addHeader("User-Agent", OverpassClient.USER_AGENT)
                 .addHeader("Accept", "application/json")
                 .build()
             RoutePlanner.http.newCall(req).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) = finish(null)
+                override fun onFailure(call: Call, e: IOException) = part(null)
                 override fun onResponse(call: Call, response: Response) {
                     val body = response.use { if (it.isSuccessful) it.body?.string() else null }
-                    finish(body?.let { try { Tourist.parseSitelinks(it) } catch (e: Exception) { null } })
+                    part(body?.let { try { Tourist.parseSiteInfo(it, langs) } catch (e: Exception) { null } })
                 }
-                fun finish(part: Map<String, Int>?) {
-                    synchronized(lock) {
-                        if (part != null) { result.putAll(part); anyOk = true }
+                fun part(p: Map<String, Tourist.SiteInfo>?) {
+                    synchronized(result) { if (p != null) result.putAll(p) }
+                    if (left.decrementAndGet() == 0) worker.execute {
+                        val copy = synchronized(result) { HashMap(result) }
+                        if (copy.isNotEmpty()) SiteInfoStore.add(app, copy)
+                        finish(copy)
                     }
-                    if (left.decrementAndGet() == 0) done(if (anyOk) result else null)
                 }
             })
         }
     }
 
+    /**
+     * Fires one Overpass request for [chunk]; its answer is stored per square
+     * (even if the search that asked was replaced meanwhile: nothing wasted),
+     * then [latch] opens. The returned holder gets the error text, if any.
+     */
+    private fun fetch(chunk: List<Tile>, latch: CountDownLatch, onSwitch: () -> Unit): java.util.concurrent.atomic.AtomicReference<String?> {
+        val outcome = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        main.post {
+            OverpassClient.query(app, Tourist.tileQuery(chunk), onSwitch = onSwitch) { body, failure ->
+                store.execute {
+                    val parsed = body?.let { try { Tourist.parseOverpass(it) } catch (e: Exception) { null } }
+                    if (parsed == null) {
+                        outcome.set(if (body == null) failure?.message ?: "Places search failed" else OverpassClient.Failure.BAD_ANSWER.message)
+                    } else {
+                        for ((t, list) in Tourist.byTile(parsed, chunk)) cache.put(t, Tourist.toJson(list))
+                    }
+                    chunk.forEach { inFlight.remove(it, latch) }
+                    latch.countDown()
+                }
+            }
+        }
+        return outcome
+    }
+
+    /** Waits for [latch]; false when this search was replaced meanwhile. */
+    private fun await(gen: Int, latch: CountDownLatch): Boolean {
+        while (!latch.await(500, TimeUnit.MILLISECONDS)) if (gen != generation) return false
+        return gen == generation
+    }
+
     companion object {
         private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
+        /** Parses and stores answers (never blocked by a waiting search). */
+        private val store = java.util.concurrent.Executors.newSingleThreadExecutor()
+        private val inFlight = java.util.concurrent.ConcurrentHashMap<Tile, CountDownLatch>()
+        private const val DAY_MS = 24L * 3600_000L
 
         const val USER_AGENT = OverpassClient.USER_AGENT
-        private const val MAX_CANDIDATES = 300
+        /** Squares per Overpass request, and per search. */
+        private const val TILES_PER_REQUEST = 25
+        private const val MAX_TILES = 150
+        private const val MAX_WIKIDATA = 300
         const val ROUTE_LIMIT = 25
         const val AREA_LIMIT = 20
+    }
+}
+
+/** Wikidata answers kept on the phone for a month (id -> sitelinks, article). */
+internal object SiteInfoStore {
+    private const val FILE = "sights_wikidata.json"
+    private const val MAX_AGE_MS = 30L * 24 * 3600_000L
+    private var memory: HashMap<String, Pair<Long, Tourist.SiteInfo>>? = null
+
+    @Synchronized
+    fun load(c: Context): Map<String, Tourist.SiteInfo> {
+        val m = memory ?: read(c).also { memory = it }
+        val now = System.currentTimeMillis()
+        return m.filterValues { now - it.first < MAX_AGE_MS }.mapValues { it.value.second }
+    }
+
+    @Synchronized
+    fun add(c: Context, info: Map<String, Tourist.SiteInfo>) {
+        val m = memory ?: read(c).also { memory = it }
+        val now = System.currentTimeMillis()
+        for ((id, i) in info) m[id] = now to i
+        // Oldest out beyond 20 000 places.
+        if (m.size > 20_000) m.entries.sortedBy { it.value.first }.take(m.size - 20_000).forEach { m.remove(it.key) }
+        try {
+            val o = JSONObject()
+            for ((id, v) in m) {
+                val a = JSONArray().put(v.first).put(v.second.sitelinks)
+                v.second.articleUrl?.let { a.put(it) }
+                o.put(id, a)
+            }
+            File(c.cacheDir, "places").mkdirs()
+            File(File(c.cacheDir, "places"), FILE).writeText(o.toString())
+        } catch (e: Exception) { }
+    }
+
+    @Synchronized
+    fun forget() { memory = null }
+
+    private fun read(c: Context): HashMap<String, Pair<Long, Tourist.SiteInfo>> {
+        val out = HashMap<String, Pair<Long, Tourist.SiteInfo>>()
+        try {
+            val f = File(File(c.cacheDir, "places"), FILE)
+            if (!f.exists()) return out
+            val o = JSONObject(f.readText())
+            val keys = o.keys()
+            while (keys.hasNext()) {
+                val id = keys.next()
+                val a = o.optJSONArray(id) ?: continue
+                out[id] = a.optLong(0) to Tourist.SiteInfo(a.optInt(1), a.optString(2, "").ifBlank { null })
+            }
+        } catch (e: Exception) { }
+        return out
     }
 }

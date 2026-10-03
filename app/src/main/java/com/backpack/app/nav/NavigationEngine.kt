@@ -238,6 +238,8 @@ object NavigationEngine {
     }
 
     fun speak(text: String) {
+        // Settings > Navigation > Spoken instructions.
+        if (app?.let { Prefs.voiceOn(it) } == false) return
         if (!ttsReady) {
             pendingSpeech = text
             return

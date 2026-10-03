@@ -272,53 +272,113 @@
          preference toggle. Background color (not text color) shows
          which one is primary, to avoid the confusing "text swaps
          color" effect from before. -->
+    <!-- Last button of the right column: all settings, by category. -->
+    <ImageButton
+        android:id="@+id/settings_button"
+        android:scaleType="fitCenter"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="325dp"
+        android:layout_marginEnd="8dp"
+        android:src="@drawable/ic_settings"
+        android:background="@drawable/icon_backdrop"
+        android:padding="5dp"
+        android:contentDescription="Settings"
+        android:elevation="0dp"
+        android:stateListAnimator="@null" />
+
+    <!-- During navigation (in the add-stop slot): Drive view <-> Overview. -->
+    <ImageButton
+        android:id="@+id/overview_button"
+        android:scaleType="fitCenter"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="166dp"
+        android:layout_marginEnd="8dp"
+        android:src="@drawable/ic_overview"
+        android:background="@drawable/icon_backdrop"
+        android:padding="6dp"
+        android:contentDescription="Route overview"
+        android:elevation="0dp"
+        android:stateListAnimator="@null"
+        android:visibility="gone" />
+
+    <!-- Left, under the trip row: back to the route before a detour or a
+         replaced stop (kept until arrival). -->
+    <ImageButton
+        android:id="@+id/resume_button"
+        android:scaleType="fitCenter"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_gravity="top|start"
+        android:layout_marginTop="166dp"
+        android:layout_marginStart="8dp"
+        android:src="@drawable/ic_resume_route"
+        android:background="@drawable/icon_backdrop"
+        android:padding="6dp"
+        android:contentDescription="Resume previous route"
+        android:elevation="0dp"
+        android:stateListAnimator="@null"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/route_options_row"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:layout_marginTop="325dp"
+        android:layout_marginTop="378dp"
         android:layout_marginEnd="8dp"
         android:orientation="vertical"
         android:visibility="gone" />
 
-    <!-- ===== ZONE: top-center, transient messages ===== -->
-
-    <TextView
-        android:id="@+id/message_bubble"
+    <!-- ===== ZONE: messages, always in the same band: between the
+         position arrow and the bottom buttons (the stretch already driven,
+         the least useful part of the map). Errors above routine messages. ===== -->
+    <LinearLayout
+        android:id="@+id/message_band"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
-        android:background="@drawable/message_bubble_background"
-        android:textColor="@color/backpack_ink"
-        android:textSize="15sp"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="6dp"
-        android:maxLines="2"
-        android:maxWidth="260dp"
-        android:ellipsize="end"
-        android:alpha="0"
-        android:visibility="invisible" />
+        android:layout_marginBottom="146dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
 
-    <!-- Errors get their own spot, separate from routine confirmation
-         messages, positioned at runtime, 25% of screen height up
-         from the bottom (device-relative, so it's computed in code
-         rather than a fixed dp margin). -->
-    <TextView
-        android:id="@+id/error_bubble"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:background="@drawable/message_bubble_background"
-        android:textColor="@color/backpack_ink"
-        android:textSize="15sp"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="6dp"
-        android:maxLines="2"
-        android:maxWidth="260dp"
-        android:ellipsize="end"
-        android:alpha="0"
-        android:visibility="invisible" />
+        <TextView
+            android:id="@+id/error_bubble"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/message_bubble_background"
+            android:textColor="@color/backpack_ink"
+            android:textSize="15sp"
+            android:gravity="center"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="6dp"
+            android:maxLines="2"
+            android:maxWidth="280dp"
+            android:ellipsize="end"
+            android:alpha="0"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/message_bubble"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/message_bubble_background"
+            android:textColor="@color/backpack_ink"
+            android:textSize="15sp"
+            android:gravity="center"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="6dp"
+            android:maxLines="2"
+            android:maxWidth="280dp"
+            android:ellipsize="end"
+            android:alpha="0"
+            android:visibility="gone" />
+
+    </LinearLayout>
 
     <!-- ===== ZONE: bottom-left, settings (swapped with speed sign) ===== -->
 
@@ -388,7 +448,7 @@
 
 
 
-    <!-- ===== ZONE: bottom bar: 4 equal slots (settings | clear | go | speed),
+    <!-- ===== ZONE: bottom bar, navigation only: 3 equal slots (clear | go | speed),
          84dp tall (the speed widget with its limit sign fits inside, nothing
          clipped), centres 6 + 42 = 48dp above the bottom; empty slots keep
          their place. ===== -->
@@ -401,27 +461,6 @@
         android:clipChildren="false"
         android:clipToPadding="false"
         android:orientation="horizontal">
-
-        <FrameLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:clipChildren="false">
-
-            <ImageButton
-                android:id="@+id/settings_button"
-                android:scaleType="fitCenter"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_gravity="center"
-                android:src="@drawable/ic_settings"
-                android:background="@drawable/icon_backdrop"
-                android:padding="4dp"
-                android:contentDescription="Settings"
-                android:elevation="0dp"
-                android:stateListAnimator="@null" />
-
-        </FrameLayout>
 
         <FrameLayout
             android:layout_width="0dp"
@@ -483,19 +522,20 @@
             android:clipChildren="false"
             android:visibility="gone">
 
-            <LinearLayout
+            <!-- Number centred in the circle (fine-tuned in code on the
+                 digits' real height), unit below it. -->
+            <FrameLayout
                 android:id="@+id/speed_sign"
                 android:layout_width="64dp"
                 android:layout_height="64dp"
                 android:layout_gravity="center"
-                android:background="@drawable/speed_sign_background"
-                android:gravity="center"
-                android:orientation="vertical">
+                android:background="@drawable/speed_sign_background">
 
                 <TextView
                     android:id="@+id/speed_sign_text"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_gravity="center"
                     android:includeFontPadding="false"
                     android:text="0"
                     android:textColor="#FF1A1A1A"
@@ -506,12 +546,14 @@
                     android:id="@+id/speed_unit_text"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:layout_marginBottom="9dp"
                     android:includeFontPadding="false"
                     android:text="km/h"
                     android:textColor="#FF555555"
                     android:textSize="9sp" />
 
-            </LinearLayout>
+            </FrameLayout>
 
             <!-- Speed-limit sign: white, red ring, black number. Hidden when the
                  road's limit is unknown. -->

@@ -29,6 +29,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.backpack.app.core.Geo
 import com.backpack.app.core.LatLon
+import com.backpack.app.core.PoiPlace
+import com.backpack.app.core.RouteLabels
+import com.backpack.app.core.Stops
 import com.backpack.app.core.Maneuver
 import com.backpack.app.core.NavStep
 import com.backpack.app.core.Progress
@@ -43,18 +46,15 @@ import com.backpack.app.core.Tourist
 import com.backpack.app.core.TouristPoi
 import com.backpack.app.search.SearchClient
 import com.backpack.app.tourist.TouristFinder
-import com.backpack.app.net.OverpassClient
 import com.backpack.app.location.LocationHub
 import com.backpack.app.map.MapLayers
 import com.backpack.app.nav.NavigationEngine
 import com.backpack.app.route.RoutePlanner
+import com.backpack.app.places.PlacesFinder
+import com.backpack.app.speed.SpeedLimitLookup
+import com.backpack.app.ui.LetterBadge
 import com.backpack.app.ui.Popup
-import com.backpack.app.ui.RouteOptionsDialog
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.Request
-import okhttp3.Response
-import org.json.JSONObject
+import com.backpack.app.ui.SettingsPopup
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -67,10 +67,14 @@ import org.maplibre.android.location.modes.RenderMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
-import java.io.IOException
 
 /**
- * Backpack 0.4.0 map screen.
+ * Backpack map screen (1.0.0: one button style, POI dropdown, fixed message
+ * band, lettered routes, settings popup by category, place popups with
+ * "Go here" / "Add stop" / read more, temporary detours with "resume",
+ * Drive / Overview views, speed limits loaded per route).
+ *
+ * History (0.4.0):
  *
  * Kept from Step 38 (behaviour unchanged): travel mode / preference /
  * toll / urgency toggles, the Balanced toll-vs-time choice, speed-limit
@@ -102,16 +106,26 @@ class MainActivity : AppCompatActivity() {
         EMERGENCY(R.drawable.ic_urgency_emergency)
     }
 
-    private enum class PoiCategory(val overpassFilter: String, val iconRes: Int, val iconName: String, val label: String) {
+    /** [orsIds]: openrouteservice place categories (second source when Overpass is busy). */
+    private enum class PoiCategory(
+        val overpassFilter: String, val iconRes: Int, val iconName: String, val label: String,
+        val orsIds: Map<Int, String> = emptyMap()
+    ) {
         NONE("", R.drawable.ic_poi_toggle, "", "Off"),
-        FUEL("[\"amenity\"~\"fuel|charging_station\"]", R.drawable.ic_poi_fuel, "poi_fuel", "Fuel/Charging"),
-        FOOD("[\"amenity\"~\"restaurant|cafe|fast_food\"]", R.drawable.ic_poi_food, "poi_food", "Food"),
-        LODGING("[\"tourism\"~\"hotel|guest_house|motel\"]", R.drawable.ic_poi_lodging, "poi_lodging", "Lodging"),
-        PARKING("[\"amenity\"=\"parking\"]", R.drawable.ic_poi_parking, "poi_parking", "Parking"),
-        TOILETS("[\"amenity\"=\"toilets\"]", R.drawable.ic_poi_toilets, "poi_toilets", "Toilets"),
-        EMERGENCY("[\"amenity\"~\"hospital|police|fire_station\"]", R.drawable.ic_poi_emergency, "poi_emergency", "Emergency"),
+        FUEL("[\"amenity\"~\"^(fuel|charging_station)$\"]", R.drawable.ic_poi_fuel, "poi_fuel", "Fuel/Charging",
+            mapOf(596 to "fuel", 593 to "charging_station")),
+        FOOD("[\"amenity\"~\"^(restaurant|cafe|fast_food)$\"]", R.drawable.ic_poi_food, "poi_food", "Food",
+            mapOf(570 to "restaurant", 564 to "cafe", 566 to "fast_food")),
+        LODGING("[\"tourism\"~\"^(hotel|guest_house|motel)$\"]", R.drawable.ic_poi_lodging, "poi_lodging", "Lodging",
+            mapOf(108 to "hotel", 106 to "guest_house", 109 to "motel")),
+        PARKING("[\"amenity\"=\"parking\"]", R.drawable.ic_poi_parking, "poi_parking", "Parking", mapOf(601 to "parking")),
+        TOILETS("[\"amenity\"=\"toilets\"]", R.drawable.ic_poi_toilets, "poi_toilets", "Toilets", mapOf(179 to "toilets")),
+        EMERGENCY("[\"amenity\"~\"^(hospital|police|fire_station)$\"]", R.drawable.ic_poi_emergency, "poi_emergency", "Emergency",
+            mapOf(206 to "hospital", 369 to "police", 367 to "fire_station")),
         /** Well-known places (same as Weekend mode), from Wikidata-ranked OSM data. */
-        SIGHTS("", R.drawable.ic_tourist, "", "Sights")
+        SIGHTS("", R.drawable.ic_tourist, "", "Sights");
+
+        fun finderCategory() = PlacesFinder.Category(name, overpassFilter, orsIds)
     }
 
     private lateinit var mapView: MapView
@@ -146,14 +160,14 @@ class MainActivity : AppCompatActivity() {
     private var routeOptions = RouteOptions()
 
     // From Settings.
-    private var valuePerMinuteWeekend = SettingsActivity.DEFAULT_VALUE_WEEKEND / 60.0
-    private var valuePerMinuteWork = SettingsActivity.DEFAULT_VALUE_WORK / 60.0
-    private var valuePerMinuteEmergency = SettingsActivity.DEFAULT_VALUE_EMERGENCY / 60.0
-    private var tollRatePerKm = SettingsActivity.DEFAULT_TOLL_RATE
+    private var valuePerMinuteWeekend = Settings.DEFAULT_VALUE_WEEKEND / 60.0
+    private var valuePerMinuteWork = Settings.DEFAULT_VALUE_WORK / 60.0
+    private var valuePerMinuteEmergency = Settings.DEFAULT_VALUE_EMERGENCY / 60.0
+    private var tollRatePerKm = Settings.DEFAULT_TOLL_RATE
     private var useMetric = true
 
     private var waypointModeArmed = false
-    private val maxWaypoints = 2
+    private val maxWaypoints = Stops.MAX
 
     // Navigation screen state (the navigation itself lives in NavigationEngine).
     private var navUiActive = false
@@ -163,12 +177,9 @@ class MainActivity : AppCompatActivity() {
     private var isDisplayDimmed = false
     private var lastTrackingZoom = 0.0
 
-    // Speed limit.
-    private var lastOverpassQueryAtMs = 0L
+    // Speed limit (loaded per route by SpeedLimitLookup).
     private var lastKnownSpeedLimit: Int? = null
     private var lastSpeedLimitOkAtMs = 0L
-    private var speedLimitInFlight = false
-    private var speedLimitSeq = 0
     private val handler = Handler(Looper.getMainLooper())
     private var blinkOn = true
     private var isBlinking = false
@@ -179,6 +190,9 @@ class MainActivity : AppCompatActivity() {
     private var poiRequestGeneration = 0
     private var lastPoiQueryAtMs = 0L
     private var lastPoiQueryCenter: LatLon? = null
+    private val placesFinder by lazy { PlacesFinder(this) }
+    /** Everyday places on the map (tap one for its popup). */
+    private var poiResults: List<PoiPlace> = emptyList()
 
     private val activeColor by lazy { ContextCompat.getColor(this, R.color.rg_active) }
     private val inactiveColor by lazy { ContextCompat.getColor(this, R.color.rg_icon_inactive) }
@@ -239,17 +253,9 @@ class MainActivity : AppCompatActivity() {
         speedLimitSign = findViewById(R.id.speed_limit_sign)
         messageBubble = findViewById(R.id.message_bubble)
         errorBubble = findViewById(R.id.error_bubble)
-        messageBubble.post {
-            val params = messageBubble.layoutParams as FrameLayout.LayoutParams
-            params.bottomMargin = (resources.displayMetrics.heightPixels * 0.25).toInt()
-            messageBubble.layoutParams = params
-        }
-        errorBubble.post {
-            val params = errorBubble.layoutParams as FrameLayout.LayoutParams
-            params.bottomMargin = (resources.displayMetrics.heightPixels * 0.40).toInt()
-            errorBubble.layoutParams = params
-        }
         applyBubbleColors()
+        // Speed number centred on its digits, not on the font's line box.
+        speedSignText.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> centerDigits(v as TextView) }
 
         mapView.onCreate(savedInstanceState)
         mapView.addOnDidFailLoadingMapListener { showError("Map could not load -- check the connection") }
@@ -259,8 +265,17 @@ class MainActivity : AppCompatActivity() {
             setIconActive(this, false)
             setOnClickListener { centerOnMyLocation() }
         }
-        findViewById<ImageButton>(R.id.settings_button).setOnClickListener {
-            startActivity(Intent(this, SettingsActivity::class.java))
+        findViewById<ImageButton>(R.id.settings_button).apply {
+            setIconActive(this, false)
+            setOnClickListener { SettingsPopup.show(this@MainActivity, settingsHost) }
+        }
+        findViewById<ImageButton>(R.id.overview_button).apply {
+            setIconActive(this, false)
+            setOnClickListener { if (overviewOn) leaveOverview() else enterOverview() }
+        }
+        findViewById<ImageButton>(R.id.resume_button).apply {
+            setIconActive(this, false)
+            setOnClickListener { resumePreviousRoute() }
         }
         findViewById<TextView>(R.id.credit_text).setOnClickListener { showCredits() }
 
@@ -274,6 +289,8 @@ class MainActivity : AppCompatActivity() {
         setupUrgencyButton()
         setupRouteOptionsButton()
         setupAltRouteButton()
+        styleBottomButtons()
+        refreshResumeButton()
         touristWasOn = touristOn
         refreshModeButtonHighlight()
         refreshPreferenceHighlight()
@@ -386,14 +403,25 @@ class MainActivity : AppCompatActivity() {
                 showTouristPlace(tourist)
                 return@addOnMapClickListener true
             }
+            val poiKey = layers.poiAt(m, screen)
+            val poi = poiKey?.let { k -> poiResults.firstOrNull { it.key == k } }
+            if (poi != null) {
+                showPoiPlace(poi)
+                return@addOnMapClickListener true
+            }
             // While navigating, grey lines are only offered from "find alternative route".
-            val idx = if (!NavigationEngine.isActive || altChoiceOpen) layers.alternativeAt(m, screen) else null
+            val choosing = !NavigationEngine.isActive || altChoiceOpen
+            val idx = if (choosing) layers.letterAt(m, screen) ?: layers.alternativeAt(m, screen) else null
             if (idx != null) {
-                promoteRouteToPrimary(idx)
-            } else {
+                if (idx != TripState.selectedIndex) promoteRouteToPrimary(idx)
+            } else if (!overviewOn) {
                 handleDestinationTap(LatLon(p.latitude, p.longitude))
             }
             true
+        }
+        // Overview: any touch of the map restarts its 20 s.
+        m.addOnCameraMoveStartedListener { reason ->
+            if (overviewOn && reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) scheduleOverviewReturn()
         }
         m.addOnMapLongClickListener { p ->
             handleStartOverride(LatLon(p.latitude, p.longitude))
@@ -480,7 +508,7 @@ class MainActivity : AppCompatActivity() {
             if (isGpsDegraded) clearGpsWarning()
             if (puckActive()) map?.locationComponent?.forceLocationUpdate(withHeading(location))
             if (currentMode == ModeUi.DRIVING) {
-                maybeQuerySpeedLimit(location)
+                updateSpeedLimit(location)
                 updateSpeedSignDisplay(location)
             }
             if (navUiActive) adaptTrackingZoom(location)
@@ -523,6 +551,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val m = map ?: return
+        if (navUiActive && overviewOn) {
+            leaveOverview()
+            return
+        }
         if (navUiActive && puckActive()) {
             // Following: switch "your direction up" <-> "north up".
             // Map moved by hand: follow again, same orientation as before.
@@ -553,8 +585,8 @@ class MainActivity : AppCompatActivity() {
         avoidTolls = prefs.getBoolean("avoid_tolls", avoidTolls)
         currentPoiCategory = enumOr(prefs.getString("poi_category", null), currentPoiCategory)
         // A configured "default on launch" POI in Settings wins over session memory.
-        val defaultPoi = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
-            .getString(SettingsActivity.KEY_DEFAULT_POI, "NONE")
+        val defaultPoi = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
+            .getString(Settings.KEY_DEFAULT_POI, "NONE")
         if (defaultPoi != "NONE") currentPoiCategory = enumOr(defaultPoi, currentPoiCategory)
         routeOptions = Prefs.routeOptions(this)
     }
@@ -579,12 +611,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadSettings() {
-        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
-        useMetric = prefs.getBoolean(SettingsActivity.KEY_UNIT_METRIC, true)
-        valuePerMinuteWeekend = prefs.getFloat(SettingsActivity.KEY_VALUE_WEEKEND, SettingsActivity.DEFAULT_VALUE_WEEKEND.toFloat()).toDouble() / 60.0
-        valuePerMinuteWork = prefs.getFloat(SettingsActivity.KEY_VALUE_WORK, SettingsActivity.DEFAULT_VALUE_WORK.toFloat()).toDouble() / 60.0
-        valuePerMinuteEmergency = prefs.getFloat(SettingsActivity.KEY_VALUE_EMERGENCY, SettingsActivity.DEFAULT_VALUE_EMERGENCY.toFloat()).toDouble() / 60.0
-        tollRatePerKm = prefs.getFloat(SettingsActivity.KEY_TOLL_RATE, SettingsActivity.DEFAULT_TOLL_RATE.toFloat()).toDouble()
+        val prefs = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
+        useMetric = prefs.getBoolean(Settings.KEY_UNIT_METRIC, true)
+        valuePerMinuteWeekend = prefs.getFloat(Settings.KEY_VALUE_WEEKEND, Settings.DEFAULT_VALUE_WEEKEND.toFloat()).toDouble() / 60.0
+        valuePerMinuteWork = prefs.getFloat(Settings.KEY_VALUE_WORK, Settings.DEFAULT_VALUE_WORK.toFloat()).toDouble() / 60.0
+        valuePerMinuteEmergency = prefs.getFloat(Settings.KEY_VALUE_EMERGENCY, Settings.DEFAULT_VALUE_EMERGENCY.toFloat()).toDouble() / 60.0
+        tollRatePerKm = prefs.getFloat(Settings.KEY_TOLL_RATE, Settings.DEFAULT_TOLL_RATE.toFloat()).toDouble()
     }
 
     // ---------- Messages ----------
@@ -600,6 +632,8 @@ class MainActivity : AppCompatActivity() {
 
     private var bubbleFadeOutRunnable: Runnable? = null
 
+    /** Routine messages: always in the message band (between the arrow and
+     *  the bottom buttons), under any error. */
     private fun showMessage(text: String) {
         bubbleFadeOutRunnable?.let { handler.removeCallbacks(it) }
         messageBubble.text = text
@@ -609,7 +643,7 @@ class MainActivity : AppCompatActivity() {
         messageBubble.animate().alpha(1f).setDuration(200).start()
         val fadeOut = Runnable {
             messageBubble.animate().alpha(0f).setDuration(1800).withEndAction {
-                messageBubble.visibility = View.INVISIBLE
+                messageBubble.visibility = View.GONE
             }.start()
         }
         bubbleFadeOutRunnable = fadeOut
@@ -618,15 +652,15 @@ class MainActivity : AppCompatActivity() {
 
     private var errorFadeOutRunnable: Runnable? = null
 
-    /** Genuine failures, higher on the screen. With [retry], the bubble
-     *  says "tap to retry" and stays a little longer. */
+    /** Genuine failures, in the same band, just above the routine message.
+     *  With [retry], the bubble says "tap to retry" and stays a little longer. */
     private fun showError(text: String, retry: (() -> Unit)? = null) {
         errorFadeOutRunnable?.let { handler.removeCallbacks(it) }
         errorBubble.text = if (retry != null) "$text \u00b7 tap to retry" else text
         if (retry != null) {
             errorBubble.isClickable = true
             errorBubble.setOnClickListener {
-                errorBubble.visibility = View.INVISIBLE
+                errorBubble.visibility = View.GONE
                 errorBubble.setOnClickListener(null)
                 errorBubble.isClickable = false
                 retry()
@@ -641,7 +675,7 @@ class MainActivity : AppCompatActivity() {
         errorBubble.animate().alpha(1f).setDuration(200).start()
         val fadeOut = Runnable {
             errorBubble.animate().alpha(0f).setDuration(1800).withEndAction {
-                errorBubble.visibility = View.INVISIBLE
+                errorBubble.visibility = View.GONE
                 errorBubble.setOnClickListener(null)
                 errorBubble.isClickable = false
             }.start()
@@ -654,8 +688,36 @@ class MainActivity : AppCompatActivity() {
         button.imageTintList = ColorStateList.valueOf(if (active) activeColor else inactiveColor)
     }
 
-    private fun setBackdrop(button: ImageButton, color: Int) {
-        (button.background?.mutate() as? GradientDrawable)?.setColor(color)
+    /**
+     * Status ring on the standard grey backdrop (RedGRPS map-control look):
+     * red when [on], the faint dark edge otherwise. The backdrop itself stays
+     * the same light grey on every button, so no button turns dark.
+     */
+    private fun setStatusRing(button: ImageButton, on: Boolean) {
+        (button.background?.mutate() as? GradientDrawable)?.setStroke(
+            if (on) dp(2) else Math.max(1, dp(1) * 3 / 4),
+            if (on) activeColor else ContextCompat.getColor(this, R.color.rg_control_edge)
+        )
+    }
+
+    /** Go / Stop: the main action, RedGRPS "Start sharing" look (dark red,
+     *  white icon). Clear: standard grey button. */
+    private fun styleBottomButtons() {
+        findViewById<ImageButton>(R.id.nav_go_button).apply {
+            background = ContextCompat.getDrawable(this@MainActivity, R.drawable.go_backdrop)
+            imageTintList = ColorStateList.valueOf(Color.WHITE)
+        }
+        setIconActive(findViewById(R.id.clear_route_button), false)
+    }
+
+    /** Puts the digits of [tv] exactly in the middle of its view (and so of the circle). */
+    private fun centerDigits(tv: TextView) {
+        if (tv.height == 0 || tv.layout == null) return
+        val b = android.graphics.Rect()
+        tv.paint.getTextBounds("0123456789", 0, 10, b)
+        val glyphCenter = tv.baseline + b.exactCenterY()
+        val shift = tv.height / 2f - glyphCenter
+        if (Math.abs(tv.translationY - shift) > 0.5f) tv.translationY = shift
     }
 
     private fun showCredits() {
@@ -663,7 +725,9 @@ class MainActivity : AppCompatActivity() {
         p.text("Map data © OpenStreetMap contributors, available under the Open Database License (ODbL).")
         p.text("Map tiles: OpenFreeMap © OpenMapTiles.")
         p.text("Routing and address search: openrouteservice.org by HeiGIT.")
-        p.text("Places and speed limits: Overpass API (OpenStreetMap data).")
+        p.text("Places and speed limits: Overpass API (OpenStreetMap data); openrouteservice places as a second source.")
+        p.text("Well-known places: Wikidata (CC0) and Wikipedia.")
+        p.text("Search: Photon (komoot) and Nominatim (OpenStreetMap Foundation).")
         p.text("Map engine: MapLibre Native (BSD licence).")
         p.button("OSM copyright") {
             p.dismiss()
@@ -849,21 +913,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun sightsMaxFraction(): Double =
-        getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
-            .getInt(SettingsActivity.KEY_SIGHTS_MAX_PCT, SettingsActivity.DEFAULT_SIGHTS_MAX_PCT) / 100.0
+        getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
+            .getInt(Settings.KEY_SIGHTS_MAX_PCT, Settings.DEFAULT_SIGHTS_MAX_PCT) / 100.0
 
     private fun onPlacesServerSwitch() = showMessage("Places server busy, trying another...")
 
     /** Along the routes of the current plan when there is one (all
      *  alternatives in Weekend, to pick the sights route), else in the
      *  visible area (re-searched when the map moved more than ~1 km). */
-    private fun refreshTourist(force: Boolean = false) {
+    private fun refreshTourist(force: Boolean = false, extend: Boolean = false) {
         if (!touristOn) return
         val m = map ?: return
         val plan = TripState.plan
         val route = selectedRoute()
         if (plan != null && route != null && route.points.size >= 2) {
-            if (!force && touristRouteKey === plan) {
+            if (!force && !extend && touristRouteKey === plan) {
                 // Same plan, maybe another route chosen: re-rank locally, no network.
                 showTouristFor(route)
                 return
@@ -877,8 +941,11 @@ class MainActivity : AppCompatActivity() {
             // needs no new search); only the followed one while navigating.
             val lines = if (navUiActive) listOf(route.points) else plan.routes.map { it.points }
             val startIndex = TripState.selectedIndex
-            touristFinder.alongRoutes(lines, currentMode.mode, { onPlacesServerSwitch() }) { all, error ->
-                onTouristCandidates(all, error, plan, null, announce = true, scenic = scenic, startIndex = startIndex)
+            // While navigating: from where you are (the squares behind you are not needed).
+            val fromM = if (navUiActive) (NavigationEngine.lastProgress?.alongM ?: 0.0) else 0.0
+            touristFinder.alongRoutes(lines, currentMode.mode, fromM, { onPlacesServerSwitch() }) { all, error, coveredM ->
+                TripState.touristCoveredM = coveredM
+                onTouristCandidates(all, error, plan, null, announce = !extend, scenic = scenic && !extend, startIndex = startIndex)
             }
             return
         }
@@ -893,7 +960,7 @@ class MainActivity : AppCompatActivity() {
         val latSpan = (box.latitudeNorth - box.latitudeSouth).coerceIn(0.0, maxSpan)
         val lonSpan = (box.longitudeEast - box.longitudeWest).coerceIn(0.0, maxSpan)
         touristFinder.inBox(center.lat - latSpan / 2, center.lon - lonSpan / 2, center.lat + latSpan / 2, center.lon + lonSpan / 2,
-            { if (force) onPlacesServerSwitch() }) { all, error ->
+            { if (force) onPlacesServerSwitch() }) { all, error, _ ->
             onTouristCandidates(all, error, null, center, announce = force, scenic = false)
         }
     }
@@ -934,12 +1001,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val shown = showTouristFor(if (plan != null) selectedRoute() else null)
+        // Part of the squares could not be fetched: say so, keep what was found.
+        if (error != null) showError("Some places may be missing ($error)", retry = { refreshTourist(force = true) })
         if (!announce) return
         showMessage(note ?: when {
             shown.isEmpty() -> if (plan != null) "No well-known places along this route" else "No well-known places here"
             plan != null -> "${shown.size} well-known places along your route (hold the button for the list)"
             else -> "${shown.size} well-known places here"
         })
+    }
+
+    /** Well-known places are searched up to a distance ahead; while driving
+     *  on, the next stretch is searched before you reach the end of it. */
+    private fun extendTouristIfNeeded(p: Progress, route: RouteResult) {
+        if (!touristOn || touristPendingRoute != null || TripState.plan == null) return
+        val covered = TripState.touristCoveredM
+        if (covered >= route.line.length - 1.0) return
+        if (p.alongM < covered - Tourist.searchAheadM(currentMode.mode) * 0.3) return
+        refreshTourist(extend = true)
     }
 
     private fun touistClearPending() {
@@ -969,13 +1048,7 @@ class MainActivity : AppCompatActivity() {
     /** The route places are measured on: the one being navigated, else the selected one. */
     private fun touristRoute(): RouteResult? = (if (NavigationEngine.isActive) NavigationEngine.route else null) ?: selectedRoute()
 
-    /** (metres ahead of you -- or from the start when not navigating --, metres off the route). */
-    private fun aheadOnRoute(poi: TouristPoi): Pair<Double, Double>? {
-        val r = touristRoute() ?: return null
-        val snap = r.line.snap(poi.point) ?: return null
-        val progress = if (NavigationEngine.isActive) NavigationEngine.lastProgress?.alongM ?: 0.0 else 0.0
-        return Pair(snap.alongM - progress, snap.offsetM)
-    }
+    private fun aheadOnRoute(poi: TouristPoi): Pair<Double, Double>? = aheadOn(poi.point)
 
     private fun showTouristList() {
         val onRoute = touristRoute() != null && TripState.destination != null
@@ -1000,12 +1073,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showTouristPlace(poi: TouristPoi) {
-        val p = Popup(this, poi.name)
         val known = if (poi.sitelinks > 0) " \u00b7 written about on ${poi.sitelinks} Wikipedia/Wikimedia sites" else ""
-        p.text("${starsText(poi.stars)}${poi.category.label}$known")
+        showPlacePopup(poi.name, "${starsText(poi.stars)}${poi.category.label}$known", poi.point,
+            poi.readMoreUrl, if (poi.wikipediaUrl != null || poi.articleUrl != null) "Read about it on Wikipedia" else "Read about it on Wikidata")
+    }
+
+    private fun showPoiPlace(place: PoiPlace) {
+        val kind = com.backpack.app.core.Places.kindLabel(place.kind)
+        val detail = if (place.name.isBlank()) kind else kind + (place.openingHours?.let { " \u00b7 $it" } ?: "")
+        val link = when {
+            place.wikipedia != null -> "Read about it on Wikipedia"
+            place.wikidata != null -> "Read about it on Wikidata"
+            else -> "Website"
+        }
+        showPlacePopup(place.label, detail, place.point, place.readMoreUrl, link)
+    }
+
+    /**
+     * One popup for every place (well-known places and POI categories):
+     * what it is, where it is on your route with the extra time (estimate,
+     * then the router's exact value), a link to read about it, and
+     * Go here / Add stop.
+     */
+    private fun showPlacePopup(title: String, detail: String, point: LatLon, readMoreUrl: String?, linkLabel: String) {
+        val p = Popup(this, title)
+        p.text(detail)
         val route = touristRoute()
         val end = TripState.destination
-        val ahead = aheadOnRoute(poi)
+        val ahead = aheadOn(point)
         val passed = NavigationEngine.isActive && ahead != null && ahead.first < -50.0
         if (route != null && end != null && ahead != null && !passed) {
             val estimate = Tourist.estimateDetourSeconds(ahead.second, currentMode.mode)
@@ -1014,9 +1109,9 @@ class MainActivity : AppCompatActivity() {
             val detourText = p.text("$where \u00b7 \u2248 +${Tourist.minutesLabel(estimate)}")
             // Exact extra time from the router, same rules as the trip.
             val start = (if (NavigationEngine.isActive) currentPosition() else null) ?: resolveStartPoint()
-            val stops = Tourist.insertStop(NavigationEngine.remainingStops() ?: TripState.waypoints, poi.point, route.line)
+            val stops = Tourist.insertStop(NavigationEngine.remainingStops() ?: TripState.waypoints, point, route.line)
             val current = NavigationEngine.lastProgress?.remainingS ?: route.durationSeconds
-            if (start != null && stops.size <= maxWaypoints) {
+            if (start != null) {
                 detourPlanner.plan(buildRequest(start, end, stops)) { plan, _ ->
                     val r = plan?.routes?.getOrNull(plan.primaryIndex) ?: return@plan
                     val extra = (r.durationSeconds - current).coerceAtLeast(0.0)
@@ -1026,49 +1121,107 @@ class MainActivity : AppCompatActivity() {
         } else if (passed) {
             p.text("Already passed on your route.")
         }
-        poi.wikipediaUrl?.let { url ->
-            p.button("Wikipedia") {
-                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (e: Exception) { }
-            }
-        }
-        if (end != null) {
-            if (!passed) p.button("Add as stop", primary = true) { p.dismiss(); addTouristStop(poi) }
-        } else {
-            p.button("Go here", primary = true) {
-                p.dismiss()
-                // A destination, not a stop, even if stop mode was armed.
-                if (waypointModeArmed) {
-                    waypointModeArmed = false
-                    setIconActive(findViewById(R.id.waypoint_button), false)
-                }
-                handleDestinationTap(poi.point)
-            }
-        }
+        // Tap to read about it in the browser.
+        readMoreUrl?.let { p.link(linkLabel, it) }
+        if (end != null && !passed) p.button("Add stop", primary = true) { p.dismiss(); addStopFlow(point, title) }
+        p.button("Go here", primary = end == null) { p.dismiss(); goHere(point, title) }
         p.button("Close") { p.dismiss() }
         p.dialog.setOnDismissListener { detourPlanner.cancel() }
         p.show()
     }
 
-    /** Adds the place as a stop, in the right order along the route. */
-    private fun addTouristStop(poi: TouristPoi) {
+    /** (metres ahead -- of you while navigating, else from the start --, metres off the route). */
+    private fun aheadOn(point: LatLon): Pair<Double, Double>? {
+        val r = touristRoute() ?: return null
+        val snap = r.line.snap(point) ?: return null
+        val progress = if (NavigationEngine.isActive) NavigationEngine.lastProgress?.alongM ?: 0.0 else 0.0
+        return Pair(snap.alongM - progress, snap.offsetM)
+    }
+
+    /**
+     * Adds [point] as a stop in route order. With 2 stops of your own already:
+     * "Visit on the way" (a temporary detour that does not count, then the
+     * original plan goes on) or "Replace last stop". Either way the trip
+     * before is kept for "Resume previous route".
+     */
+    private fun addStopFlow(point: LatLon, name: String) {
         val end = TripState.destination ?: return
-        val ahead = aheadOnRoute(poi)
+        val ahead = aheadOn(point)
         if (NavigationEngine.isActive && ahead != null && ahead.first < -50.0) {
-            showMessage("${poi.name} is already behind you")
+            showMessage("$name is already behind you")
             return
         }
         val existing = NavigationEngine.remainingStops() ?: TripState.waypoints.toList()
-        if (existing.size >= maxWaypoints) {
-            showMessage("Maximum $maxWaypoints stops reached")
+        val line = touristRoute()?.line
+        if (Stops.ownCount(existing, TripState.detour) < Stops.MAX) {
+            applyStops(Tourist.insertStop(existing, point, line), end, "$name added as a stop \u00b7 finding route...")
             return
         }
-        val stops = Tourist.insertStop(existing, poi.point, touristRoute()?.line)
+        val p = Popup(this, "Already ${Stops.MAX} stops")
+        p.text("Visit $name on the way (a short detour, then your route goes on), or replace your last stop by it?")
+        p.bodyButton("Visit on the way") {
+            p.dismiss()
+            TripState.rememberForResume(existing)
+            val stops = Stops.withDetour(existing, TripState.detour, point, line)
+            TripState.detour = point
+            applyStops(stops, end, "Detour to $name \u00b7 finding route...")
+        }
+        p.bodyButton("Replace last stop") {
+            p.dismiss()
+            TripState.rememberForResume(existing)
+            applyStops(Stops.replaceLast(existing, TripState.detour, point, line), end, "$name replaces your last stop \u00b7 finding route...")
+        }
+        p.button("Cancel") { p.dismiss() }
+        p.show()
+    }
+
+    private fun applyStops(stops: List<LatLon>, end: LatLon, message: String) {
         TripState.waypoints.clear()
         TripState.waypoints.addAll(stops)
         refreshPins()
+        refreshResumeButton()
         val start = resolveStartPoint() ?: return
-        showMessage("${poi.name} added as a stop \u00b7 finding route...")
+        showMessage(message)
         requestBestRoute(start, end, stops)
+    }
+
+    /** New destination from a place popup; also while navigating (the trip
+     *  before is kept for "Resume previous route"). */
+    private fun goHere(point: LatLon, name: String) {
+        // A destination, not a stop, even if stop mode was armed.
+        if (waypointModeArmed) {
+            waypointModeArmed = false
+            setIconActive(findViewById(R.id.waypoint_button), false)
+        }
+        if (NavigationEngine.isActive) {
+            val existing = NavigationEngine.remainingStops() ?: TripState.waypoints.toList()
+            TripState.rememberForResume(existing)
+            // Straight there: the detour (if any) is dropped, your own stops stay.
+            val stops = existing.filter { it != TripState.detour }
+            TripState.detour = null
+            TripState.destination = point
+            applyStops(stops, point, "Going to $name \u00b7 finding route...")
+            return
+        }
+        if (TripState.destination != null) TripState.rememberForResume(TripState.waypoints.toList())
+        setDestination(point)
+        refreshResumeButton()
+    }
+
+    /** Back to the trip before the last detour / replaced stop / "Go here". */
+    private fun resumePreviousRoute() {
+        val prev = TripState.previous ?: return
+        // Stops you have been at since then stay visited.
+        val stops = prev.waypoints.filter { it !in TripState.visitedSinceSnapshot }
+        TripState.previous = null
+        TripState.detour = null
+        TripState.destination = prev.destination
+        applyStops(stops, prev.destination, "Previous route resumed \u00b7 finding route...")
+        refreshResumeButton()
+    }
+
+    private fun refreshResumeButton() {
+        findViewById<View>(R.id.resume_button).visibility = if (TripState.previous != null) View.VISIBLE else View.GONE
     }
 
     // ---------- Stops (waypoints) ----------
@@ -1084,13 +1237,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun addWaypoint(point: LatLon) {
-        if (TripState.waypoints.size >= maxWaypoints) {
-            showMessage("Maximum $maxWaypoints stops reached")
+        if (Stops.ownCount(TripState.waypoints, TripState.detour) >= maxWaypoints) {
+            // With a destination: visit on the way or replace the last stop.
+            if (TripState.destination != null) addStopFlow(point, "This place")
+            else showMessage("Maximum $maxWaypoints stops reached")
             return
         }
         TripState.waypoints.add(point)
         refreshPins()
-        if (TripState.waypoints.size >= maxWaypoints) {
+        if (Stops.ownCount(TripState.waypoints, TripState.detour) >= maxWaypoints) {
             // The natural next tap sets the destination, not a rejected 3rd stop.
             waypointModeArmed = false
             setIconActive(findViewById(R.id.waypoint_button), false)
@@ -1166,13 +1321,14 @@ class MainActivity : AppCompatActivity() {
         wakeDisplay()
         findViewById<ImageButton>(R.id.nav_go_button).setImageResource(R.drawable.ic_navigation_stop)
         setNavigationDeclutter(true)
+        findViewById<View>(R.id.overview_button).visibility = View.VISIBLE
         navInstructionBar.visibility = View.VISIBLE
         lastRealLocationAtMs = System.currentTimeMillis()
         handler.removeCallbacks(deadReckoningRunnable)
         handler.postDelayed(deadReckoningRunnable, 1000L)
 
         val m = map ?: return
-        if (puckActive()) followPosition(if (first) 18.0 else null)
+        if (puckActive() && !overviewOn) followPosition(if (first) 18.0 + Prefs.navZoomOffset(this) else null)
         NavigationEngine.lastProgress?.let { p -> NavigationEngine.route?.let { onNavProgress(p, it) } }
     }
 
@@ -1184,7 +1340,8 @@ class MainActivity : AppCompatActivity() {
     private fun followPosition(zoom: Double?) {
         val lc = map?.locationComponent ?: return
         if (zoom != null) lastTrackingZoom = zoom
-        val tilt = if (northUp) 0.0 else if (currentMode == ModeUi.DRIVING) 45.0 else 25.0
+        // Settings > Navigation: 3D tilt (Auto = 45° driving, 25° otherwise).
+        val tilt = if (northUp) 0.0 else Prefs.navTilt(this, currentMode == ModeUi.DRIVING)
         val mode = if (northUp) CameraMode.TRACKING_GPS_NORTH else CameraMode.TRACKING_GPS
         lc.setCameraMode(mode, 750L, zoom, if (northUp) 0.0 else null, tilt, object : OnLocationCameraTransitionListener {
             override fun onLocationCameraTransitionFinished(cameraMode: Int) {
@@ -1201,6 +1358,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopNavigationUi() {
+        if (overviewOn) {
+            overviewOn = false
+            handler.removeCallbacks(overviewReturnRunnable)
+            setOverviewButton(false)
+        }
+        findViewById<View>(R.id.overview_button).visibility = View.GONE
         navUiActive = false
         deadReckoningActive = false
         handler.removeCallbacks(deadReckoningRunnable)
@@ -1231,13 +1394,21 @@ class MainActivity : AppCompatActivity() {
             if (altChoiceOpen) closeAltChoice(restore = false)
             TripState.plan = plan
             TripState.selectedIndex = plan.primaryIndex
-            // No new places search on a reroute: places are measured on the
-            // current route anyway (see aheadOnRoute).
+            // No full places search on a reroute: places are measured on the
+            // current route anyway (see aheadOnRoute); the stretch ahead of
+            // the new route is searched by extendTouristIfNeeded (mostly from
+            // the squares already on the phone).
+            TripState.touristCoveredM = 0.0
+            SpeedLimitLookup.routeChanged()
             drawPlan(plan, plan.primaryIndex, fit = false, note = plan.note, tourist = false)
         }
         override fun onRerouteFailed(error: String) = showError(error)
         override fun onArrived() {
             if (altChoiceOpen) closeAltChoice(restore = true)
+            // Arrived: nothing left to resume.
+            TripState.previous = null
+            TripState.detour = null
+            refreshResumeButton()
             navDistanceText.text = ""
             statusStrip.text = "Arrived"
             navInstructionIcon.setImageResource(R.drawable.ic_nav_arrive)
@@ -1261,6 +1432,17 @@ class MainActivity : AppCompatActivity() {
             wakeDisplay()
         }
         if (p.stepAdvanced) wakeDisplay()
+        // Remember the stops of the remembered trip you pass, for "resume".
+        TripState.previous?.let { prev ->
+            LocationHub.lastGoodFix?.let { f ->
+                val here = LatLon(f.latitude, f.longitude)
+                prev.waypoints.forEach { w -> if (Geo.distance(here, w) < 80.0) TripState.visitedSinceSnapshot.add(w) }
+            }
+        }
+        // A temporary detour already visited is no longer "on the way".
+        TripState.detour?.let { d -> if (NavigationEngine.remainingStops()?.contains(d) == false) TripState.detour = null }
+        if (overviewOn && p.anticipation) leaveOverview() // back to the drive view before a turn
+        extendTouristIfNeeded(p, route)
         // Live remaining distance and arrival time.
         routeInfoDist.text = distanceLabel(p.remainingM)
         routeInfoEta.text = etaLabel(p.remainingS)
@@ -1295,16 +1477,71 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Speed-adaptive zoom (Driving only, as before): 18 at a standstill
-     *  down to 14 at ~120 km/h. Only re-zooms on a real change. */
+     *  down to 14 at ~120 km/h, plus the Settings offset. Only re-zooms on
+     *  a real change; not in the overview. */
     private fun adaptTrackingZoom(location: Location) {
-        if (currentMode != ModeUi.DRIVING || !location.hasSpeed() || !puckActive()) return
+        if (currentMode != ModeUi.DRIVING || !location.hasSpeed() || !puckActive() || overviewOn) return
         val lc = map?.locationComponent ?: return
         if (lc.cameraMode != CameraMode.TRACKING_GPS && lc.cameraMode != CameraMode.TRACKING_GPS_NORTH) return
-        val zoom = (18.0 - location.speed * 3.6 / 30.0).coerceIn(14.0, 18.0)
+        val zoom = (18.0 - location.speed * 3.6 / 30.0).coerceIn(14.0, 18.0) + Prefs.navZoomOffset(this)
         if (Math.abs(zoom - lastTrackingZoom) >= 0.3) {
             lastTrackingZoom = zoom
             lc.zoomWhileTracking(zoom, 1200L)
         }
+    }
+
+    // ---------- Drive view / Overview (while navigating) ----------
+
+    private var overviewOn = false
+
+    private val overviewReturnRunnable = Runnable { if (overviewOn) leaveOverview() }
+
+    /** 20 s without touching the map: back to the drive view. */
+    private fun scheduleOverviewReturn() {
+        handler.removeCallbacks(overviewReturnRunnable)
+        handler.postDelayed(overviewReturnRunnable, 20_000L)
+    }
+
+    private fun setOverviewButton(on: Boolean) {
+        findViewById<ImageButton>(R.id.overview_button).apply {
+            setImageResource(if (on) R.drawable.ic_drive_view else R.drawable.ic_overview)
+            setIconActive(this, on)
+            contentDescription = if (on) "Back to the drive view" else "Route overview"
+        }
+    }
+
+    /**
+     * Flat, north up, the rest of the route framed, with the places along it
+     * (tap one: Add stop). Navigation and voice go on underneath. Back to the
+     * drive view by the button, after 20 s untouched, or before a turn.
+     */
+    private fun enterOverview() {
+        val m = map ?: return
+        val route = NavigationEngine.route ?: return
+        overviewOn = true
+        setOverviewButton(true)
+        if (puckActive()) m.locationComponent.cameraMode = CameraMode.NONE
+        val from = NavigationEngine.lastProgress?.snap?.segmentIndex ?: 0
+        val rest = (listOfNotNull(currentPosition()) + route.points.drop(from + 1)).ifEmpty { route.points }
+        try {
+            if (rest.size >= 2) {
+                val bounds = LatLngBounds.Builder().includes(rest.map { LatLng(it.lat, it.lon) }).build()
+                // Reset tilt, bearing and the navigation padding first, then frame.
+                m.cameraPosition = CameraPosition.Builder().target(m.cameraPosition.target).zoom(m.cameraPosition.zoom)
+                    .bearing(0.0).tilt(0.0).padding(0.0, 0.0, 0.0, 0.0).build()
+                m.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, dp(56), dp(130), dp(56), dp(170)), 700)
+            }
+        } catch (e: Exception) { }
+        showMessage("Overview \u00b7 tap a place to add it \u00b7 back to driving in 20 s")
+        scheduleOverviewReturn()
+    }
+
+    private fun leaveOverview() {
+        if (!overviewOn) return
+        overviewOn = false
+        handler.removeCallbacks(overviewReturnRunnable)
+        setOverviewButton(false)
+        if (navUiActive && puckActive()) followPosition(lastTrackingZoom.takeIf { it > 0.0 } ?: (18.0 + Prefs.navZoomOffset(this)))
     }
 
     private fun setNavigationDeclutter(navigating: Boolean) {
@@ -1398,14 +1635,10 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- POI layer ----------
 
-    /** Category icons are multi-colour: status colours the backdrop, never
-     *  the icon (tinting flattens the symbol). */
+    /** Category icons are multi-colour (never tinted): status is a red ring
+     *  on the usual grey backdrop (found), no ring otherwise. Off = grey pin. */
     private fun setPoiButtonStatus(button: ImageButton, found: Boolean?) {
-        when (found) {
-            true -> setBackdrop(button, activeColor)
-            false -> setBackdrop(button, inactiveColor)
-            null -> setBackdrop(button, backdropColor)
-        }
+        setStatusRing(button, found == true)
         if (found == null) setIconActive(button, false) else button.imageTintList = null
     }
 
@@ -1413,39 +1646,87 @@ class MainActivity : AppCompatActivity() {
         val button = findViewById<ImageButton>(R.id.poi_toggle_button)
         button.setImageResource(currentPoiCategory.iconRes)
         setPoiButtonStatus(button, if (currentPoiCategory == PoiCategory.NONE) null else false)
-        button.setOnClickListener {
-            val categories = PoiCategory.values()
-            currentPoiCategory = categories[(currentPoiCategory.ordinal + 1) % categories.size]
-            button.setImageResource(currentPoiCategory.iconRes)
-            saveToggleState()
-            if (currentPoiCategory == PoiCategory.NONE) {
-                poiRequestGeneration++
-                setPoiButtonStatus(button, null)
-                layers.setPois(emptyList())
-                touristModeChanged()
-                showMessage("POI layer off")
-            } else if (currentPoiCategory == PoiCategory.SIGHTS) {
-                poiRequestGeneration++
-                layers.setPois(emptyList())
-                setPoiButtonStatus(button, false)
-                showMessage("Looking for well-known places...")
-                touristModeChanged()
-            } else {
-                touristModeChanged() // leaving Sights clears them unless Weekend
-                setPoiButtonStatus(button, false)
-                showMessage("Checking for ${currentPoiCategory.label}...")
-                queryPois(force = true)
-            }
-        }
+        button.setOnClickListener { showPoiDropdown(button) }
         button.setOnLongClickListener {
             if (currentPoiCategory == PoiCategory.SIGHTS && touristResults.isNotEmpty()) showTouristList()
             true
         }
     }
 
-    /** Overpass query for the visible area (capped at ~25 km), repeated
-     *  when the map moved more than ~1 km. Only the newest request may
-     *  render, so categories never mix. */
+    /** Dropdown under the POI button: icon + name, the current one in red. One tap chooses. */
+    private fun showPoiDropdown(anchor: View) {
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = ContextCompat.getDrawable(this@MainActivity, R.drawable.popup_background)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+        }
+        val window = android.widget.PopupWindow(list, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, true)
+        for (cat in PoiCategory.values()) {
+            val selected = cat == currentPoiCategory
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(dp(8), dp(5), dp(14), dp(5))
+                setOnClickListener {
+                    window.dismiss()
+                    selectPoiCategory(cat)
+                }
+            }
+            row.addView(ImageView(this).apply {
+                setImageResource(cat.iconRes)
+                if (cat == PoiCategory.NONE || cat == PoiCategory.SIGHTS) imageTintList = ColorStateList.valueOf(if (selected) activeColor else inactiveColor)
+            }, LinearLayout.LayoutParams(dp(26), dp(26)))
+            row.addView(TextView(this).apply {
+                text = cat.label
+                textSize = 15f
+                setTextColor(if (selected) activeColor else ContextCompat.getColor(this@MainActivity, R.color.rg_text))
+                setTypeface(typeface, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                setPadding(dp(10), 0, 0, 0)
+            })
+            list.addView(row)
+        }
+        window.elevation = dp(6).toFloat()
+        window.isOutsideTouchable = true
+        window.showAsDropDown(anchor, -dp(40), dp(4))
+    }
+
+    private fun selectPoiCategory(cat: PoiCategory) {
+        if (cat == currentPoiCategory && cat != PoiCategory.NONE) {
+            // Same category again: search again (e.g. after a busy server).
+            if (cat == PoiCategory.SIGHTS) refreshTourist(force = true) else queryPois(force = true)
+            return
+        }
+        val button = findViewById<ImageButton>(R.id.poi_toggle_button)
+        currentPoiCategory = cat
+        button.setImageResource(cat.iconRes)
+        saveToggleState()
+        poiRequestGeneration++
+        placesFinder.cancel()
+        poiResults = emptyList()
+        layers.setPois(emptyList())
+        when (cat) {
+            PoiCategory.NONE -> {
+                setPoiButtonStatus(button, null)
+                touristModeChanged()
+                showMessage("POI layer off")
+            }
+            PoiCategory.SIGHTS -> {
+                setPoiButtonStatus(button, false)
+                showMessage("Looking for well-known places...")
+                touristModeChanged()
+            }
+            else -> {
+                touristModeChanged() // leaving Sights clears them unless Weekend
+                setPoiButtonStatus(button, false)
+                showMessage("Checking for ${cat.label}...")
+                queryPois(force = true)
+            }
+        }
+    }
+
+    /** Places of the chosen category in the visible area (capped at ~25 km),
+     *  per map square from the phone's cache or one Overpass request; again
+     *  when the map moved more than ~1 km. Only the newest request renders. */
     private fun queryPois(force: Boolean = false) {
         if (currentPoiCategory == PoiCategory.NONE || currentPoiCategory == PoiCategory.SIGHTS) return
         val m = map ?: return
@@ -1461,52 +1742,31 @@ class MainActivity : AppCompatActivity() {
         val thisGeneration = ++poiRequestGeneration
         val box = m.projection.visibleRegion.latLngBounds
         val maxSpanDegrees = 25000.0 / 111000.0
-        val latSpan = (box.latitudeNorth - box.latitudeSouth).coerceAtMost(maxSpanDegrees)
+        val latSpan = (box.latitudeNorth - box.latitudeSouth).coerceIn(0.0, maxSpanDegrees)
         val lonSpan = (box.longitudeEast - box.longitudeWest).coerceIn(0.0, maxSpanDegrees)
-        val south = center.lat - latSpan / 2
-        val north = center.lat + latSpan / 2
-        val west = center.lon - lonSpan / 2
-        val east = center.lon + lonSpan / 2
-
-        val query = "[out:json][timeout:25];node($south,$west,$north,$east)${category.overpassFilter};out body 30;"
-        OverpassClient.query(this, query, onSwitch = {
-            if (thisGeneration == poiRequestGeneration) onPlacesServerSwitch()
-        }) { body, failure ->
-            if (thisGeneration != poiRequestGeneration || isDestroyed) return@query
-            val results = body?.let { try { parsePoiResults(it) } catch (e: Exception) { null } }
+        placesFinder.inBox(category.finderCategory(), center.lat - latSpan / 2, center.lon - lonSpan / 2,
+            center.lat + latSpan / 2, center.lon + lonSpan / 2,
+            onSwitch = { if (thisGeneration == poiRequestGeneration && force) onPlacesServerSwitch() }
+        ) { results, error, note ->
+            if (thisGeneration != poiRequestGeneration || isDestroyed) return@inBox
             val button = findViewById<ImageButton>(R.id.poi_toggle_button)
+            if (results == null) {
+                // Allow a new try as soon as asked (or after a map move).
+                lastPoiQueryCenter = null
+                setPoiButtonStatus(button, false)
+                showError(error ?: "Places search failed", retry = { queryPois(force = true) })
+                return@inBox
+            }
+            poiResults = results
+            layers.setPois(results.map { MapLayers.Pin(it.key, it.point, category.iconName) })
+            setPoiButtonStatus(button, results.isNotEmpty())
             when {
-                body == null || results == null -> {
-                    // Allow a new try as soon as asked (or after a map move).
-                    lastPoiQueryCenter = null
-                    setPoiButtonStatus(button, false)
-                    showError(if (body == null) failure?.message ?: "Places search failed" else "Couldn't read the places answer",
-                        retry = { queryPois(force = true) })
-                }
-                else -> {
-                    layers.setPois(results.mapIndexed { i, p -> MapLayers.Pin("poi$i", p, category.iconName) })
-                    if (results.isEmpty()) {
-                        setPoiButtonStatus(button, false)
-                        showMessage("No ${category.label} found nearby")
-                    } else {
-                        setPoiButtonStatus(button, true)
-                        showMessage("${results.size} ${category.label} found")
-                    }
-                }
+                note != null -> showMessage(note)
+                !force -> {}
+                results.isEmpty() -> showMessage("No ${category.label} found here")
+                else -> showMessage("${results.size} ${category.label} \u00b7 tap one for details")
             }
         }
-    }
-
-    private fun parsePoiResults(responseBody: String): List<LatLon> {
-        val elements = JSONObject(responseBody).getJSONArray("elements")
-        val results = mutableListOf<LatLon>()
-        for (i in 0 until elements.length()) {
-            val e = elements.getJSONObject(i)
-            val lat = e.optDouble("lat", Double.NaN)
-            val lon = e.optDouble("lon", Double.NaN)
-            if (!lat.isNaN() && !lon.isNaN()) results.add(LatLon(lat, lon))
-        }
-        return results
     }
 
     // ---------- Mode / preference / toll / urgency ----------
@@ -1564,9 +1824,9 @@ class MainActivity : AppCompatActivity() {
         setIconActive(button, true)
     }
 
-    /** Backdrop colour, not icon tint: active red when tolls are allowed,
-     *  grey when avoided. */
-    private fun setTollButtonStatus(allowed: Boolean) = setBackdrop(tollToggle, if (allowed) activeColor else inactiveColor)
+    /** Same grey backdrop as every button; the icon is red when tolls are
+     *  allowed, grey (crossed-out icon) when avoided. */
+    private fun setTollButtonStatus(allowed: Boolean) = setIconActive(tollToggle, allowed)
 
     private fun setupTollToggle() {
         tollToggle.setImageResource(if (avoidTolls) R.drawable.ic_toll_off else R.drawable.ic_toll_on)
@@ -1597,12 +1857,8 @@ class MainActivity : AppCompatActivity() {
             touristModeChanged()
 
             if (urgencyMode == UrgencyMode.EMERGENCY && currentPoiCategory != PoiCategory.EMERGENCY) {
-                currentPoiCategory = PoiCategory.EMERGENCY
-                val poiButton = findViewById<ImageButton>(R.id.poi_toggle_button)
-                poiButton.setImageResource(PoiCategory.EMERGENCY.iconRes)
-                setPoiButtonStatus(poiButton, false)
-                queryPois(force = true)
-                touristModeChanged() // Sights category replaced by Emergency
+                // Sights category (if any) replaced by Emergency.
+                selectPoiCategory(PoiCategory.EMERGENCY)
             }
 
             val start = resolveStartPoint()
@@ -1623,15 +1879,43 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Quick access to the Route page of Settings. */
     private fun setupRouteOptionsButton() {
         findViewById<ImageButton>(R.id.route_options_button).setOnClickListener {
-            RouteOptionsDialog.show(this, currentMode.mode) { opts ->
-                routeOptions = opts
-                refreshRouteOptionsButton()
-                rerouteIfPossible(opts.summary(currentMode.mode))
-            }
+            SettingsPopup.show(this, settingsHost, SettingsPopup.Page.ROUTE)
         }
         refreshRouteOptionsButton()
+    }
+
+    private val settingsHost = object : SettingsPopup.Host {
+        override val travelMode get() = currentMode.mode
+        override val poiChoices get() = PoiCategory.values().map { it.name to it.label }
+        override fun onRouteOptionsChanged(options: RouteOptions) {
+            routeOptions = options
+            refreshRouteOptionsButton()
+            rerouteIfPossible(options.summary(currentMode.mode))
+        }
+        override fun onSettingsClosed() {
+            if (isDestroyed) return
+            loadSettings()
+            // Map style changed (day/night itself rebuilds the screen).
+            val m = map
+            if (m != null && loadedStyleUrl != null && loadedStyleUrl != Prefs.mapStyleUrl(this@MainActivity)) loadStyle(m)
+            Prefs.applyNightMode(this@MainActivity)
+            // New tilt / zoom apply at once while navigating.
+            if (navUiActive && !overviewOn && puckActive()) {
+                if (currentMode == ModeUi.DRIVING) {
+                    lastTrackingZoom = -100.0 // the next fix sets the speed-adapted zoom again
+                    followPosition(null)
+                } else {
+                    followPosition(18.0 + Prefs.navZoomOffset(this@MainActivity))
+                }
+            }
+            NavigationEngine.lastProgress?.let { p -> NavigationEngine.route?.let { onNavProgress(p, it) } }
+        }
+        override fun onPlacesCleared() {
+            TripState.touristCoveredM = 0.0
+        }
     }
 
     /** Red when this mode's options differ from the defaults. */
@@ -1652,45 +1936,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- Speed limit (unchanged rules) ----------
+    // ---------- Speed limit (alarm rules unchanged) ----------
 
-    /** Overpass maxspeed of the nearest road, at most every 15 s, Driving only. */
-    private fun maybeQuerySpeedLimit(location: Location) {
+    /**
+     * Road limit for the sign. Along a route (planned or navigated) the
+     * roads ahead are loaded in one go and looked up on the phone; off a
+     * route, one quick lookup around you at most every 15 s. The last known
+     * limit is kept for 2 min when nothing answers.
+     */
+    private fun updateSpeedLimit(location: Location) {
         val now = System.currentTimeMillis()
-        if (now - lastOverpassQueryAtMs < 15000L || speedLimitInFlight) return
-        lastOverpassQueryAtMs = now
-        speedLimitInFlight = true
-        val seq = ++speedLimitSeq
-        val query = "[out:json][timeout:10];way(around:25,${location.latitude},${location.longitude})[\"highway\"][\"maxspeed\"];out tags 3;"
-        // Quick (15 s, one round) and silent: a busy server must not cover the
-        // screen with errors every 15 s. The last known limit is kept for 2 min.
-        OverpassClient.query(this, query, quick = true) { body, _ ->
-            speedLimitInFlight = false
-            if (isDestroyed || seq != speedLimitSeq) return@query
-            // An answer older than 20 s is about a road already behind you.
-            if (body != null && System.currentTimeMillis() - now > 20_000L) return@query
-            if (body == null) {
-                if (System.currentTimeMillis() - lastSpeedLimitOkAtMs > 120_000L) lastKnownSpeedLimit = null
-                return@query
-            }
-            lastSpeedLimitOkAtMs = System.currentTimeMillis()
-            lastKnownSpeedLimit = try { parseMaxSpeed(body) } catch (e: Exception) { null }
-            LocationHub.lastFix?.let { if (currentMode == ModeUi.DRIVING) updateSpeedSignDisplay(it) }
+        val route = (if (NavigationEngine.isActive) NavigationEngine.route else null) ?: selectedRoute()
+        if (route != null && route.points.size >= 2) {
+            val along = (if (NavigationEngine.isActive) NavigationEngine.lastProgress?.alongM else null)
+                ?: route.line.snap(LatLon(location.latitude, location.longitude))?.alongM ?: 0.0
+            SpeedLimitLookup.prepare(this, route, along)
         }
-    }
-
-    private fun parseMaxSpeed(responseBody: String): Int? {
-        val elements = JSONObject(responseBody).getJSONArray("elements")
-        if (elements.length() == 0) return null
-        val tags = elements.getJSONObject(0).optJSONObject("tags") ?: return null
-        val raw = tags.optString("maxspeed", "").ifEmpty { return null }
-        raw.toIntOrNull()?.let { return it }
-        return when (raw) {
-            "FR:motorway" -> 130
-            "FR:rural" -> 80
-            "FR:urban" -> 50
-            "FR:zone30" -> 30
-            else -> null
+        if (SpeedLimitLookup.covers(location)) {
+            lastKnownSpeedLimit = SpeedLimitLookup.limitAt(location)
+            lastSpeedLimitOkAtMs = now
+            return
+        }
+        if (now - lastSpeedLimitOkAtMs > 120_000L) lastKnownSpeedLimit = null
+        SpeedLimitLookup.lookupHere(this, location) { ok ->
+            if (!ok || isDestroyed) return@lookupHere
+            val fix = LocationHub.lastFix ?: return@lookupHere
+            if (SpeedLimitLookup.covers(fix)) {
+                lastKnownSpeedLimit = SpeedLimitLookup.limitAt(fix)
+                lastSpeedLimitOkAtMs = System.currentTimeMillis()
+            }
+            if (currentMode == ModeUi.DRIVING) updateSpeedSignDisplay(fix)
         }
     }
 
@@ -1776,6 +2051,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun maybeSoundAlarm(highPitch: Boolean) {
         wakeDisplay()
+        // Settings > Speed > Alarm sound (the sign itself always shows).
+        if (!Prefs.alarmSound(this)) return
         val now = System.currentTimeMillis()
         if (now - lastAlarmAtMs < 3000L) return
         lastAlarmAtMs = now
@@ -1791,13 +2068,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleDestinationTap(point: LatLon) {
         if (NavigationEngine.isActive) {
-            showMessage("Stop navigation before changing your route")
+            showMessage("Stop navigation before changing your route (or open a place: Go here)")
             return
         }
         if (waypointModeArmed) {
             addWaypoint(point)
             return
         }
+        // A new destination tapped on the map is a new trip: nothing to resume.
+        TripState.previous = null
+        TripState.detour = null
+        refreshResumeButton()
+        setDestination(point)
+    }
+
+    private fun setDestination(point: LatLon) {
         val start = resolveStartPoint()
         if (start == null) {
             showError("No GPS fix yet -- long-press to set a start point manually")
@@ -1835,6 +2120,7 @@ class MainActivity : AppCompatActivity() {
         TripState.clear()
         layers.clearRoutes()
         refreshPins()
+        refreshResumeButton()
         routeInfoDist.text = ""
         routeInfoEta.text = ""
         routeInfoCost.text = ""
@@ -1908,6 +2194,12 @@ class MainActivity : AppCompatActivity() {
 
         if (fit) fitCamera(results)
         if (tourist) refreshTourist()
+        // Driving: the speed limits of the first stretch load before Go.
+        if (currentMode == ModeUi.DRIVING) {
+            SpeedLimitLookup.routeChanged()
+            val along = currentPosition()?.let { primary.line.snap(it)?.alongM } ?: 0.0
+            SpeedLimitLookup.prepare(this, primary, along)
+        }
     }
 
     /** After Go only the followed route is drawn (grey alternatives come back
@@ -1964,14 +2256,26 @@ class MainActivity : AppCompatActivity() {
             val unpavedPart = if (result.unpavedFraction >= 0.01) {
                 " · %.0f%% unpaved".format(result.unpavedFraction * 100)
             } else ""
+            // Letter badge (same as on the map line) + facts; only the selected
+            // chip gets the red frame, no chip turns red.
+            val sel = index == selected
             val chip = TextView(this)
             chip.text = "${km}km · $eta$costPart$unpavedPart"
             chip.textSize = 13f
-            chip.setPadding(dp(10), dp(6), dp(10), dp(6))
-            chip.setTextColor(Color.WHITE)
-            val pill = ContextCompat.getDrawable(this, R.drawable.route_pill_background)?.mutate() as? GradientDrawable
-            pill?.setColor(ContextCompat.getColor(this, if (index == selected) R.color.rg_active_soft else R.color.rg_inactive_soft))
-            chip.background = pill
+            chip.setPadding(dp(6), dp(5), dp(10), dp(5))
+            chip.gravity = android.view.Gravity.CENTER_VERTICAL
+            chip.compoundDrawablePadding = dp(6)
+            chip.setTextColor(ContextCompat.getColor(this, R.color.route_chip_text))
+            chip.setTypeface(chip.typeface, if (sel) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+            if (index < 4) {
+                val badge = android.graphics.drawable.BitmapDrawable(resources, LetterBadge.bitmap(this, RouteLabels.letter(index), sel, 20f))
+                chip.setCompoundDrawablesWithIntrinsicBounds(badge, null, null, null)
+            }
+            chip.background = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(ContextCompat.getColor(this@MainActivity, R.color.route_chip_bg))
+                if (sel) setStroke(dp(2), activeColor) else setStroke(Math.max(1, dp(1) / 2), ContextCompat.getColor(this@MainActivity, R.color.rg_control_edge))
+            }
             chip.layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = dp(6); gravity = android.view.Gravity.END }

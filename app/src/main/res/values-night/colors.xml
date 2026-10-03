@@ -22,4 +22,9 @@
     <color name="backpack_bg">#FF202020</color>
     <color name="backpack_accent">#FFB03A3A</color>
     <color name="backpack_text_secondary">#FFB0B0B0</color>
+    <!-- 1.0.0 -->
+    <color name="rg_go_backdrop">#B3B03A3A</color>
+    <color name="search_frame">#B3A0A0A0</color>
+    <color name="route_chip_bg">#E6303030</color>
+    <color name="route_chip_text">#FFEEEEEE</color>
 </resources>

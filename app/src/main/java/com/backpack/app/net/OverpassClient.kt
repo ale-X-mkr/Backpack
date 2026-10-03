@@ -3,7 +3,7 @@ package com.backpack.app.net
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import com.backpack.app.SettingsActivity
+import com.backpack.app.Settings
 import com.backpack.app.core.OverpassCheck
 import com.backpack.app.route.RoutePlanner
 import okhttp3.Call
@@ -23,19 +23,31 @@ import java.util.concurrent.TimeUnit
  * - a busy answer (429/5xx) or a hidden server timeout ("runtime error"
  *   remark in an HTTP 200 answer) moves on to the next server;
  * - after every server failed, one more round 3 s later;
- * - long read timeout: Overpass sends nothing until the query is done.
+ * - long read timeout: Overpass sends nothing until the query is done;
+ * - 1.0.0: before a query, the server's status page says whether a query
+ *   slot is free. A server with no free slot for more than a few seconds is
+ *   skipped in the first round instead of making us wait for a refusal.
+ *   The answer is remembered for 30 s (cheap: a tiny text page).
  * Callbacks: [onSwitch] and [done] run on the main thread.
  */
 object OverpassClient {
 
     const val MAIN = "https://overpass-api.de/api/interpreter"
     const val PRIVATE_COFFEE = "https://overpass.private.coffee/api/interpreter"
-    const val USER_AGENT = "Backpack/0.8 (private Android navigation app; OpenStreetMap data)"
+    const val USER_AGENT = "Backpack/1.0 (private Android navigation app; OpenStreetMap data)"
 
     private val main = Handler(Looper.getMainLooper())
 
     private val longHttp = RoutePlanner.http.newBuilder().readTimeout(40, TimeUnit.SECONDS).build()
     private val shortHttp = RoutePlanner.http.newBuilder().readTimeout(15, TimeUnit.SECONDS).build()
+    private val statusHttp = RoutePlanner.http.newBuilder()
+        .connectTimeout(4, TimeUnit.SECONDS).readTimeout(4, TimeUnit.SECONDS).build()
+
+    /** Longest wait for a free slot we accept (seconds); longer = next server. */
+    private const val MAX_SLOT_WAIT_S = 4
+
+    /** server -> (checked at, seconds to wait then). */
+    private val statusMemo = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Int?>>()
 
     enum class Failure(val message: String) {
         TIMEOUT("Places servers too slow right now (timeout)"),
@@ -45,8 +57,8 @@ object OverpassClient {
     }
 
     fun servers(c: Context): List<String> {
-        val own = c.getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(SettingsActivity.KEY_OVERPASS_URL, "")?.trim().orEmpty()
+        val own = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(Settings.KEY_OVERPASS_URL, "")?.trim().orEmpty()
         return (listOf(own) + listOf(MAIN, PRIVATE_COFFEE)).filter { it.startsWith("https://") || it.startsWith("http://") }.distinct()
     }
 
@@ -81,7 +93,47 @@ object OverpassClient {
             if (index + 1 < list.size && onSwitch != null) main.post { onSwitch() }
             attempt(list, index + 1, round, maxRounds, query, quick, f, onSwitch, done)
         }
-        val req = Request.Builder().url(list[index])
+        // First round: ask the status page first. Last round: just try.
+        if (round + 1 < maxRounds || quick) {
+            withSlot(list[index], { next(Failure.BUSY) }) { send(list[index], query, quick, done) { f -> next(f) } }
+        } else {
+            send(list[index], query, quick, done) { f -> next(f) }
+        }
+    }
+
+    /** Runs [go] when [server] has (or soon has) a free slot, else [busy]. */
+    private fun withSlot(server: String, busy: () -> Unit, go: () -> Unit) {
+        val statusUrl = OverpassCheck.statusUrl(server) ?: return go()
+        val now = System.currentTimeMillis()
+        statusMemo[server]?.let { (at, wait) ->
+            if (now - at < 30_000L) {
+                val left = wait?.let { it - ((now - at) / 1000).toInt() }
+                when {
+                    left == null || left <= 0 -> go()
+                    left <= MAX_SLOT_WAIT_S -> main.postDelayed({ go() }, left * 1000L)
+                    else -> busy()
+                }
+                return
+            }
+        }
+        val req = Request.Builder().url(statusUrl).addHeader("User-Agent", USER_AGENT).build()
+        statusHttp.newCall(req).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) = go() // no status page: just try
+            override fun onResponse(call: Call, response: Response) {
+                val text = response.use { if (it.isSuccessful) it.body?.string() else null }
+                val wait = text?.let { OverpassCheck.statusWait(it) }
+                statusMemo[server] = System.currentTimeMillis() to wait
+                when {
+                    wait == null || wait <= 0 -> go()
+                    wait <= MAX_SLOT_WAIT_S -> main.postDelayed({ go() }, wait * 1000L)
+                    else -> busy()
+                }
+            }
+        })
+    }
+
+    private fun send(server: String, query: String, quick: Boolean, done: (String?, Failure?) -> Unit, next: (Failure) -> Unit) {
+        val req = Request.Builder().url(server)
             .addHeader("User-Agent", USER_AGENT)
             .addHeader("Accept", "application/json")
             .post(FormBody.Builder().add("data", query).build())
@@ -95,7 +147,10 @@ object OverpassClient {
                 val code = response.code
                 val body = response.use { if (it.isSuccessful) it.body?.string() else null }
                 when {
-                    body == null -> next(if (code == 504) Failure.TIMEOUT else Failure.BUSY)
+                    body == null -> {
+                        if (code == 429) statusMemo[server] = System.currentTimeMillis() to 60
+                        next(if (code == 504) Failure.TIMEOUT else Failure.BUSY)
+                    }
                     // Not JSON (e.g. a wrong own-server URL returning a web page).
                     !body.trimStart().startsWith("{") -> next(Failure.BAD_ANSWER)
                     OverpassCheck.runtimeError(body) != null -> next(Failure.TIMEOUT)
