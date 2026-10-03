@@ -291,7 +291,7 @@ class MainActivity : AppCompatActivity() {
         styleBottomButtons()
         refreshResumeButton()
         watchKeyboard()
-        placeCommunicationArea()
+        placeLayout()
         touristWasOn = touristOn
         refreshModeButtonHighlight()
         refreshPreferenceHighlight()
@@ -1388,6 +1388,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshResumeButton() {
         findViewById<View>(R.id.resume_button).visibility = if (TripState.previous != null) View.VISIBLE else View.GONE
+        placeLayout()
     }
 
     // ---------- Stops (waypoints) ----------
@@ -1727,19 +1728,29 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.waypoint_button).visibility = visibility
         findViewById<View>(R.id.search_button).visibility = visibility
         findViewById<View>(R.id.search_input).visibility = visibility
-        // Settings stays reachable while navigating: one row lower, under
-        // "find alternative route" (which takes its slot); chips below both.
-        setTopMargin(R.id.route_options_button, if (navigating) 325 else 272)
-        setTopMargin(R.id.route_options_row, if (navigating) 378 else 325)
         // preference_toggle stays visible on purpose: switching routes mid-trip.
         tollToggle.visibility = if (navigating || currentMode != ModeUi.DRIVING) View.GONE else View.VISIBLE
-        placeCommunicationArea()
+        placeLayout()
     }
 
-    private fun setTopMargin(id: Int, topDp: Int) {
+    private fun setMargins(id: Int, top: Int? = null, bottom: Int? = null, start: Int? = null, end: Int? = null) {
         val v = findViewById<View>(id)
         val lp = v.layoutParams as FrameLayout.LayoutParams
-        if (lp.topMargin != dp(topDp)) { lp.topMargin = dp(topDp); v.layoutParams = lp }
+        var changed = false
+        top?.let { if (lp.topMargin != dp(it)) { lp.topMargin = dp(it); changed = true } }
+        bottom?.let { if (lp.bottomMargin != dp(it)) { lp.bottomMargin = dp(it); changed = true } }
+        start?.let { if (lp.marginStart != dp(it)) { lp.marginStart = dp(it); changed = true } }
+        end?.let { if (lp.marginEnd != dp(it)) { lp.marginEnd = dp(it); changed = true } }
+        if (changed) v.layoutParams = lp
+    }
+
+    private fun setSize(id: Int, height: Int? = null, width: Int? = null) {
+        val v = findViewById<View>(id)
+        val lp = v.layoutParams
+        var changed = false
+        height?.let { if (lp.height != dp(it)) { lp.height = dp(it); changed = true } }
+        width?.let { if (lp.width != dp(it)) { lp.width = dp(it); changed = true } }
+        if (changed) v.layoutParams = lp
     }
 
     // ---------- Communication area (bottom): search bar + messages ----------
@@ -1747,28 +1758,80 @@ class MainActivity : AppCompatActivity() {
     private var keyboardOpen = false
 
     /**
-     * Bottom of the screen, from the bottom up: navigation buttons, route
-     * info, search bar (magnifier on its right), messages. While navigating
-     * the search bar is hidden and messages sit over the route info. While
-     * typing, the search bar, its suggestions and the messages sit just over
-     * the keyboard (the buttons under them are hidden meanwhile).
+     * Places every control (portrait and landscape, navigating or not):
+     *
+     * Top band: the instruction bar while navigating, with the speed circle
+     * at its right end (same spot when not navigating, driving only); the
+     * route chips A / B / C at the top centre (under the bar while
+     * navigating).
+     *
+     * Two columns of 4 buttons, starting just under the top band (higher,
+     * where the search bar used to be, when nothing is up there):
+     *  left  = travel mode (+ toll), urgency, POI, find alternative route
+     *          (navigating) -- "resume" takes that slot, or the next one;
+     *  right = locate, add stop / overview, route preference, settings.
+     *
+     * Bottom, from the bottom up: Go / clear, search bar + magnifier, route
+     * info (distance, arrival, cost), messages. While navigating the search
+     * bar is hidden; while typing it sits just over the keyboard.
+     *
+     * Transparent guards under the columns and the bottom area keep near
+     * misses from tapping the map.
      */
-    private fun placeCommunicationArea() {
+    private fun placeLayout() {
+        val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val driving = currentMode == ModeUi.DRIVING
+        val topBandUsed = navUiActive || driving
+        val top0 = if (topBandUsed) 92 else 60
+        val step = if (land) 46 else 53
+        val gap = step - 38
+
+        // Left column.
+        setMargins(R.id.mode_row, top = top0)
+        setMargins(R.id.urgency_button, top = gap)
+        setMargins(R.id.poi_toggle_button, top = gap)
+        val altShown = findViewById<View>(R.id.alt_route_button).visibility == View.VISIBLE
+        setMargins(R.id.alt_route_button, top = top0 + 3 * step)
+        setMargins(R.id.resume_button, top = top0 + (if (altShown) 4 else 3) * step)
+        val resumeShown = findViewById<View>(R.id.resume_button).visibility == View.VISIBLE
+        val leftRows = if (altShown && resumeShown) 5 else 4
+        // Right column.
+        setMargins(R.id.locate_button, top = top0)
+        setMargins(R.id.waypoint_button, top = top0 + step)
+        setMargins(R.id.overview_button, top = top0 + step)
+        setMargins(R.id.preference_toggle_button, top = top0 + 2 * step)
+        setMargins(R.id.route_options_button, top = top0 + 3 * step)
+        // Chips: top centre; under the instruction bar while navigating.
+        setMargins(R.id.route_options_scroll, top = if (navUiActive) 92 else 12, start = 96, end = if (driving) 100 else 64)
+        // Instruction text keeps clear of the speed circle at its right end.
+        navInstructionBar.setPadding(dp(16), dp(10), if (driving) dp(86) else dp(16), dp(10))
+
+        // Bottom: buttons (6..90) -> search bar -> route info -> messages.
         val searchShown = !navUiActive
-        val searchBottom = if (keyboardOpen) 8 else 144
-        val bandBottom = if (searchShown) searchBottom + 44 else 146
-        fun bottomMargin(id: Int, valueDp: Int) {
-            val v = findViewById<View>(id)
-            val lp = v.layoutParams as FrameLayout.LayoutParams
-            if (lp.bottomMargin != dp(valueDp)) { lp.bottomMargin = dp(valueDp); v.layoutParams = lp }
+        val searchBottom = if (keyboardOpen) 8 else 92
+        val infoBottom = if (searchShown) searchBottom + 44 else 92
+        val infoShown = routeInfo.visibility == View.VISIBLE && !keyboardOpen
+        val bandBottom = when {
+            infoShown -> infoBottom + 40
+            searchShown -> searchBottom + 44
+            else -> 92
         }
-        bottomMargin(R.id.search_input, searchBottom)
-        bottomMargin(R.id.search_button, searchBottom)
-        bottomMargin(R.id.search_results_scroll, searchBottom + 42)
-        bottomMargin(R.id.message_band, bandBottom)
+        setMargins(R.id.search_input, bottom = searchBottom)
+        setMargins(R.id.search_button, bottom = searchBottom)
+        setMargins(R.id.search_results_scroll, bottom = searchBottom + 42)
+        setMargins(R.id.route_info, bottom = infoBottom)
+        setMargins(R.id.message_band, bottom = bandBottom)
+
+        // Guards: columns (with a little margin around) and the bottom area.
+        setMargins(R.id.guard_left, top = top0 - 6)
+        setSize(R.id.guard_left, height = leftRows * step + 4, width = 88)
+        setMargins(R.id.guard_right, top = top0 - 6)
+        setSize(R.id.guard_right, height = 4 * step + 4, width = 56)
+        setSize(R.id.guard_bottom, height = if (searchShown && !keyboardOpen) searchBottom + 44 else 92)
+
         // While typing, what is under the search bar steps aside; only what
         // was shown is hidden, and only that comes back.
-        val under = listOf<View>(findViewById(R.id.bottom_bar), findViewById(R.id.credit_text), routeInfo, speedWidget)
+        val under = listOf<View>(findViewById(R.id.bottom_bar), findViewById(R.id.credit_text), routeInfo)
         if (keyboardOpen) {
             for (v in under) if (v.visibility == View.VISIBLE) { v.visibility = View.INVISIBLE; hiddenForKeyboard.add(v) }
         } else {
@@ -1792,7 +1855,7 @@ class MainActivity : AppCompatActivity() {
             val open = insets.isVisible(ime) || insets.getInsets(ime).bottom > dp(80)
             if (open != keyboardOpen) {
                 keyboardOpen = open
-                root.post { placeCommunicationArea() }
+                root.post { placeLayout() }
             }
         }
     }
@@ -2035,6 +2098,7 @@ class MainActivity : AppCompatActivity() {
             stopBlinking()
         }
         refreshRouteOptionsButton()
+        placeLayout()
     }
 
     private fun selectMode(mode: ModeUi) {
@@ -2228,9 +2292,7 @@ class MainActivity : AppCompatActivity() {
         val speedKmh = (location.speed * 3.6).toInt()
         val hasRealMovement = location.hasSpeed() && speedKmh > 3
         // Hidden only while the keyboard is open (search bar in its place).
-        if (keyboardOpen) {
-            if (speedWidget.visibility == View.GONE) { speedWidget.visibility = View.INVISIBLE; hiddenForKeyboard.add(speedWidget) }
-        } else speedWidget.visibility = View.VISIBLE
+        speedWidget.visibility = View.VISIBLE
         val background = speedSign.background?.mutate() as? GradientDrawable
 
         // Circle = your speed; sign on top = the road's limit (OSM, km/h).
@@ -2385,6 +2447,7 @@ class MainActivity : AppCompatActivity() {
         routeInfoEta.text = ""
         routeInfoCost.text = ""
         routeInfo.visibility = View.GONE
+        placeLayout()
         if (navUiActive) stopNavigationUi()
         findViewById<ImageButton>(R.id.nav_go_button).visibility = View.GONE
         findViewById<ImageButton>(R.id.clear_route_button).visibility = View.GONE
@@ -2443,6 +2506,12 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val sel = selectedIndex.coerceIn(0, results.size - 1)
+        // Destination where you already are: nothing to navigate.
+        if (!NavigationEngine.isActive && results[sel].distanceMeters < 30.0) {
+            clearRoute()
+            showMessage("You are already there")
+            return
+        }
         TripState.selectedIndex = sel
         drawRouteLines(results, sel)
         val primary = results[sel]
@@ -2457,6 +2526,7 @@ class MainActivity : AppCompatActivity() {
         note?.let { showMessage(it) }
         if (keyboardOpen) { routeInfo.visibility = View.INVISIBLE; hiddenForKeyboard.add(routeInfo) }
         else routeInfo.visibility = View.VISIBLE
+        placeLayout()
         populateRouteOptionsRow(results, sel)
         findViewById<ImageButton>(R.id.nav_go_button).visibility = View.VISIBLE
         findViewById<ImageButton>(R.id.clear_route_button).visibility = View.VISIBLE
@@ -2487,7 +2557,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun distanceLabel(m: Double): String {
         val km = m / 1000.0
-        return if (useMetric) "Dist: %.2f Km".format(km) else "Dist: %.2f mi".format(km * 0.621371)
+        return if (useMetric) "Dist: %.2f km".format(km) else "Dist: %.2f mi".format(km * 0.621371)
     }
 
     private fun etaLabel(seconds: Double): String {
@@ -2548,7 +2618,7 @@ class MainActivity : AppCompatActivity() {
             }
             chip.layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = dp(6); gravity = android.view.Gravity.END }
+            ).apply { marginEnd = dp(6) }
             chip.setOnClickListener { if (index != TripState.selectedIndex) promoteRouteToPrimary(index) }
             row.addView(chip)
         }

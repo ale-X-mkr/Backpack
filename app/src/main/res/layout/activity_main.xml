@@ -8,6 +8,36 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- 1.0.2: protected zones. Transparent, they catch taps that miss a
+         button by a little, so the map under the controls never gets an
+         unwanted tap (destination, stop). Sized in code with the columns. -->
+    <View
+        android:id="@+id/guard_left"
+        android:layout_width="88dp"
+        android:layout_height="230dp"
+        android:layout_gravity="top|start"
+        android:clickable="true"
+        android:focusable="false"
+        android:importantForAccessibility="no" />
+
+    <View
+        android:id="@+id/guard_right"
+        android:layout_width="56dp"
+        android:layout_height="230dp"
+        android:layout_gravity="top|end"
+        android:clickable="true"
+        android:focusable="false"
+        android:importantForAccessibility="no" />
+
+    <View
+        android:id="@+id/guard_bottom"
+        android:layout_width="match_parent"
+        android:layout_height="136dp"
+        android:layout_gravity="bottom"
+        android:clickable="true"
+        android:focusable="false"
+        android:importantForAccessibility="no" />
+
     <!-- Turn-by-turn guidance bar: icon + text, dark solid background. -->
     <LinearLayout
         android:id="@+id/nav_instruction_bar"
@@ -21,6 +51,8 @@
         android:background="@drawable/nav_bar_background"
         android:paddingHorizontal="16dp"
         android:paddingVertical="10dp"
+        android:clickable="true"
+        android:minHeight="72dp"
         android:visibility="gone">
 
         <ImageView
@@ -205,15 +237,15 @@
         android:elevation="0dp"
         android:stateListAnimator="@null" />
 
-    <!-- During navigation: look for another route from where you are. -->
+    <!-- During navigation, left column under POI: another route from where you are. -->
     <ImageButton
         android:id="@+id/alt_route_button"
         android:scaleType="fitCenter"
         android:layout_width="38dp"
         android:layout_height="38dp"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="272dp"
-        android:layout_marginEnd="8dp"
+        android:layout_gravity="top|start"
+        android:layout_marginTop="219dp"
+        android:layout_marginStart="8dp"
         android:src="@drawable/ic_alt_route"
         android:background="@drawable/icon_backdrop"
         android:padding="6dp"
@@ -222,10 +254,6 @@
         android:stateListAnimator="@null"
         android:visibility="gone" />
 
-    <!-- Alternative route chips, stacked vertically below the
-         preference toggle. Background color (not text color) shows
-         which one is primary, to avoid the confusing "text swaps
-         color" effect from before. -->
     <!-- During navigation (in the add-stop slot): Drive view <-> Overview. -->
     <ImageButton
         android:id="@+id/overview_button"
@@ -261,15 +289,27 @@
         android:stateListAnimator="@null"
         android:visibility="gone" />
 
-    <LinearLayout
-        android:id="@+id/route_options_row"
+    <!-- Route chips A / B / C: one row at the top centre, between the two
+         columns (under the instruction bar while navigating); scrolls
+         sideways if they don't all fit. Top margin set in code. -->
+    <HorizontalScrollView
+        android:id="@+id/route_options_scroll"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="325dp"
-        android:layout_marginEnd="8dp"
-        android:orientation="vertical"
-        android:visibility="gone" />
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="12dp"
+        android:layout_marginStart="56dp"
+        android:layout_marginEnd="56dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/route_options_row"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:visibility="gone" />
+
+    </HorizontalScrollView>
 
     <!-- ===== ZONE: communication area, bottom: buttons, route info, search
          bar, and the messages just over the search bar (over the route info
@@ -329,6 +369,7 @@
 
     <LinearLayout
         android:id="@+id/route_info"
+        android:clickable="true"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
@@ -445,8 +486,7 @@
 
         </FrameLayout>
 
-        <!-- Third slot left free: Go stays centred; the speed circle sits at
-             the right edge of the screen (below). -->
+        <!-- Third slot left free: Go stays centred. -->
         <Space
             android:layout_width="0dp"
             android:layout_height="match_parent"
@@ -454,15 +494,18 @@
 
     </LinearLayout>
 
-    <!-- Current speed circle at the right edge (~2dp in), ring colour = speed
-         vs limit (rules unchanged); the road's limit sign on its top-left. -->
+    <!-- Current speed circle at the top right: inside the instruction bar
+         while navigating (right end, centred on its background), same spot
+         otherwise. Ring colour = speed vs limit (rules unchanged); the road's
+         limit sign at the circle's bottom-left, touching its ring. -->
     <FrameLayout
         android:id="@+id/speed_widget"
         android:layout_width="84dp"
         android:layout_height="84dp"
-        android:layout_gravity="bottom|end"
-        android:layout_marginBottom="6dp"
-        android:layout_marginEnd="2dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="14dp"
+        android:clickable="true"
         android:clipChildren="false"
         android:visibility="gone">
 
@@ -470,8 +513,7 @@
             android:id="@+id/speed_sign"
             android:layout_width="64dp"
             android:layout_height="64dp"
-            android:layout_gravity="bottom|end"
-            android:layout_marginBottom="10dp"
+            android:layout_gravity="top|end"
             android:background="@drawable/speed_sign_background">
 
             <TextView
@@ -503,6 +545,8 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:layout_gravity="top|start"
+            android:layout_marginStart="11dp"
+            android:layout_marginTop="37dp"
             android:background="@drawable/speed_limit_background"
             android:elevation="2dp"
             android:gravity="center"

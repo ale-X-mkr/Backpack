@@ -1,9 +1,31 @@
-# Backpack 1.0.1
+# Backpack 1.0.2
 
 Private, open-source GPS navigation for Android. Nothing from Google:
 no Play Services, no Google servers, no Material library.
 
-## New in 1.0.1
+## New in 1.0.2
+- **Speed circle at the top right:** while navigating it sits inside the
+  instruction bar (right end, centred on its background); otherwise at the
+  same spot. The road's limit sign sits at the circle's bottom-left, touching
+  its ring.
+- **Bottom, from the bottom up:** Go / clear, the search bar with the
+  magnifier on its right, the distance / arrival / cost bar, messages. While
+  navigating the search bar is hidden; while typing it floats just over the
+  keyboard (voice typing: use your keyboard's mic key).
+- **Button columns moved up** to where the search bar used to be (just under
+  the top band when the speed circle or the instruction bar is there).
+  4 buttons per side: left = travel mode (+ toll), urgency, POI, find
+  alternative route (navigating; "resume" takes that slot, or the next one);
+  right = locate, add stop / overview, preference, settings.
+- **Route chips A / B / C in one row at the top centre** (under the
+  instruction bar while navigating), so they no longer fall off the screen in
+  landscape. Landscape uses the same layout with tighter rows.
+- **Protected zones:** a tap that misses a button by a little, on the bottom
+  area or on the instruction bar no longer taps the map.
+- A destination where you already are says "You are already there". "km"
+  written in lowercase.
+
+## 1.0.1
 - **One settings button:** the gear is gone; the sliders button (right
   column) opens Settings by category, also while navigating (one row lower).
 - **Trip toggles on the left**, mirroring the right column: travel mode (toll
