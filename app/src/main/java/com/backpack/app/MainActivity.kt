@@ -257,6 +257,10 @@ class MainActivity : AppCompatActivity() {
         messageBubble = findViewById(R.id.message_bubble)
         errorBubble = findViewById(R.id.error_bubble)
         applyBubbleColors()
+        var lastBarHeight = 0
+        navInstructionBar.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            if (v.height != lastBarHeight) { lastBarHeight = v.height; v.post { placeLayout() } }
+        }
         // Speed number centred on its digits, not on the font's line box.
         speedSignText.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> centerDigits(v as TextView) }
 
@@ -1782,7 +1786,11 @@ class MainActivity : AppCompatActivity() {
         val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val driving = currentMode == ModeUi.DRIVING
         val topBandUsed = navUiActive || driving
-        val top0 = if (topBandUsed) 92 else 60
+        // Under the speed circle (12..96) or the instruction bar (taller with
+        // two lines or a large font): measured, never less than 100.
+        val barBottom = if (navUiActive && navInstructionBar.height > 0)
+            (navInstructionBar.bottom / resources.displayMetrics.density).toInt() + 8 else 0
+        val top0 = if (topBandUsed) maxOf(100, barBottom) else 60
         val step = if (land) 46 else 53
         val gap = step - 38
 
@@ -1802,11 +1810,26 @@ class MainActivity : AppCompatActivity() {
         setMargins(R.id.preference_toggle_button, top = top0 + 2 * step)
         setMargins(R.id.route_options_button, top = top0 + 3 * step)
         // Chips: top centre; under the instruction bar while navigating.
-        setMargins(R.id.route_options_scroll, top = if (navUiActive) 92 else 12, start = 96, end = if (driving) 100 else 64)
+        setMargins(R.id.route_options_scroll, top = if (navUiActive) top0 else 12, start = 96, end = if (driving) 100 else 64)
         // Instruction text keeps clear of the speed circle at its right end.
         navInstructionBar.setPadding(dp(16), dp(10), if (driving) dp(86) else dp(16), dp(10))
 
+        // While typing, what is under the search bar steps aside; only what
+        // was shown is hidden, and only that comes back (first, so the
+        // positions below see the real state).
+        val under = listOf<View>(findViewById(R.id.bottom_bar), findViewById(R.id.credit_text), routeInfo)
+        if (keyboardOpen) {
+            for (v in under) if (v.visibility == View.VISIBLE) { v.visibility = View.INVISIBLE; hiddenForKeyboard.add(v) }
+        } else {
+            for (v in hiddenForKeyboard) if (v.visibility == View.INVISIBLE) v.visibility = View.VISIBLE
+            hiddenForKeyboard.clear()
+        }
+
         // Bottom: buttons (6..90) -> search bar -> route info -> messages.
+        // Landscape: search bar and route info in the middle, between the
+        // columns (the screen is too low for them to pass under the columns).
+        val sideStart = if (land) 100 else 8
+        val sideEnd = if (land) 100 else 8
         val searchShown = !navUiActive
         val searchBottom = if (keyboardOpen) 8 else 92
         val infoBottom = if (searchShown) searchBottom + 44 else 92
@@ -1816,9 +1839,9 @@ class MainActivity : AppCompatActivity() {
             searchShown -> searchBottom + 44
             else -> 92
         }
-        setMargins(R.id.search_input, bottom = searchBottom)
-        setMargins(R.id.search_button, bottom = searchBottom)
-        setMargins(R.id.search_results_scroll, bottom = searchBottom + 42)
+        setMargins(R.id.search_input, bottom = searchBottom, start = sideStart, end = sideEnd + 46)
+        setMargins(R.id.search_button, bottom = searchBottom, end = sideEnd)
+        setMargins(R.id.search_results_scroll, bottom = searchBottom + 42, start = sideStart, end = sideEnd + 46)
         setMargins(R.id.route_info, bottom = infoBottom)
         setMargins(R.id.message_band, bottom = bandBottom)
 
@@ -1828,16 +1851,6 @@ class MainActivity : AppCompatActivity() {
         setMargins(R.id.guard_right, top = top0 - 6)
         setSize(R.id.guard_right, height = 4 * step + 4, width = 56)
         setSize(R.id.guard_bottom, height = if (searchShown && !keyboardOpen) searchBottom + 44 else 92)
-
-        // While typing, what is under the search bar steps aside; only what
-        // was shown is hidden, and only that comes back.
-        val under = listOf<View>(findViewById(R.id.bottom_bar), findViewById(R.id.credit_text), routeInfo)
-        if (keyboardOpen) {
-            for (v in under) if (v.visibility == View.VISIBLE) { v.visibility = View.INVISIBLE; hiddenForKeyboard.add(v) }
-        } else {
-            for (v in hiddenForKeyboard) if (v.visibility == View.INVISIBLE) v.visibility = View.VISIBLE
-            hiddenForKeyboard.clear()
-        }
     }
 
     private val hiddenForKeyboard = mutableSetOf<View>()
@@ -2508,7 +2521,14 @@ class MainActivity : AppCompatActivity() {
         val sel = selectedIndex.coerceIn(0, results.size - 1)
         // Destination where you already are: nothing to navigate.
         if (!NavigationEngine.isActive && results[sel].distanceMeters < 30.0) {
-            clearRoute()
+            // Only the destination goes: your start point and stops stay.
+            clearRouteVisuals()
+            TripState.committed = TripState.copy()
+            routeInfo.visibility = View.GONE
+            findViewById<View>(R.id.nav_go_button).visibility = View.GONE
+            findViewById<View>(R.id.clear_route_button).visibility = View.GONE
+            findViewById<LinearLayout>(R.id.route_options_row).apply { removeAllViews(); visibility = View.GONE }
+            placeLayout()
             showMessage("You are already there")
             return
         }
