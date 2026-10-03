@@ -1,6 +1,90 @@
-# Backpack 0.8.0
+# Backpack 1.0.0
 
-## New in 0.8.0
+Private, open-source GPS navigation for Android. Nothing from Google:
+no Play Services, no Google servers, no Material library.
+
+## New in 1.0.0 (first release)
+
+**Fewer server timeouts**
+- **Speed limits per route:** the roads of the next ~20 km of your route are
+  loaded in one request (the next stretch before you reach the end), then
+  every GPS fix is looked up on the phone. Without a route: one quick lookup
+  around you at most every 15 s, as before. The server no longer follows the
+  car fix by fix.
+- **Places per map square, kept on the phone:** places are fetched per square
+  of about 5 km (one light request for all missing squares) and kept 3 days
+  (everyday places) or 2 weeks (sights, with their Wikidata ranking for a
+  month). Planning again, moving the map back, or a second trip in the same
+  area asks no server. The servers only learn which squares, never your route
+  line. Sights are searched up to 15 / 60 / 120 km ahead (walk / bike / car),
+  the next stretch while you go. Settings > Places: "Clear saved places".
+- **Free slot first:** before a query, each Overpass server's status page says
+  whether a slot is free; a busy server is skipped instead of waiting for its
+  refusal (remembered 30 s).
+- **Second source:** when every Overpass server fails, everyday places come
+  from openrouteservice's places service (same key, 500 a day).
+
+**Look**
+- One button style everywhere (light grey backdrop, red when active); Go / Stop
+  in dark red with a white icon. The toll button shows its state by the icon
+  colour, the POI button by a red ring.
+- **POI button = dropdown** list (icon + name, current one in red).
+- **Messages always in the same band**, between the position arrow and the
+  bottom buttons; errors just above the routine message.
+- **Routes lettered A / B / C** on the map (where the lines part) and on the
+  chips; only the selected letter and chip get the red frame. Tap a letter to
+  pick that route.
+- **Settings in one popup by category** (Route, Navigation, Speed, Places, Map,
+  Servers), from the last button of the right column; the route-options
+  button opens it on Route. The bottom bar keeps only navigation: clear, Go,
+  speed.
+- Search field with a thin dark-grey frame. Speed number exactly centred.
+- **App icon: red backpack.**
+
+**Places and stops**
+- Every place popup (sights and POI categories): what it is, where it is on
+  your route and the extra time, a link to read about it (Wikipedia, else
+  Wikidata, else the place's website), **Go here** and **Add stop**.
+  Tap a fuel station / restaurant / ... on the map for its popup.
+- With 2 stops already: **Visit on the way** (temporary detour that does not
+  count, then your route goes on) or **Replace last stop**.
+- **Resume previous route** (undo button, left): back to the trip before a
+  detour, a replaced stop or "Go here", until you arrive. Stops you already
+  visited stay visited. "Go here" now works while navigating too.
+
+**Navigation view**
+- Settings > Navigation: 3D tilt Auto / Flat / 30° / 45° / 60° (60° is
+  MapLibre's maximum on Android), zoom Closer / Normal / Farther, spoken
+  instructions on/off. Settings > Speed: alarm sound on/off (rules unchanged).
+- **Overview** button while navigating (add-stop slot): flat, north up, the
+  rest of the route framed with the places along it; tap one to add it.
+  Navigation and voice go on; back to the drive view by the button, after
+  20 s untouched, before a turn, or with the locate button.
+
+**Release**
+- Version 1.0.0, release build signed with your keystore from
+  local.properties (see app/build.gradle.kts), not debuggable.
+- No routing key built in (F-Droid builds): the app asks for your own free
+  openrouteservice key in Settings > Servers.
+- fastlane/metadata (title, descriptions, icon) ready for F-Droid.
+
+## Build a release
+1. local.properties (never committed): `ors.key1=`, `ors.key2=` (optional),
+   `release.storeFile=`, `release.storePassword=`, `release.keyAlias=`,
+   `release.keyPassword=`.
+2. `./gradlew assembleRelease` -> app/build/outputs/apk/release/app-release.apk
+3. `adb install -r --user 0 app-release.apk`
+   (An app signed with another key must be uninstalled first.)
+
+## Privacy, in short
+Routing (openrouteservice) gets the trip's points. Places servers get only the
+~5 km squares looked at; speed limits the road ahead of your route (or around
+you without a route). Search positions are rounded to ~1 km. Wikidata gets
+place ids. No account, no tracking; nothing about your trips is stored except
+the places cache (Settings > Places > Clear saved places).
+
+## 0.8.0
+
 - **Weekend = well-known places.** Weekend (urgency button) shows the
   well-known places along your route or in view; Work / Emergency hide
   them. Hold the urgency button for the list. The camera button is gone.
@@ -52,9 +136,6 @@
 - Bottom buttons on one line; toll button now left of the car (car unmoved).
 
 
-Private, open-source GPS navigation for Android. Nothing from Google:
-no Play Services, no Google servers, no Material library.
-
 ## 0.4.0 (changes since Step 38)
 - **Map:** MapLibre Native (BSD) with OpenFreeMap vector maps (no account,
   no key, no cookies). Real night map with Day / Night / Auto. Style
@@ -92,10 +173,12 @@ max 2 stops, alternative-route chips, all icons.
 ## Build
 - Kotlin 2.3.20 (needed by MapLibre 13.x), Java 17, compileSdk 35, targetSdk 34.
 - If Android Studio offers to update the Android Gradle Plugin, accept.
-- Unit tests for the routing and navigation core: `app/src/test` (13 tests).
+- Unit tests for the routing, navigation and places core: `app/src/test` (35 tests).
 
 ## Known limits
-- Routing and address search still go to openrouteservice.org (it sees the
-  start and end of each route). A self-hosted server can be set in Settings.
+- Routing still goes to openrouteservice.org (it sees the points of each
+  route). A self-hosted server can be set in Settings > Servers.
+- Overpass can still be slow at busy hours for squares not seen before; what
+  is on the phone shows at once, the rest says "some places may be missing".
 - openrouteservice cannot hard-avoid unpaved roads and has no motorbike profile.
 - Slight / keep turns use the normal left/right icon (no new icons added).

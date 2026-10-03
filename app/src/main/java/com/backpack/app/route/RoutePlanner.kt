@@ -61,7 +61,7 @@ class RoutePlanner(context: Context) {
         }
     }
 
-    private class Outcome(val routes: List<RouteResult>?, val httpCode: Int?, val body: String?, val failed: Boolean = false)
+    private class Outcome(val routes: List<RouteResult>?, val httpCode: Int?, val body: String?, val failed: Boolean = false, val noKey: Boolean = false)
 
     private fun planBalanced(req: RouteRequest, cb: PlanCallback) {
         val lock = Any()
@@ -84,7 +84,11 @@ class RoutePlanner(context: Context) {
             val plan = TollBalance.plan(a, b, req.valuePerMinute, req.tollRatePerKm)
             if (plan == null) {
                 val code = wt.httpCode ?: wo.httpCode
-                cb.onResult(null, if (code != null) Ors.friendlyError(code, wt.body ?: wo.body) else "Route request failed")
+                cb.onResult(null, when {
+                    wt.noKey -> NO_KEY
+                    code != null -> Ors.friendlyError(code, wt.body ?: wo.body)
+                    else -> "Route request failed"
+                })
             } else {
                 cb.onResult(plan, null)
             }
@@ -112,6 +116,7 @@ class RoutePlanner(context: Context) {
                 }
                 alternatives && !o.failed && o.httpCode != null && o.httpCode !in setOf(401, 403, 429) ->
                     planSingle(req, alternatives = false, cb)
+                o.noKey -> cb.onResult(null, NO_KEY)
                 o.httpCode != null -> cb.onResult(null, Ors.friendlyError(o.httpCode, o.body))
                 routes != null -> cb.onResult(null, "Route returned no geometry")
                 else -> cb.onResult(null, "Route request failed -- check the connection")
@@ -131,7 +136,8 @@ class RoutePlanner(context: Context) {
         val baseUrl = Prefs.orsBaseUrl(app)
         // A self-hosted ORS server may need no key at all.
         if (keys.isEmpty() && baseUrl == Prefs.DEFAULT_ORS_URL) {
-            done(Outcome(null, null, null, failed = true))
+            // Builds without built-in keys (e.g. F-Droid): your own free key is needed.
+            done(Outcome(null, null, null, failed = true, noKey = true))
             return
         }
         val coords = mutableListOf(req.from).apply { addAll(req.waypoints); add(req.to) }
@@ -224,6 +230,8 @@ class RoutePlanner(context: Context) {
     }
 
     companion object {
+        const val NO_KEY = "No routing key -- add your free openrouteservice key in Settings > Servers"
+
         val http: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)

@@ -23,8 +23,8 @@ android {
         applicationId = "com.backpack.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "0.8.0"
+        versionCode = 10
+        versionName = "1.0.0"
         buildConfigField("String", "ORS_KEY_1", "\"${localProp("ors.key1")}\"")
         buildConfigField("String", "ORS_KEY_2", "\"${localProp("ors.key2")}\"")
     }
@@ -33,9 +33,32 @@ android {
         buildConfig = true
     }
 
+    // Release signing with your own keystore, kept OUTSIDE the project.
+    // In local.properties (never committed):
+    //   release.storeFile=/path/to/your.keystore
+    //   release.storePassword=...
+    //   release.keyAlias=...
+    //   release.keyPassword=...
+    // Without these lines the release APK is built unsigned (sign it yourself).
+    val releaseStore = localProp("release.storeFile")
+    if (releaseStore.isNotEmpty()) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseStore)
+                storePassword = localProp("release.storePassword")
+                keyAlias = localProp("release.keyAlias")
+                keyPassword = localProp("release.keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Not shrunk/obfuscated in 1.0.0: MapLibre's native code is most of
+            // the size anyway, and an untested R8 setup is a crash risk.
             isMinifyEnabled = false
+            isDebuggable = false
+            if (releaseStore.isNotEmpty()) signingConfig = signingConfigs.getByName("release")
         }
     }
 
