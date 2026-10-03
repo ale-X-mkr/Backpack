@@ -62,6 +62,15 @@ android {
         }
     }
 
+    // The release build's lint step (lintVitalAnalyzeRelease) crashes inside
+    // lint itself ("Already disposed: MessageBus", LintClassLoaderBuildService):
+    // AGP 8.5's lint and Kotlin 2.3 don't get along. It only checks for fatal
+    // lint issues; skip it for release builds. Run lint by hand if wanted.
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
