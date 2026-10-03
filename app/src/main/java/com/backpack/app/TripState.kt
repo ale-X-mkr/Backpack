@@ -62,14 +62,22 @@ object TripState {
     fun copy() = Copy(destination, waypoints.toList(), detour, detourApplied, previous, visitedSinceSnapshot.toSet())
 
     fun restore(c: Copy) {
+        val visitedNow = visitedSinceSnapshot.toSet()
         destination = c.destination
         waypoints.clear()
         waypoints.addAll(c.waypoints)
         detour = c.detour
         detourApplied = c.detourApplied
         previous = c.previous
-        visitedSinceSnapshot.addAll(c.visited)
+        // Stops passed while the request ran stay passed.
+        visitedSinceSnapshot.addAll(c.visited + visitedNow)
     }
+
+    /** The trip as it was when its route last arrived: what a failed or
+     *  interrupted change goes back to (null = no route yet). */
+    var committed: Copy? = null
+    /** A trip change is waiting for its route (survives a screen rebuild). */
+    var changePending = false
 
     fun clear() {
         customStart = null
@@ -80,5 +88,7 @@ object TripState {
         detour = null
         detourApplied = false
         previous = null
+        committed = null
+        changePending = false
     }
 }

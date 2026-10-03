@@ -37,8 +37,9 @@ class PlacesFinder(context: Context) {
     class Category(val layer: String, val overpassFilter: String, val orsIds: Map<Int, String>)
 
     fun interface ResultCallback {
-        /** [note]: shown to the user (fallback used, part missing...). */
-        fun onResult(places: List<PoiPlace>?, error: String?, note: String?)
+        /** [note]: shown to the user (fallback used, part missing...).
+         *  [serverFailed]: Overpass did not answer (back off before asking again). */
+        fun onResult(places: List<PoiPlace>?, error: String?, note: String?, serverFailed: Boolean)
     }
 
     private val app = context.applicationContext
@@ -69,16 +70,16 @@ class PlacesFinder(context: Context) {
         south: Double, west: Double, north: Double, east: Double,
         found: List<PoiPlace>, missing: List<Tile>, onSwitch: () -> Unit, callback: ResultCallback
     ) {
-        fun finish(extra: List<PoiPlace>, error: String?, note: String?) {
+        fun finish(extra: List<PoiPlace>, error: String?, note: String?, serverFailed: Boolean) {
             if (gen != generation) return
             val all = (found + extra).distinctBy { it.key }
                 .filter { it.point.lat in south..north && it.point.lon in west..east }
                 .sortedBy { Geo.distance(it.point, center) }
                 .take(MAX_SHOWN)
-            if (all.isEmpty() && error != null) callback.onResult(null, error, null)
-            else callback.onResult(all, null, note ?: error?.let { "Some places may be missing ($it)" })
+            if (all.isEmpty() && error != null) callback.onResult(null, error, null, true)
+            else callback.onResult(all, null, note ?: error?.let { "Some places may be missing ($it)" }, serverFailed)
         }
-        if (missing.isEmpty()) { finish(emptyList(), null, null); return }
+        if (missing.isEmpty()) { finish(emptyList(), null, null, false); return }
         val query = Places.tileQuery(category.overpassFilter, missing)
         OverpassClient.query(app, query, onSwitch = { if (gen == generation) onSwitch() }) { body, failure ->
             if (body != null) {
@@ -88,7 +89,7 @@ class PlacesFinder(context: Context) {
                     if (parsed != null) for ((t, list) in Places.byTile(parsed, missing)) cache.put(t, Places.toJson(list))
                     main.post {
                         if (gen != generation) return@post
-                        if (parsed != null) finish(parsed, null, null)
+                        if (parsed != null) finish(parsed, null, null, false)
                         else fallback(gen, category, center, south, west, north, east, OverpassClient.Failure.BAD_ANSWER.message, ::finish)
                     }
                 }
@@ -102,14 +103,14 @@ class PlacesFinder(context: Context) {
     /** Second source: openrouteservice places around the centre. */
     private fun fallback(
         gen: Int, category: Category, center: LatLon, south: Double, west: Double, north: Double, east: Double,
-        error: String, finish: (List<PoiPlace>, String?, String?) -> Unit
+        error: String, finish: (List<PoiPlace>, String?, String?, Boolean) -> Unit
     ) {
         val half = minOf(Geo.distance(LatLon(south, center.lon), LatLon(north, center.lon)),
             Geo.distance(LatLon(center.lat, west), LatLon(center.lat, east))) / 2
         orsPlaces(category, center, half.toInt().coerceIn(300, 2000)) { list ->
             if (gen != generation) return@orsPlaces
-            if (list == null) finish(emptyList(), error, null)
-            else finish(list, null, "Places servers busy -- showing openrouteservice places nearby")
+            if (list == null) finish(emptyList(), error, null, true)
+            else finish(list, null, "Places servers busy -- showing openrouteservice places nearby", true)
         }
     }
 

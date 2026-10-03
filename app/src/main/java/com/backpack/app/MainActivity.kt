@@ -301,6 +301,13 @@ class MainActivity : AppCompatActivity() {
         if (!LocationHub.hasPermission(this)) {
             requestLocationPermission()
         }
+        // The screen was rebuilt while a trip change waited for its route
+        // (that request was cancelled): back to the trip being followed.
+        if (TripState.changePending) {
+            TripState.committed?.let { TripState.restore(it) }
+            TripState.changePending = false
+            refreshResumeButton()
+        }
     }
 
     override fun onStart() {
@@ -951,9 +958,10 @@ class MainActivity : AppCompatActivity() {
             touristFinder.alongRoutes(lines, currentMode.mode, fromM, { onPlacesServerSwitch() }) { all, error, coveredM ->
                 // Only a search that answered counts as covering the stretch;
                 // a failed one is tried again 2 min later, not on every fix.
-                if (all != null) TripState.touristCoveredM = coveredM
+                if (all != null && error == null) TripState.touristCoveredM = coveredM
                 else touristRetryAfterMs = System.currentTimeMillis() + 120_000L
-                onTouristCandidates(all, error, plan, null, announce = !extend, scenic = scenic && !extend, startIndex = startIndex)
+                onTouristCandidates(all, error, plan, null, announce = !extend, scenic = scenic && !extend,
+                    startIndex = startIndex, keepOnFailure = extend)
             }
             return
         }
@@ -975,10 +983,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun onTouristCandidates(
         all: List<TouristPoi>?, error: String?, plan: RoutePlan?, center: LatLon?,
-        announce: Boolean, scenic: Boolean, startIndex: Int = -1
+        announce: Boolean, scenic: Boolean, startIndex: Int = -1, keepOnFailure: Boolean = false
     ) {
         if (!touristOn || isDestroyed) return
         touistClearPending()
+        if (all == null && keepOnFailure) return // the places already shown stay; retried later
         if (all == null) {
             // Remember the failed search too: no retry on every map move.
             touristResults = emptyList()
@@ -1210,11 +1219,17 @@ class MainActivity : AppCompatActivity() {
             return
         }
         showMessage(message)
-        requestBestRoute(start, end, stops, onFailure = {
-            TripState.restore(before)
-            refreshPins()
-            refreshResumeButton()
-        })
+        TripState.changePending = true
+        requestBestRoute(start, end, stops, onFailure = { restoreCommitted(before) })
+    }
+
+    /** A trip change failed: back to the trip whose route is on screen (and
+     *  being navigated), not to a half-applied earlier change. */
+    private fun restoreCommitted(fallback: TripState.Copy) {
+        TripState.restore(TripState.committed ?: fallback)
+        TripState.changePending = false
+        refreshPins()
+        refreshResumeButton()
     }
 
     /** New destination from a place popup; also while navigating (the trip
@@ -1258,11 +1273,8 @@ class MainActivity : AppCompatActivity() {
         refreshResumeButton()
         val start = resolveStartPoint() ?: run { TripState.restore(before); refreshPins(); refreshResumeButton(); return }
         showMessage("Previous route resumed \u00b7 finding route...")
-        requestBestRoute(start, end, stops, onFailure = {
-            TripState.restore(before)
-            refreshPins()
-            refreshResumeButton()
-        })
+        TripState.changePending = true
+        requestBestRoute(start, end, stops, onFailure = { restoreCommitted(before) })
     }
 
     private fun refreshResumeButton() {
@@ -1487,8 +1499,8 @@ class MainActivity : AppCompatActivity() {
         // A temporary detour already visited is no longer "on the way".
         TripState.detour?.let { d ->
             if (TripState.detourApplied && NavigationEngine.remainingStops()?.contains(d) == false) {
-                TripState.detour = null
-                TripState.detourApplied = false
+                TripState.dropDetour()
+                TripState.committed?.let { TripState.committed = TripState.copy() }
             }
         }
         if (overviewOn && p.anticipation) leaveOverview() // back to the drive view before a turn
@@ -1799,7 +1811,7 @@ class MainActivity : AppCompatActivity() {
         placesFinder.inBox(category.finderCategory(), center.lat - latSpan / 2, center.lon - lonSpan / 2,
             center.lat + latSpan / 2, center.lon + lonSpan / 2,
             onSwitch = { if (thisGeneration == poiRequestGeneration && force) onPlacesServerSwitch() }
-        ) { results, error, note ->
+        ) { results, error, note, serverFailed ->
             if (thisGeneration != poiRequestGeneration || isDestroyed) return@inBox
             val button = findViewById<ImageButton>(R.id.poi_toggle_button)
             if (results == null) {
@@ -1811,8 +1823,15 @@ class MainActivity : AppCompatActivity() {
                 showError(error ?: "Places search failed", retry = { queryPois(force = true) })
                 return@inBox
             }
-            poiFailures = 0
-            poiRetryAtMs = 0L
+            if (serverFailed) {
+                // Shown from the phone / openrouteservice, but Overpass failed:
+                // automatic retries for the missing squares wait too.
+                poiFailures++
+                poiRetryAtMs = System.currentTimeMillis() + when (poiFailures) { 1 -> 60_000L; 2 -> 120_000L; else -> 300_000L }
+            } else {
+                poiFailures = 0
+                poiRetryAtMs = 0L
+            }
             poiResults = results
             layers.setPois(results.map { MapLayers.Pin(it.key, it.point, category.iconName) })
             setPoiButtonStatus(button, results.isNotEmpty())
@@ -2222,6 +2241,9 @@ class MainActivity : AppCompatActivity() {
             }
             // From now on, a detour missing from the remaining stops means "visited".
             TripState.detour?.let { if (it in request.waypoints) TripState.detourApplied = true }
+            // This trip now matches the route on screen.
+            TripState.changePending = false
+            TripState.committed = TripState.copy()
             if (navigating && altChoiceOpen) closeAltChoice(restore = false)
             TripState.plan = plan
             TripState.selectedIndex = plan.primaryIndex
