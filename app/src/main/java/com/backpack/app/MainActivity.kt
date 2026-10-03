@@ -394,6 +394,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Leaving the app (not a rebuild): a place still waiting for GPS is dropped,
+        // it must not come back unasked at the next start.
+        if (isFinishing) {
+            TripState.pendingLink = null
+            TripState.pendingLinkMode = null
+        }
         planner.cancel()
         handler.removeCallbacksAndMessages(null)
         toneGenerator?.release()
@@ -458,11 +464,12 @@ class MainActivity : AppCompatActivity() {
             if (TripState.plan == null) refreshTourist()
         }
         loadStyle(m)
-        startLink?.let { startLink = null; handleNavLink(it) }
-        // A place from another app still waiting for GPS (screen rebuilt meanwhile).
-        TripState.pendingLink?.let { (point, _) ->
+        // A place from another app still waiting for GPS (screen rebuilt
+        // meanwhile) -- unless a newer link just arrived.
+        if (startLink == null) TripState.pendingLink?.let { (point, _) ->
             m.cameraPosition = CameraPosition.Builder().target(LatLng(point.lat, point.lon)).zoom(14.0).build()
         }
+        startLink?.let { startLink = null; handleNavLink(it) }
     }
 
     private fun loadStyle(m: MapLibreMap) {
