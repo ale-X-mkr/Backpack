@@ -1850,7 +1850,8 @@ class MainActivity : AppCompatActivity() {
         setSize(R.id.guard_left, height = leftRows * step + 4, width = 88)
         setMargins(R.id.guard_right, top = top0 - 6)
         setSize(R.id.guard_right, height = 4 * step + 4, width = 56)
-        setSize(R.id.guard_bottom, height = if (searchShown && !keyboardOpen) searchBottom + 44 else 92)
+        // Landscape: only the buttons' strip, so most of the low wide map stays draggable.
+        setSize(R.id.guard_bottom, height = if (searchShown && !keyboardOpen && !land) searchBottom + 44 else 92)
     }
 
     private val hiddenForKeyboard = mutableSetOf<View>()
@@ -2529,6 +2530,7 @@ class MainActivity : AppCompatActivity() {
             findViewById<View>(R.id.clear_route_button).visibility = View.GONE
             findViewById<LinearLayout>(R.id.route_options_row).apply { removeAllViews(); visibility = View.GONE }
             placeLayout()
+            refreshTourist(force = true) // sights of the visible area again
             showMessage("You are already there")
             return
         }
