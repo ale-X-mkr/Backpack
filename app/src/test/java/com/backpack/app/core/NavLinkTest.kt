@@ -50,4 +50,13 @@ class NavLinkTest {
         assertNull(p("https://example.com/maps?q=45,5"))
         assertNull(p("mailto:x@y.z"))
     }
+
+    @Test fun placeDataSearchPathAndStrayPercent() {
+        val l = p("https://www.google.com/maps/place/Bastille/@45.19,5.70,15z/data=!4m6!3m5!1s0x0:0x0!8m2!3d45.1983!4d5.7256")!!
+        assertEquals(LatLon(45.1983, 5.7256), l.point)
+        assertEquals("Bastille", l.label)
+        assertEquals("cafe Grenoble", p("https://www.google.com/maps/search/cafe+Grenoble/@45.18,5.72,14z")!!.query)
+        assertEquals("100% bio, Lyon", p("geo:0,0?q=100%25+bio,+Lyon")!!.query)
+        assertEquals("100% bio", p("google.navigation:q=100%+bio")!!.query)
+    }
 }

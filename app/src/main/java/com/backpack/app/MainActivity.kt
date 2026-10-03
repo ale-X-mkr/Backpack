@@ -300,9 +300,6 @@ class MainActivity : AppCompatActivity() {
         if (!LocationHub.hasPermission(this)) {
             requestLocationPermission()
         }
-        // Opened by another app with a place ("navigate here"): only on a real
-        // start, not when the screen is rebuilt (rotation, day/night).
-        if (savedInstanceState == null) handleNavLink(intent)
         // The screen was rebuilt while a trip change waited for its route
         // (that request was cancelled): back to the trip being followed.
         if (TripState.changePending) {
@@ -310,13 +307,22 @@ class MainActivity : AppCompatActivity() {
             TripState.changePending = false
             refreshResumeButton()
         }
+        // Opened by another app with a place ("navigate here"): only on a real
+        // start (not a rebuild, not a relaunch from Recents), handled once the
+        // map is ready so the camera can show the place and the route.
+        if (savedInstanceState == null &&
+            (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0
+        ) startLink = intent
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleNavLink(intent)
+        if (map != null) handleNavLink(intent) else startLink = intent
     }
+
+    /** Link that opened the app, handled when the map is ready. */
+    private var startLink: Intent? = null
 
     override fun onStart() {
         super.onStart()
@@ -452,6 +458,11 @@ class MainActivity : AppCompatActivity() {
             if (TripState.plan == null) refreshTourist()
         }
         loadStyle(m)
+        startLink?.let { startLink = null; handleNavLink(it) }
+        // A place from another app still waiting for GPS (screen rebuilt meanwhile).
+        TripState.pendingLink?.let { (point, _) ->
+            m.cameraPosition = CameraPosition.Builder().target(LatLng(point.lat, point.lon)).zoom(14.0).build()
+        }
     }
 
     private fun loadStyle(m: MapLibreMap) {
@@ -527,7 +538,12 @@ class MainActivity : AppCompatActivity() {
         if (plausible) {
             if (isGpsDegraded) clearGpsWarning()
             // A place from another app was waiting for the first position.
-            pendingLinkTarget?.let { (point, label) -> pendingLinkTarget = null; placeLinkDestination(point, label) }
+            TripState.pendingLink?.let { (point, label) ->
+                val mode = TripState.pendingLinkMode
+                TripState.pendingLink = null
+                TripState.pendingLinkMode = null
+                placeLinkDestination(point, label, mode)
+            }
             if (puckActive()) map?.locationComponent?.forceLocationUpdate(withHeading(location))
             if (currentMode == ModeUi.DRIVING) {
                 updateSpeedLimit(location)
@@ -831,9 +847,6 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- Places handed over by other apps ----------
 
-    /** Destination waiting for the first GPS fix (or the map). */
-    private var pendingLinkTarget: Pair<LatLon, String>? = null
-
     /**
      * geo: / google.navigation: / Google Maps links: the place becomes the
      * destination and the route is shown -- you check it (vehicle, options...)
@@ -860,11 +873,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun resolveLink(link: NavLink) {
-        // The sender's travel mode (walk / bike / car), when it says one.
-        link.mode?.let { m -> ModeUi.values().firstOrNull { it.mode == m }?.let { setModeQuietly(it) } }
         val point = link.point
         if (point != null) {
-            placeLinkDestination(point, link.label ?: "%.5f, %.5f".format(java.util.Locale.ROOT, point.lat, point.lon))
+            placeLinkDestination(point, link.label ?: "%.5f, %.5f".format(java.util.Locale.ROOT, point.lat, point.lon), link.mode)
             return
         }
         val query = link.query ?: return
@@ -872,21 +883,26 @@ class MainActivity : AppCompatActivity() {
         searchClient.search(query, currentPosition() ?: cameraCenter()) { places, error ->
             val first = places.firstOrNull()
             if (first == null) showError(error ?: "Place not found: $query")
-            else placeLinkDestination(first.point, link.label ?: first.name)
+            else placeLinkDestination(first.point, link.label ?: first.name, link.mode)
         }
     }
 
-    private fun placeLinkDestination(point: LatLon, label: String) {
+    private fun placeLinkDestination(point: LatLon, label: String, mode: com.backpack.app.core.TravelMode?) {
+        // The sender's travel mode (walk / bike / car), set just before routing.
+        fun applyMode() = mode?.let { m -> ModeUi.values().firstOrNull { it.mode == m }?.let { setModeQuietly(it) } }
         if (NavigationEngine.isActive) {
+            applyMode()
             goHere(point, label)
             return
         }
         map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(point.lat, point.lon), 14.0))
         if (resolveStartPoint() == null) {
-            pendingLinkTarget = point to label
+            TripState.pendingLink = point to label
+            TripState.pendingLinkMode = mode
             showMessage("$label \u00b7 waiting for GPS to plan the route...")
             return
         }
+        applyMode()
         // A destination, never a stop, even if stop mode was armed.
         if (waypointModeArmed) {
             waypointModeArmed = false
@@ -1722,8 +1738,6 @@ class MainActivity : AppCompatActivity() {
     // ---------- Communication area (bottom): search bar + messages ----------
 
     private var keyboardOpen = false
-    private var rootMaxHeight = 0
-    private var rootWidth = 0
 
     /**
      * Bottom of the screen, from the bottom up: navigation buttons, route
@@ -1745,32 +1759,33 @@ class MainActivity : AppCompatActivity() {
         bottomMargin(R.id.search_button, searchBottom)
         bottomMargin(R.id.search_results_scroll, searchBottom + 42)
         bottomMargin(R.id.message_band, bandBottom)
-        val under = if (keyboardOpen) View.INVISIBLE else View.VISIBLE
-        findViewById<View>(R.id.bottom_bar).visibility = under
-        findViewById<View>(R.id.credit_text).visibility = under
+        // While typing, what is under the search bar steps aside; only what
+        // was shown is hidden, and only that comes back.
+        val under = listOf<View>(findViewById(R.id.bottom_bar), findViewById(R.id.credit_text), routeInfo, speedWidget)
         if (keyboardOpen) {
-            routeInfo.visibility = View.INVISIBLE
-            speedWidget.visibility = View.INVISIBLE
+            for (v in under) if (v.visibility == View.VISIBLE) { v.visibility = View.INVISIBLE; hiddenForKeyboard.add(v) }
         } else {
-            if (routeInfo.visibility == View.INVISIBLE) routeInfo.visibility = View.VISIBLE
-            if (speedWidget.visibility == View.INVISIBLE) speedWidget.visibility = View.VISIBLE
+            for (v in hiddenForKeyboard) if (v.visibility == View.INVISIBLE) v.visibility = View.VISIBLE
+            hiddenForKeyboard.clear()
         }
     }
 
-    /** The screen shrinks when the keyboard opens (adjustResize): the
-     *  communication area follows it. */
+    private val hiddenForKeyboard = mutableSetOf<View>()
+
+    /** The screen shrinks when the keyboard opens (adjustResize). After each
+     *  layout, the window's own insets say whether the keyboard is shown;
+     *  the communication area follows. (No height guessing: split screen or
+     *  a resized window is not mistaken for the keyboard.) Below Android 11
+     *  the keyboard inset size counts too (the visibility flag is a guess there). */
     private fun watchKeyboard() {
         val root = findViewById<View>(android.R.id.content)
         root.viewTreeObserver.addOnGlobalLayoutListener {
-            val h = root.height
-            val w = root.width
-            if (h == 0) return@addOnGlobalLayoutListener
-            if (w != rootWidth) { rootWidth = w; rootMaxHeight = h } // rotation: new reference
-            if (h > rootMaxHeight) rootMaxHeight = h
-            val open = rootMaxHeight - h > dp(150)
+            val insets = androidx.core.view.ViewCompat.getRootWindowInsets(root) ?: return@addOnGlobalLayoutListener
+            val ime = androidx.core.view.WindowInsetsCompat.Type.ime()
+            val open = insets.isVisible(ime) || insets.getInsets(ime).bottom > dp(80)
             if (open != keyboardOpen) {
                 keyboardOpen = open
-                placeCommunicationArea()
+                root.post { placeCommunicationArea() }
             }
         }
     }
@@ -2206,7 +2221,9 @@ class MainActivity : AppCompatActivity() {
         val speedKmh = (location.speed * 3.6).toInt()
         val hasRealMovement = location.hasSpeed() && speedKmh > 3
         // Hidden only while the keyboard is open (search bar in its place).
-        speedWidget.visibility = if (keyboardOpen) View.INVISIBLE else View.VISIBLE
+        if (keyboardOpen) {
+            if (speedWidget.visibility == View.GONE) { speedWidget.visibility = View.INVISIBLE; hiddenForKeyboard.add(speedWidget) }
+        } else speedWidget.visibility = View.VISIBLE
         val background = speedSign.background?.mutate() as? GradientDrawable
 
         // Circle = your speed; sign on top = the road's limit (OSM, km/h).
@@ -2305,6 +2322,9 @@ class MainActivity : AppCompatActivity() {
             addWaypoint(point)
             return
         }
+        // Your own choice wins over a place still waiting for GPS.
+        TripState.pendingLink = null
+        TripState.pendingLinkMode = null
         // A new destination tapped on the map is a new trip: nothing to resume,
         // and a temporary detour does not become a stop of its own.
         TripState.previous = null
@@ -2348,6 +2368,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun clearRoute() {
         planner.cancel()
+        TripState.pendingLink = null
+        TripState.pendingLinkMode = null
         TripState.clear()
         layers.clearRoutes()
         refreshPins()
@@ -2426,7 +2448,8 @@ class MainActivity : AppCompatActivity() {
             "Cost: --"
         }
         note?.let { showMessage(it) }
-        routeInfo.visibility = if (keyboardOpen) View.INVISIBLE else View.VISIBLE
+        if (keyboardOpen) { routeInfo.visibility = View.INVISIBLE; hiddenForKeyboard.add(routeInfo) }
+        else routeInfo.visibility = View.VISIBLE
         populateRouteOptionsRow(results, sel)
         findViewById<ImageButton>(R.id.nav_go_button).visibility = View.VISIBLE
         findViewById<ImageButton>(R.id.clear_route_button).visibility = View.VISIBLE

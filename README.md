@@ -196,7 +196,7 @@ max 2 stops, alternative-route chips, all icons.
 ## Build
 - Kotlin 2.3.20 (needed by MapLibre 13.x), Java 17, compileSdk 35, targetSdk 34.
 - If Android Studio offers to update the Android Gradle Plugin, accept.
-- Unit tests for the routing, navigation and places core: `app/src/test` (38 tests).
+- Unit tests for the routing, navigation and places core: `app/src/test` (39 tests).
 
 ## Known limits
 - Routing still goes to openrouteservice.org (it sees the points of each

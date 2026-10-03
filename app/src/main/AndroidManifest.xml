@@ -58,6 +58,26 @@
                 <data android:scheme="https" />
                 <data android:scheme="http" />
                 <data android:host="maps.google.com" />
+                <data android:host="maps.google.fr" />
+                <data android:host="maps.google.de" />
+                <data android:host="maps.google.es" />
+                <data android:host="maps.google.it" />
+                <data android:host="maps.google.co.uk" />
+                <data android:host="maps.google.ch" />
+                <data android:host="maps.google.be" />
+                <data android:host="maps.google.nl" />
+                <data android:host="maps.google.at" />
+                <data android:host="maps.google.pt" />
+                <data android:host="maps.google.no" />
+                <data android:host="maps.google.se" />
+                <data android:host="maps.google.dk" />
+                <data android:host="maps.google.fi" />
+                <data android:host="maps.google.pl" />
+                <data android:host="maps.google.cz" />
+                <data android:host="maps.google.ie" />
+                <data android:host="maps.google.lu" />
+                <data android:host="maps.google.ca" />
+                <data android:host="maps.google.com.au" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -87,6 +107,26 @@
                 <data android:host="www.google.at" />
                 <data android:host="google.pt" />
                 <data android:host="www.google.pt" />
+                <data android:host="google.no" />
+                <data android:host="www.google.no" />
+                <data android:host="google.se" />
+                <data android:host="www.google.se" />
+                <data android:host="google.dk" />
+                <data android:host="www.google.dk" />
+                <data android:host="google.fi" />
+                <data android:host="www.google.fi" />
+                <data android:host="google.pl" />
+                <data android:host="www.google.pl" />
+                <data android:host="google.cz" />
+                <data android:host="www.google.cz" />
+                <data android:host="google.ie" />
+                <data android:host="www.google.ie" />
+                <data android:host="google.lu" />
+                <data android:host="www.google.lu" />
+                <data android:host="google.ca" />
+                <data android:host="www.google.ca" />
+                <data android:host="google.com.au" />
+                <data android:host="www.google.com.au" />
                 <data android:pathPrefix="/maps" />
             </intent-filter>
         </activity>

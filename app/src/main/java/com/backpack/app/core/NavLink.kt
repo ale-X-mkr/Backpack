@@ -42,7 +42,21 @@ data class NavLink(
             }
         }
 
-        private fun decode(s: String) = URLDecoder.decode(s.replace("+", "%2B"), "UTF-8").replace('+', ' ').trim()
+        /** Path text: "+" means a space; a stray "%" is kept as it is. */
+        private fun decode(s: String): String = try {
+            URLDecoder.decode(escapeStrayPercent(s).replace("+", "%2B"), "UTF-8").replace('+', ' ').trim()
+        } catch (e: Exception) {
+            s.replace('+', ' ').trim()
+        }
+
+        /** A "%" not followed by two hex digits is a plain percent sign. */
+        private fun escapeStrayPercent(s: String) = s.replace(Regex("%(?![0-9A-Fa-f]{2})"), "%25")
+
+        private fun decodeParam(s: String): String = try {
+            URLDecoder.decode(escapeStrayPercent(s), "UTF-8").trim()
+        } catch (e: Exception) {
+            s.replace('+', ' ').trim()
+        }
 
         /** Query parameters (first value wins), decoded. */
         private fun params(query: String): Map<String, String> {
@@ -51,7 +65,7 @@ data class NavLink(
                 if (part.isEmpty()) continue
                 val i = part.indexOf('=')
                 val k = (if (i < 0) part else part.substring(0, i)).lowercase()
-                val v = if (i < 0) "" else URLDecoder.decode(part.substring(i + 1), "UTF-8").trim()
+                val v = if (i < 0) "" else decodeParam(part.substring(i + 1))
                 if (k !in out) out[k] = v
             }
             return out
@@ -124,10 +138,19 @@ data class NavLink(
                     .filter { it.isNotBlank() && !it.startsWith("@") && !it.startsWith("data=") }
                 fromText(parts.lastOrNull(), mode)?.let { return it }
             }
+            // /maps/search/<query>/@... : the query, not the map centre.
+            if (path.startsWith("/maps/search/")) {
+                fromText(decode(path.removePrefix("/maps/search/").substringBefore('/')), mode)?.let { return it }
+            }
+            val name = if (path.startsWith("/maps/place/")) decode(path.removePrefix("/maps/place/").substringBefore('/')).ifBlank { null } else null
+            // The place itself ("!3d<lat>!4d<lon>" in the data part) before the
+            // map centre after "@" (shifted when the place panel is open).
+            Regex("!3d(-?\\d+(?:\\.\\d+)?)!4d(-?\\d+(?:\\.\\d+)?)").find(path)?.let { m ->
+                coordinates("${m.groupValues[1]},${m.groupValues[2]}")?.let { return NavLink(it, null, name, mode) }
+            }
             // /maps/place/<name>/@lat,lon,17z  or  /maps/@lat,lon,15z
             val at = Regex("/@(-?\\d+(?:\\.\\d+)?),(-?\\d+(?:\\.\\d+)?)").find(path)
             val atPoint = at?.let { coordinates("${it.groupValues[1]},${it.groupValues[2]}") }
-            val name = if (path.startsWith("/maps/place/")) decode(path.removePrefix("/maps/place/").substringBefore('/')).ifBlank { null } else null
             if (atPoint != null) return NavLink(atPoint, null, name, mode)
             if (name != null) return fromText(name, mode)
             return null

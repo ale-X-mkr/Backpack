@@ -26,6 +26,11 @@ object TripState {
     /** How far along the route the well-known places were searched (metres). */
     var touristCoveredM: Double = 0.0
 
+    /** A place sent by another app, waiting for the first GPS fix (survives rotation). */
+    var pendingLink: Pair<LatLon, String>? = null
+    /** Travel mode sent with it (applied when the route is planned). */
+    var pendingLinkMode: com.backpack.app.core.TravelMode? = null
+
     /** The temporary "visit on the way" stop (in [waypoints]; not one of your 2 stops). */
     var detour: LatLon? = null
     /** True once a route through [detour] was received (only then can "passed" be judged). */
