@@ -30,5 +30,7 @@
     <color name="search_frame">#B3505050</color>
     <color name="route_chip_bg">#E6F2F2F2</color>
     <color name="route_chip_text">#FF1A1A1A</color>
+    <!-- 1.0.4: last line of the instruction box (distance · arrival · cost). -->
+    <color name="eta_line_text">#FFFFD27A</color>
     <color name="ic_launcher_background">#FFF4F1EE</color>
 </resources>

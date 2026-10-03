@@ -139,6 +139,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var navDistanceText: TextView
     private lateinit var navInstructionIcon: ImageView
     private lateinit var navInstructionBar: View
+    /** 1.0.4: instruction box = turn row + distance/arrival/cost line. */
+    private lateinit var navBox: View
     private lateinit var routeInfo: View
     private lateinit var routeInfoDist: TextView
     private lateinit var routeInfoEta: TextView
@@ -243,6 +245,7 @@ class MainActivity : AppCompatActivity() {
         navDistanceText = findViewById(R.id.nav_distance_text)
         navInstructionIcon = findViewById(R.id.nav_instruction_icon)
         navInstructionBar = findViewById(R.id.nav_instruction_bar)
+        navBox = findViewById(R.id.nav_box)
         routeInfo = findViewById(R.id.route_info)
         routeInfoDist = findViewById(R.id.route_info_dist)
         routeInfoEta = findViewById(R.id.route_info_eta)
@@ -258,7 +261,7 @@ class MainActivity : AppCompatActivity() {
         errorBubble = findViewById(R.id.error_bubble)
         applyBubbleColors()
         var lastBarHeight = 0
-        navInstructionBar.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+        navBox.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
             if (v.height != lastBarHeight) { lastBarHeight = v.height; v.post { placeLayout() } }
         }
         // Speed number centred on its digits, not on the font's line box.
@@ -432,6 +435,8 @@ class MainActivity : AppCompatActivity() {
 
         m.addOnMapClickListener { p ->
             hideSuggestions()
+            // A tap on the map closes the search box, nothing else.
+            if (searchOpen) { closeSearch(); return@addOnMapClickListener true }
             val screen = m.projection.toScreenLocation(p)
             val touristKey = layers.touristAt(m, screen)
             val tourist = touristKey?.let { k -> touristResults.firstOrNull { it.key == k } }
@@ -797,20 +802,9 @@ class MainActivity : AppCompatActivity() {
         val searchButton = findViewById<ImageButton>(R.id.search_button)
         val searchInput = findViewById<EditText>(R.id.search_input)
         setIconActive(searchButton, false)
-        searchButton.setOnClickListener {
-            val text = searchInput.text.toString().trim()
-            if (text.isNotEmpty()) {
-                submitSearch(text)
-                return@setOnClickListener
-            }
-            searchInput.requestFocus()
-            searchInput.post {
-                (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
-                    .showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT)
-            }
-        }
+        // 1.0.4: the magnifier opens / closes the floating search box.
+        searchButton.setOnClickListener { if (searchOpen) closeSearch() else openSearch() }
         searchInput.setOnFocusChangeListener { _, hasFocus ->
-            setIconActive(searchButton, hasFocus)
             if (!hasFocus) hideSuggestions()
         }
         // Suggestions while typing (Photon), 350 ms after the last key.
@@ -845,14 +839,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Enter / search button: first result straight away (as before). */
+    private var searchOpen = false
+
+    /** Search box shown just over the keyboard, keyboard opened. */
+    private fun openSearch() {
+        searchOpen = true
+        val searchInput = findViewById<EditText>(R.id.search_input)
+        searchInput.visibility = View.VISIBLE
+        setIconActive(findViewById(R.id.search_button), true)
+        placeLayout()
+        searchInput.requestFocus()
+        searchInput.post {
+            (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
+                .showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    /** Result picked, map tapped or magnifier again: box and keyboard away. */
+    private fun closeSearch() {
+        if (!searchOpen) return
+        searchOpen = false
+        suggestRunnable?.let { handler.removeCallbacks(it) }
+        hideSuggestions()
+        closeSearchKeyboard()
+        findViewById<View>(R.id.search_input).visibility = View.GONE
+        setIconActive(findViewById(R.id.search_button), false)
+        placeLayout()
+    }
+
+    /** Enter: first result straight away (as before). */
     private fun submitSearch(text: String) {
         suggestRunnable?.let { handler.removeCallbacks(it) }
         showMessage("Searching...")
-        closeSearchKeyboard()
+        closeSearch()
         searchClient.search(text, currentPosition() ?: cameraCenter()) { places, error ->
             val first = places.firstOrNull()
-            if (first == null) showError(error ?: "Address not found") else goToPlace(first.point)
+            if (first == null) showError(error ?: "Address not found") else goToPlace(first)
         }
     }
 
@@ -932,9 +954,16 @@ class MainActivity : AppCompatActivity() {
         saveToggleState()
     }
 
-    private fun goToPlace(point: LatLon) {
-        hideSuggestions()
-        closeSearchKeyboard()
+    /** Planning: the place becomes the destination. Navigating: its popup
+     *  (Go here / Add stop), the trip is not replaced by itself. */
+    private fun goToPlace(place: com.backpack.app.core.Place) {
+        closeSearch()
+        val point = place.point
+        if (NavigationEngine.isActive) {
+            if (overviewOn) scheduleOverviewReturn()
+            showPlacePopup(place.name, place.detail.ifBlank { place.name }, point, null, "")
+            return
+        }
         map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(point.lat, point.lon), 14.0))
         handleDestinationTap(point)
     }
@@ -970,7 +999,7 @@ class MainActivity : AppCompatActivity() {
             row.textSize = 15f
             row.maxLines = 3
             row.setPadding(dp(12), dp(7), dp(12), dp(7))
-            row.setOnClickListener { goToPlace(place.point) }
+            row.setOnClickListener { goToPlace(place) }
             list.addView(row)
         }
         scroll.visibility = View.VISIBLE
@@ -1494,6 +1523,7 @@ class MainActivity : AppCompatActivity() {
         setNavigationDeclutter(true)
         findViewById<View>(R.id.overview_button).visibility = View.VISIBLE
         navInstructionBar.visibility = View.VISIBLE
+        refreshNavBox()
         lastRealLocationAtMs = System.currentTimeMillis()
         handler.removeCallbacks(deadReckoningRunnable)
         handler.postDelayed(deadReckoningRunnable, 1000L)
@@ -1549,6 +1579,8 @@ class MainActivity : AppCompatActivity() {
         navDistanceText.text = ""
         navInstructionIcon.visibility = View.GONE
         navInstructionBar.visibility = View.GONE
+        updateNavBarProximityColor(Double.MAX_VALUE) // planning: plain blue frame
+        refreshNavBox()
         val m = map ?: return
         if (puckActive()) m.locationComponent.cameraMode = CameraMode.NONE
         // The camera reset below also clears the navigation padding.
@@ -1626,7 +1658,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateNavBar(step: NavStep?, distance: Double?) {
-        navInstructionBar.visibility = View.VISIBLE
+        if (navInstructionBar.visibility != View.VISIBLE) { navInstructionBar.visibility = View.VISIBLE; refreshNavBox() }
         if (step == null) {
             navDistanceText.text = ""
             statusStrip.text = "Head to your destination"
@@ -1728,11 +1760,12 @@ class MainActivity : AppCompatActivity() {
         if (navigating) findViewById<View>(R.id.route_options_row).visibility = View.GONE
         else TripState.plan?.let { populateRouteOptionsRow(it.routes, TripState.selectedIndex) }
         redrawRouteLines()
+        // 1.0.4: navigating = left column hidden; right column = locate,
+        // overview, alternative route, magnifier (+ resume). All back on Stop / Clear.
         findViewById<View>(R.id.mode_row).visibility = visibility
+        findViewById<View>(R.id.route_options_button).visibility = visibility
         findViewById<View>(R.id.waypoint_button).visibility = visibility
-        findViewById<View>(R.id.search_button).visibility = visibility
-        findViewById<View>(R.id.search_input).visibility = visibility
-        // preference_toggle stays visible on purpose: switching routes mid-trip.
+        findViewById<View>(R.id.preference_toggle_button).visibility = visibility
         tollToggle.visibility = if (navigating || currentMode != ModeUi.DRIVING) View.GONE else View.VISIBLE
         placeLayout()
     }
@@ -1763,63 +1796,120 @@ class MainActivity : AppCompatActivity() {
 
     private var keyboardOpen = false
 
+    /** Instruction box shown while navigating, or while planning when a
+     *  route is up (then only its distance / arrival / cost line). */
+    private fun refreshNavBox() {
+        val show = navUiActive || routeInfo.visibility == View.VISIBLE
+        val v = if (show) View.VISIBLE else View.GONE
+        if (navBox.visibility != v) navBox.visibility = v
+    }
+
     /**
-     * Places every control (portrait and landscape, navigating or not):
+     * Places every control (1.0.4, portrait and landscape):
      *
-     * Top band: the instruction bar while navigating, with the speed circle
-     * at its right end (same spot when not navigating, driving only); the
-     * route chips A / B / C at the top centre (under the bar while
-     * navigating).
+     * Top centre: the instruction box (80 % wide while navigating, just the
+     * distance / arrival / cost line while planning); the speed circle at
+     * its right end (top right when not navigating); route chips under it,
+     * stacked in portrait, side by side in landscape.
      *
-     * Two columns of 4 buttons, starting just under the top band (higher,
-     * where the search bar used to be, when nothing is up there):
-     *  left  = travel mode (+ toll), urgency, POI, find alternative route
-     *          (navigating) -- "resume" takes that slot, or the next one;
-     *  right = locate, add stop / overview, route preference, settings.
+     * Two columns starting under the top band:
+     *  left  (planning only) = travel mode (+ toll), urgency, POI, settings, resume;
+     *  right planning   = locate, add stop, preference, magnifier;
+     *  right navigating = locate, overview, alternative route, magnifier, resume.
      *
-     * Bottom, from the bottom up: Go / clear, search bar + magnifier, route
-     * info (distance, arrival, cost), messages. While navigating the search
-     * bar is hidden; while typing it sits just over the keyboard.
+     * Bottom: Go / Clear just over the map credit, messages just over them
+     * (bottom-left in landscape, clear of the position arrow). The search
+     * box appears only from the magnifier, floating over the keyboard.
      *
-     * Transparent guards under the columns and the bottom area keep near
+     * Transparent guards under the columns and the bottom buttons keep near
      * misses from tapping the map.
      */
     private fun placeLayout() {
+        refreshNavBox()
         val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val driving = currentMode == ModeUi.DRIVING
-        val topBandUsed = navUiActive || driving
-        // Under the speed circle (12..96) or the instruction bar (taller with
-        // two lines or a large font): measured, never less than 100.
-        val barBottom = if (navUiActive && navInstructionBar.height > 0)
-            (navInstructionBar.bottom / resources.displayMetrics.density).toInt() + 8 else 0
-        val top0 = if (topBandUsed) maxOf(100, barBottom) else 60
+        val density = resources.displayMetrics.density
+        // The layout's own width (side navigation bar, cutout, split screen).
+        val screenW = findViewById<View>(android.R.id.content).width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+
+        // Instruction box: 80 % of the old full width while navigating;
+        // planning: as wide as its one line.
+        val boxLp = navBox.layoutParams
+        val boxW = if (navUiActive) ((screenW - dp(16)) * 0.8f).toInt() else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        if (boxLp.width != boxW) { boxLp.width = boxW; navBox.layoutParams = boxLp }
+        // Room for the speed circle at the box's right end (driving, navigating).
+        val circleInBox = navUiActive && driving
+        navBox.setPadding(dp(14), dp(5), if (circleInBox) dp(80) else dp(14), dp(5))
+        // Planning while driving: box and chips centred left of the speed
+        // circle (top right), never under it.
+        val circleTopRight = driving && !circleInBox
+        setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) 96 else 0)
+        val boxShown = navBox.visibility == View.VISIBLE && navBox.height > 0
+        val boxBottom = if (boxShown) (navBox.bottom / density).toInt() else 0
+
+        // Speed circle: inside the box at its right end, centred on its
+        // height; otherwise top right.
+        if (circleInBox && boxShown) {
+            val endInset = ((screenW - boxW) / 2 / density).toInt()
+            val boxTop = (navBox.top / density).toInt()
+            val boxH = (navBox.height / density).toInt()
+            setMargins(R.id.speed_widget, top = maxOf(boxTop, boxTop + (boxH - 64) / 2), end = endInset + 6)
+        } else {
+            setMargins(R.id.speed_widget, top = 12, end = 14)
+        }
+
+        // Columns start under the top band (speed circle when driving).
+        val top0 = maxOf(if (driving) 100 else 60, if (boxShown) boxBottom + 10 else 0)
         val step = if (land) 46 else 53
         val gap = step - 38
+        fun shown(id: Int) = findViewById<View>(id).visibility == View.VISIBLE
+        val resumeShown = shown(R.id.resume_button)
 
-        // Left column.
+        // Left column (planning): mode, urgency, POI, settings, resume.
         setMargins(R.id.mode_row, top = top0)
         setMargins(R.id.urgency_button, top = gap)
         setMargins(R.id.poi_toggle_button, top = gap)
-        val altShown = findViewById<View>(R.id.alt_route_button).visibility == View.VISIBLE
-        setMargins(R.id.alt_route_button, top = top0 + 3 * step)
-        setMargins(R.id.resume_button, top = top0 + (if (altShown) 4 else 3) * step)
-        val resumeShown = findViewById<View>(R.id.resume_button).visibility == View.VISIBLE
-        val leftRows = if (altShown && resumeShown) 5 else 4
+        setMargins(R.id.route_options_button, top = top0 + 3 * step)
+        var leftRows = if (navUiActive) 0 else 4
+
         // Right column.
         setMargins(R.id.locate_button, top = top0)
-        setMargins(R.id.waypoint_button, top = top0 + step)
-        setMargins(R.id.overview_button, top = top0 + step)
-        setMargins(R.id.preference_toggle_button, top = top0 + 2 * step)
-        setMargins(R.id.route_options_button, top = top0 + 3 * step)
-        // Chips: top centre; under the instruction bar while navigating.
-        setMargins(R.id.route_options_scroll, top = if (navUiActive) top0 else 12, start = 96, end = if (driving) 100 else 64)
-        // Instruction text keeps clear of the speed circle at its right end.
-        navInstructionBar.setPadding(dp(16), dp(10), if (driving) dp(86) else dp(16), dp(10))
+        var rightRows: Int
+        if (navUiActive) {
+            setMargins(R.id.overview_button, top = top0 + step)
+            val altShown = shown(R.id.alt_route_button)
+            setMargins(R.id.alt_route_button, top = top0 + 2 * step)
+            rightRows = if (altShown) 3 else 2
+            setMargins(R.id.search_button, top = top0 + rightRows * step)
+            rightRows++
+            if (resumeShown) {
+                moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.END)
+                setMargins(R.id.resume_button, top = top0 + rightRows * step, end = 8)
+                rightRows++
+            }
+        } else {
+            setMargins(R.id.waypoint_button, top = top0 + step)
+            setMargins(R.id.preference_toggle_button, top = top0 + 2 * step)
+            setMargins(R.id.search_button, top = top0 + 3 * step)
+            rightRows = 4
+            moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.START)
+            setMargins(R.id.resume_button, top = top0 + 4 * step, start = 8)
+            if (resumeShown) leftRows = 5
+        }
 
-        // While typing, what is under the search bar steps aside; only what
-        // was shown is hidden, and only that comes back (first, so the
-        // positions below see the real state).
-        val under = listOf<View>(findViewById(R.id.bottom_bar), findViewById(R.id.credit_text), routeInfo)
+        // Route chips: centred under the box, stacked in portrait, side by side in landscape.
+        val row = findViewById<LinearLayout>(R.id.route_options_row)
+        val orient = if (land) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        if (row.orientation != orient) {
+            row.orientation = orient
+            row.gravity = android.view.Gravity.CENTER_HORIZONTAL
+            for (i in 0 until row.childCount) chipSpacing(row.getChildAt(i), land)
+        }
+        setMargins(R.id.route_options_scroll, top = if (boxShown) boxBottom + 6 else 12, start = 56, end = if (circleTopRight) 96 else 56)
+
+        // While typing, the bottom buttons and the credit step aside; only
+        // what was shown is hidden, and only that comes back.
+        val under = listOf<View>(findViewById(R.id.bottom_bar), findViewById(R.id.credit_text))
         if (keyboardOpen) {
             for (v in under) if (v.visibility == View.VISIBLE) { v.visibility = View.INVISIBLE; hiddenForKeyboard.add(v) }
         } else {
@@ -1827,33 +1917,38 @@ class MainActivity : AppCompatActivity() {
             hiddenForKeyboard.clear()
         }
 
-        // Bottom: buttons (6..90) -> search bar -> route info -> messages.
-        // Landscape: search bar and route info in the middle, between the
-        // columns (the screen is too low for them to pass under the columns).
-        val sideStart = if (land) 100 else 8
-        val sideEnd = if (land) 100 else 8
-        val searchShown = !navUiActive
-        val searchBottom = if (keyboardOpen) 8 else 92
-        val infoBottom = if (searchShown) searchBottom + 44 else 92
-        val infoShown = routeInfo.visibility == View.VISIBLE && !keyboardOpen
-        val bandBottom = when {
-            infoShown -> infoBottom + 40
-            searchShown -> searchBottom + 44
-            else -> 92
-        }
-        setMargins(R.id.search_input, bottom = searchBottom, start = sideStart, end = sideEnd + 46)
-        setMargins(R.id.search_button, bottom = searchBottom, end = sideEnd)
-        setMargins(R.id.search_results_scroll, bottom = searchBottom + 42, start = sideStart, end = sideEnd + 46)
-        setMargins(R.id.route_info, bottom = infoBottom)
-        setMargins(R.id.message_band, bottom = bandBottom)
+        // Bottom: Go / Clear (20..64) -> messages (68). The floating search
+        // box sits in the messages' place (just over the keyboard while
+        // typing), the messages and suggestions over it.
+        val searchBottom = if (keyboardOpen) 8 else 68
+        setMargins(R.id.search_input, bottom = searchBottom, start = 8, end = 8)
+        setMargins(R.id.search_results_scroll, bottom = searchBottom + 33, start = 8, end = 8)
+        val bandBottom = if (searchOpen) searchBottom + 33 else 68
+        // Landscape: bottom-left, never over the position arrow (screen centre).
+        moveTo(R.id.message_band, android.view.Gravity.BOTTOM or if (land) android.view.Gravity.START else android.view.Gravity.CENTER_HORIZONTAL)
+        setMargins(R.id.message_band, bottom = bandBottom, start = if (land) 56 else 0)
 
-        // Guards: columns (with a little margin around) and the bottom area.
+        // Guards: columns (with a little margin around) and the bottom buttons.
         setMargins(R.id.guard_left, top = top0 - 6)
-        setSize(R.id.guard_left, height = leftRows * step + 4, width = 88)
+        setSize(R.id.guard_left, height = if (leftRows == 0) 0 else leftRows * step + 4, width = 88)
         setMargins(R.id.guard_right, top = top0 - 6)
-        setSize(R.id.guard_right, height = 4 * step + 4, width = 56)
-        // Landscape: only the buttons' strip, so most of the low wide map stays draggable.
-        setSize(R.id.guard_bottom, height = if (searchShown && !keyboardOpen && !land) searchBottom + 44 else 92)
+        setSize(R.id.guard_right, height = rightRows * step + 4, width = 56)
+        setSize(R.id.guard_bottom, height = if (keyboardOpen) 0 else 66)
+    }
+
+    /** Changes a view's gravity inside the main frame (no-op if unchanged). */
+    private fun moveTo(id: Int, gravity: Int) {
+        val v = findViewById<View>(id)
+        val lp = v.layoutParams as FrameLayout.LayoutParams
+        if (lp.gravity != gravity) { lp.gravity = gravity; v.layoutParams = lp }
+    }
+
+    /** Space between chips: under each other in portrait, side by side in landscape. */
+    private fun chipSpacing(chip: View, land: Boolean) {
+        val lp = chip.layoutParams as LinearLayout.LayoutParams
+        lp.marginEnd = if (land) dp(6) else 0
+        lp.bottomMargin = if (land) 0 else dp(4)
+        chip.layoutParams = lp
     }
 
     private val hiddenForKeyboard = mutableSetOf<View>()
@@ -1903,7 +1998,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Border blue (far) -> green -> yellow -> red (close to the turn). */
     private fun updateNavBarProximityColor(distanceToTurn: Double) {
-        val background = navInstructionBar.background?.mutate() as? GradientDrawable ?: return
+        val background = navBox.background?.mutate() as? GradientDrawable ?: return
         val farDistance = 250.0
         val nearDistance = 20.0
         val fraction = ((farDistance - distanceToTurn) / (farDistance - nearDistance)).coerceIn(0.0, 1.0)
@@ -2548,8 +2643,7 @@ class MainActivity : AppCompatActivity() {
             "Cost: --"
         }
         note?.let { showMessage(it) }
-        if (keyboardOpen) { routeInfo.visibility = View.INVISIBLE; hiddenForKeyboard.add(routeInfo) }
-        else routeInfo.visibility = View.VISIBLE
+        routeInfo.visibility = View.VISIBLE
         placeLayout()
         populateRouteOptionsRow(results, sel)
         findViewById<ImageButton>(R.id.nav_go_button).visibility = View.VISIBLE
@@ -2625,24 +2719,25 @@ class MainActivity : AppCompatActivity() {
             val sel = index == selected
             val chip = TextView(this)
             chip.text = "${km}km · $eta$costPart$unpavedPart"
-            chip.textSize = 13f
-            chip.setPadding(dp(6), dp(5), dp(10), dp(5))
+            chip.textSize = 12f
+            chip.setPadding(dp(6), dp(3), dp(10), dp(3))
             chip.gravity = android.view.Gravity.CENTER_VERTICAL
             chip.compoundDrawablePadding = dp(6)
             chip.setTextColor(ContextCompat.getColor(this, R.color.route_chip_text))
             chip.setTypeface(chip.typeface, if (sel) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
             if (index < 4) {
-                val badge = android.graphics.drawable.BitmapDrawable(resources, LetterBadge.bitmap(this, RouteLabels.letter(index), sel, 20f))
+                val badge = android.graphics.drawable.BitmapDrawable(resources, LetterBadge.bitmap(this, RouteLabels.letter(index), sel, 17f))
                 chip.setCompoundDrawablesWithIntrinsicBounds(badge, null, null, null)
             }
             chip.background = GradientDrawable().apply {
-                cornerRadius = dp(14).toFloat()
+                cornerRadius = dp(12).toFloat()
                 setColor(ContextCompat.getColor(this@MainActivity, R.color.route_chip_bg))
-                if (sel) setStroke(dp(2), activeColor) else setStroke(Math.max(1, dp(1) / 2), ContextCompat.getColor(this@MainActivity, R.color.rg_control_edge))
+                if (sel) setStroke(Math.max(1, dp(3) / 2), activeColor) else setStroke(Math.max(1, dp(1) / 2), ContextCompat.getColor(this@MainActivity, R.color.rg_control_edge))
             }
             chip.layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { marginEnd = dp(6) }
+            )
+            chipSpacing(chip, resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)
             chip.setOnClickListener { if (index != TripState.selectedIndex) promoteRouteToPrimary(index) }
             row.addView(chip)
         }

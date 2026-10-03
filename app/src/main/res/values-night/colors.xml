@@ -27,4 +27,5 @@
     <color name="search_frame">#B3A0A0A0</color>
     <color name="route_chip_bg">#E6303030</color>
     <color name="route_chip_text">#FFEEEEEE</color>
+    <color name="eta_line_text">#FFFFD27A</color>
 </resources>

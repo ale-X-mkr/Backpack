@@ -38,27 +38,34 @@
         android:focusable="false"
         android:importantForAccessibility="no" />
 
-    <!-- Turn-by-turn guidance bar: icon + text, dark solid background. -->
+    <!-- 1.0.4: the instruction box, top centre, 80 % of the old width (set in
+         code). Navigating: turn row + distance/arrival/cost line; planning:
+         only that line. Speed circle at its right end (driving). -->
+    <LinearLayout
+        android:id="@+id/nav_box"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:background="@drawable/nav_bar_background"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="5dp"
+        android:clickable="true"
+        android:visibility="gone">
+
     <LinearLayout
         android:id="@+id/nav_instruction_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="top"
-        android:layout_marginHorizontal="8dp"
-        android:layout_marginTop="8dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="@drawable/nav_bar_background"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="10dp"
-        android:clickable="true"
-        android:minHeight="72dp"
         android:visibility="gone">
 
         <ImageView
             android:id="@+id/nav_instruction_icon"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
             android:layout_marginEnd="8dp"
             android:background="@drawable/nav_icon_backdrop"
             android:padding="4dp"
@@ -89,6 +96,52 @@
             android:textSize="17sp"
             android:fontFamily="sans-serif-condensed"
             android:letterSpacing="0.01" />
+
+    </LinearLayout>
+
+        <!-- Last line of the box: distance, arrival, cost (smaller, its own colour). -->
+        <LinearLayout
+            android:id="@+id/route_info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingTop="2dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/route_info_dist"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:text=""
+                android:textColor="@color/eta_line_text"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-condensed" />
+
+            <TextView
+                android:id="@+id/route_info_eta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:text=""
+                android:textColor="@color/eta_line_text"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-condensed" />
+
+            <TextView
+                android:id="@+id/route_info_cost"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textColor="@color/eta_line_text"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-condensed" />
+
+        </LinearLayout>
 
     </LinearLayout>
 
@@ -227,9 +280,9 @@
         android:scaleType="fitCenter"
         android:layout_width="38dp"
         android:layout_height="38dp"
-        android:layout_gravity="top|end"
+        android:layout_gravity="top|start"
         android:layout_marginTop="272dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginStart="8dp"
         android:src="@drawable/ic_route_options"
         android:background="@drawable/icon_backdrop"
         android:padding="6dp"
@@ -243,9 +296,9 @@
         android:scaleType="fitCenter"
         android:layout_width="38dp"
         android:layout_height="38dp"
-        android:layout_gravity="top|start"
+        android:layout_gravity="top|end"
         android:layout_marginTop="219dp"
-        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
         android:src="@drawable/ic_alt_route"
         android:background="@drawable/icon_backdrop"
         android:padding="6dp"
@@ -279,7 +332,7 @@
         android:layout_width="38dp"
         android:layout_height="38dp"
         android:layout_gravity="top|start"
-        android:layout_marginTop="272dp"
+        android:layout_marginTop="325dp"
         android:layout_marginStart="8dp"
         android:src="@drawable/ic_resume_route"
         android:background="@drawable/icon_backdrop"
@@ -306,6 +359,7 @@
             android:id="@+id/route_options_row"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
             android:orientation="horizontal"
             android:visibility="gone" />
 
@@ -320,7 +374,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="188dp"
+        android:layout_marginBottom="68dp"
+        android:elevation="8dp"
         android:gravity="center_horizontal"
         android:orientation="vertical">
 
@@ -334,7 +389,7 @@
             android:textSize="15sp"
             android:gravity="center"
             android:paddingHorizontal="10dp"
-            android:paddingVertical="6dp"
+            android:paddingVertical="3dp"
             android:maxLines="2"
             android:maxWidth="280dp"
             android:ellipsize="end"
@@ -350,7 +405,7 @@
             android:textSize="15sp"
             android:gravity="center"
             android:paddingHorizontal="10dp"
-            android:paddingVertical="6dp"
+            android:paddingVertical="3dp"
             android:maxLines="2"
             android:maxWidth="280dp"
             android:ellipsize="end"
@@ -367,64 +422,6 @@
 
     <!-- ===== ZONE: bottom-center, route result + primary action ===== -->
 
-    <LinearLayout
-        android:id="@+id/route_info"
-        android:clickable="true"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="108dp"
-        android:orientation="horizontal"
-        android:background="@drawable/route_info_background"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="6dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/route_info_dist"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="14dp"
-            android:text=""
-            android:textColor="#F0F0F0"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-condensed"
-            android:shadowColor="#80000000"
-            android:shadowDx="0"
-            android:shadowDy="1"
-            android:shadowRadius="3" />
-
-        <TextView
-            android:id="@+id/route_info_eta"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="14dp"
-            android:text=""
-            android:textColor="#F0F0F0"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-condensed"
-            android:shadowColor="#80000000"
-            android:shadowDx="0"
-            android:shadowDy="1"
-            android:shadowRadius="3" />
-
-        <TextView
-            android:id="@+id/route_info_cost"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textColor="#F0F0F0"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-condensed"
-            android:shadowColor="#80000000"
-            android:shadowDx="0"
-            android:shadowDy="1"
-            android:shadowRadius="3" />
-
-    </LinearLayout>
 
 
 
@@ -435,9 +432,9 @@
     <LinearLayout
         android:id="@+id/bottom_bar"
         android:layout_width="match_parent"
-        android:layout_height="84dp"
+        android:layout_height="44dp"
         android:layout_gravity="bottom"
-        android:layout_marginBottom="6dp"
+        android:layout_marginBottom="20dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:orientation="horizontal">
@@ -451,12 +448,12 @@
             <ImageButton
                 android:id="@+id/clear_route_button"
                 android:scaleType="fitCenter"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_clear_route"
                 android:background="@drawable/icon_backdrop"
-                android:padding="6dp"
+                android:padding="3dp"
                 android:contentDescription="Clear route"
                 android:elevation="0dp"
                 android:stateListAnimator="@null"
@@ -473,12 +470,12 @@
             <ImageButton
                 android:id="@+id/nav_go_button"
                 android:scaleType="fitCenter"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_navigation_go"
                 android:background="@drawable/icon_backdrop"
-                android:padding="8dp"
+                android:padding="4dp"
                 android:contentDescription="Start navigation"
                 android:elevation="0dp"
                 android:stateListAnimator="@null"
@@ -559,23 +556,24 @@
 
     </FrameLayout>
 
-    <!-- Search bar, magnifier on its right, just over the route info and the
-         navigation buttons (rises above the keyboard while typing). -->
+    <!-- 1.0.4: floating search box, hidden until the magnifier is tapped;
+         floats just over the keyboard, 70 % opaque. Margins set in code. -->
     <EditText
         android:id="@+id/search_input"
         android:layout_width="match_parent"
-        android:layout_height="38dp"
+        android:layout_height="29dp"
         android:layout_gravity="bottom"
-        android:layout_marginBottom="144dp"
+        android:layout_marginBottom="68dp"
         android:layout_marginStart="8dp"
-        android:layout_marginEnd="54dp"
+        android:layout_marginEnd="8dp"
+        android:visibility="gone"
         android:background="@drawable/search_input_background"
         android:hint="Search for a destination..."
         android:textSize="16sp"
         android:textColor="#FF1A1A1A"
         android:textColorHint="#6B7280"
         android:paddingHorizontal="12dp"
-        android:paddingVertical="4dp"
+        android:paddingVertical="0dp"
         android:imeOptions="actionSearch"
         android:inputType="text"
         android:singleLine="true" />
@@ -585,8 +583,8 @@
         android:scaleType="fitCenter"
         android:layout_width="38dp"
         android:layout_height="38dp"
-        android:layout_gravity="bottom|end"
-        android:layout_marginBottom="144dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="272dp"
         android:layout_marginEnd="8dp"
         android:src="@drawable/ic_search"
         android:background="@drawable/icon_backdrop"
