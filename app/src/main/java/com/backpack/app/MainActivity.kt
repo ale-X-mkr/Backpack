@@ -191,6 +191,8 @@ class MainActivity : AppCompatActivity() {
     private var lastPoiQueryAtMs = 0L
     private var lastPoiQueryCenter: LatLon? = null
     private val placesFinder by lazy { PlacesFinder(this) }
+    private var poiFailures = 0
+    private var poiRetryAtMs = 0L
     /** Everyday places on the map (tap one for its popup). */
     private var poiResults: List<PoiPlace> = emptyList()
 
@@ -313,10 +315,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Settings popup open: the automatic day/night switch waits (it would rebuild the screen under it). */
+    private var settingsOpen = false
+
     /** Auto night mode: re-checked every minute (sunset / sunrise). */
     private val nightCheckRunnable = object : Runnable {
         override fun run() {
-            Prefs.applyNightMode(this@MainActivity)
+            if (!settingsOpen) Prefs.applyNightMode(this@MainActivity)
             handler.postDelayed(this, 60_000L)
         }
     }
@@ -944,7 +949,10 @@ class MainActivity : AppCompatActivity() {
             // While navigating: from where you are (the squares behind you are not needed).
             val fromM = if (navUiActive) (NavigationEngine.lastProgress?.alongM ?: 0.0) else 0.0
             touristFinder.alongRoutes(lines, currentMode.mode, fromM, { onPlacesServerSwitch() }) { all, error, coveredM ->
-                TripState.touristCoveredM = coveredM
+                // Only a search that answered counts as covering the stretch;
+                // a failed one is tried again 2 min later, not on every fix.
+                if (all != null) TripState.touristCoveredM = coveredM
+                else touristRetryAfterMs = System.currentTimeMillis() + 120_000L
                 onTouristCandidates(all, error, plan, null, announce = !extend, scenic = scenic && !extend, startIndex = startIndex)
             }
             return
@@ -1013,8 +1021,11 @@ class MainActivity : AppCompatActivity() {
 
     /** Well-known places are searched up to a distance ahead; while driving
      *  on, the next stretch is searched before you reach the end of it. */
+    private var touristRetryAfterMs = 0L
+
     private fun extendTouristIfNeeded(p: Progress, route: RouteResult) {
         if (!touristOn || touristPendingRoute != null || TripState.plan == null) return
+        if (System.currentTimeMillis() < touristRetryAfterMs) return
         val covered = TripState.touristCoveredM
         if (covered >= route.line.length - 1.0) return
         if (p.alongM < covered - Tourist.searchAheadM(currentMode.mode) * 0.3) return
@@ -1154,35 +1165,56 @@ class MainActivity : AppCompatActivity() {
         val existing = NavigationEngine.remainingStops() ?: TripState.waypoints.toList()
         val line = touristRoute()?.line
         if (Stops.ownCount(existing, TripState.detour) < Stops.MAX) {
-            applyStops(Tourist.insertStop(existing, point, line), end, "$name added as a stop \u00b7 finding route...")
+            changeTrip(end, Tourist.insertStop(existing, point, line), TripState.detour, remember = null,
+                message = "$name added as a stop \u00b7 finding route...")
             return
         }
         val p = Popup(this, "Already ${Stops.MAX} stops")
         p.text("Visit $name on the way (a short detour, then your route goes on), or replace your last stop by it?")
         p.bodyButton("Visit on the way") {
             p.dismiss()
-            TripState.rememberForResume(existing)
-            val stops = Stops.withDetour(existing, TripState.detour, point, line)
-            TripState.detour = point
-            applyStops(stops, end, "Detour to $name \u00b7 finding route...")
+            changeTrip(end, Stops.withDetour(existing, TripState.detour, point, line), point, remember = existing,
+                message = "Detour to $name \u00b7 finding route...")
         }
         p.bodyButton("Replace last stop") {
             p.dismiss()
-            TripState.rememberForResume(existing)
-            applyStops(Stops.replaceLast(existing, TripState.detour, point, line), end, "$name replaces your last stop \u00b7 finding route...")
+            changeTrip(end, Stops.replaceLast(existing, TripState.detour, point, line), TripState.detour, remember = existing,
+                message = "$name replaces your last stop \u00b7 finding route...")
         }
         p.button("Cancel") { p.dismiss() }
         p.show()
     }
 
-    private fun applyStops(stops: List<LatLon>, end: LatLon, message: String) {
+    /**
+     * Changes destination / stops / detour and asks for the new route. If the
+     * route request fails, the trip goes back to what it was (navigation goes
+     * on with the old route, so the screen must not show the new plan).
+     * [remember]: current stops to keep for "Resume previous route".
+     */
+    private fun changeTrip(end: LatLon, stops: List<LatLon>, detour: LatLon?, remember: List<LatLon>?, message: String) {
+        val before = TripState.copy()
+        if (remember != null) TripState.rememberForResume(remember)
+        TripState.destination = end
         TripState.waypoints.clear()
         TripState.waypoints.addAll(stops)
+        TripState.detour = detour?.takeIf { it in stops }
+        TripState.detourApplied = false
         refreshPins()
         refreshResumeButton()
-        val start = resolveStartPoint() ?: return
+        val start = resolveStartPoint()
+        if (start == null) {
+            TripState.restore(before)
+            refreshPins()
+            refreshResumeButton()
+            showError("No GPS fix yet -- try again in a moment")
+            return
+        }
         showMessage(message)
-        requestBestRoute(start, end, stops)
+        requestBestRoute(start, end, stops, onFailure = {
+            TripState.restore(before)
+            refreshPins()
+            refreshResumeButton()
+        })
     }
 
     /** New destination from a place popup; also while navigating (the trip
@@ -1195,15 +1227,13 @@ class MainActivity : AppCompatActivity() {
         }
         if (NavigationEngine.isActive) {
             val existing = NavigationEngine.remainingStops() ?: TripState.waypoints.toList()
-            TripState.rememberForResume(existing)
             // Straight there: the detour (if any) is dropped, your own stops stay.
-            val stops = existing.filter { it != TripState.detour }
-            TripState.detour = null
-            TripState.destination = point
-            applyStops(stops, point, "Going to $name \u00b7 finding route...")
+            changeTrip(point, existing.filter { it != TripState.detour }, null, remember = existing,
+                message = "Going to $name \u00b7 finding route...")
             return
         }
         if (TripState.destination != null) TripState.rememberForResume(TripState.waypoints.toList())
+        TripState.dropDetour()
         setDestination(point)
         refreshResumeButton()
     }
@@ -1213,11 +1243,26 @@ class MainActivity : AppCompatActivity() {
         val prev = TripState.previous ?: return
         // Stops you have been at since then stay visited.
         val stops = prev.waypoints.filter { it !in TripState.visitedSinceSnapshot }
+        val before = TripState.copy()
         TripState.previous = null
+        changeTripResume(before, prev.destination, stops)
+    }
+
+    private fun changeTripResume(before: TripState.Copy, end: LatLon, stops: List<LatLon>) {
+        TripState.destination = end
+        TripState.waypoints.clear()
+        TripState.waypoints.addAll(stops)
         TripState.detour = null
-        TripState.destination = prev.destination
-        applyStops(stops, prev.destination, "Previous route resumed \u00b7 finding route...")
+        TripState.detourApplied = false
+        refreshPins()
         refreshResumeButton()
+        val start = resolveStartPoint() ?: run { TripState.restore(before); refreshPins(); refreshResumeButton(); return }
+        showMessage("Previous route resumed \u00b7 finding route...")
+        requestBestRoute(start, end, stops, onFailure = {
+            TripState.restore(before)
+            refreshPins()
+            refreshResumeButton()
+        })
     }
 
     private fun refreshResumeButton() {
@@ -1407,7 +1452,7 @@ class MainActivity : AppCompatActivity() {
             if (altChoiceOpen) closeAltChoice(restore = true)
             // Arrived: nothing left to resume.
             TripState.previous = null
-            TripState.detour = null
+            TripState.dropDetour()
             refreshResumeButton()
             navDistanceText.text = ""
             statusStrip.text = "Arrived"
@@ -1440,7 +1485,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         // A temporary detour already visited is no longer "on the way".
-        TripState.detour?.let { d -> if (NavigationEngine.remainingStops()?.contains(d) == false) TripState.detour = null }
+        TripState.detour?.let { d ->
+            if (TripState.detourApplied && NavigationEngine.remainingStops()?.contains(d) == false) {
+                TripState.detour = null
+                TripState.detourApplied = false
+            }
+        }
         if (overviewOn && p.anticipation) leaveOverview() // back to the drive view before a turn
         extendTouristIfNeeded(p, route)
         // Live remaining distance and arrival time.
@@ -1735,6 +1785,8 @@ class MainActivity : AppCompatActivity() {
         val now = System.currentTimeMillis()
         val movedFar = lastPoiQueryCenter?.let { Geo.distance(it, center) > 1000.0 } ?: true
         if (!force && (now - lastPoiQueryAtMs < 20000L || !movedFar)) return
+        // After failures, automatic retries wait 1, 2, then 5 min (a tap always retries).
+        if (!force && now < poiRetryAtMs) return
         lastPoiQueryAtMs = now
         lastPoiQueryCenter = center
 
@@ -1751,12 +1803,16 @@ class MainActivity : AppCompatActivity() {
             if (thisGeneration != poiRequestGeneration || isDestroyed) return@inBox
             val button = findViewById<ImageButton>(R.id.poi_toggle_button)
             if (results == null) {
-                // Allow a new try as soon as asked (or after a map move).
+                // Allow a new try as soon as asked (or after a map move, after a pause).
                 lastPoiQueryCenter = null
+                poiFailures++
+                poiRetryAtMs = System.currentTimeMillis() + when (poiFailures) { 1 -> 60_000L; 2 -> 120_000L; else -> 300_000L }
                 setPoiButtonStatus(button, false)
                 showError(error ?: "Places search failed", retry = { queryPois(force = true) })
                 return@inBox
             }
+            poiFailures = 0
+            poiRetryAtMs = 0L
             poiResults = results
             layers.setPois(results.map { MapLayers.Pin(it.key, it.point, category.iconName) })
             setPoiButtonStatus(button, results.isNotEmpty())
@@ -1890,12 +1946,15 @@ class MainActivity : AppCompatActivity() {
     private val settingsHost = object : SettingsPopup.Host {
         override val travelMode get() = currentMode.mode
         override val poiChoices get() = PoiCategory.values().map { it.name to it.label }
+        override fun onSettingsOpened() { settingsOpen = true }
         override fun onRouteOptionsChanged(options: RouteOptions) {
+            if (isDestroyed) return
             routeOptions = options
             refreshRouteOptionsButton()
             rerouteIfPossible(options.summary(currentMode.mode))
         }
         override fun onSettingsClosed() {
+            settingsOpen = false
             if (isDestroyed) return
             loadSettings()
             // Map style changed (day/night itself rebuilds the screen).
@@ -1911,7 +1970,6 @@ class MainActivity : AppCompatActivity() {
                     followPosition(18.0 + Prefs.navZoomOffset(this@MainActivity))
                 }
             }
-            NavigationEngine.lastProgress?.let { p -> NavigationEngine.route?.let { onNavProgress(p, it) } }
         }
         override fun onPlacesCleared() {
             TripState.touristCoveredM = 0.0
@@ -2075,9 +2133,10 @@ class MainActivity : AppCompatActivity() {
             addWaypoint(point)
             return
         }
-        // A new destination tapped on the map is a new trip: nothing to resume.
+        // A new destination tapped on the map is a new trip: nothing to resume,
+        // and a temporary detour does not become a stop of its own.
         TripState.previous = null
-        TripState.detour = null
+        TripState.dropDetour()
         refreshResumeButton()
         setDestination(point)
     }
@@ -2151,15 +2210,18 @@ class MainActivity : AppCompatActivity() {
         tollRatePerKm = tollRatePerKm
     )
 
-    private fun requestBestRoute(from: LatLon, to: LatLon, stops: List<LatLon>? = null) {
+    private fun requestBestRoute(from: LatLon, to: LatLon, stops: List<LatLon>? = null, onFailure: (() -> Unit)? = null) {
         val navigating = NavigationEngine.isActive
         // Mid-trip changes (preference, urgency) start from where you are now.
         val request = buildRequest(if (navigating) currentPosition() ?: from else from, to, stops)
         planner.plan(request) { plan, error ->
             if (plan == null) {
+                onFailure?.invoke()
                 showError(error ?: "Route request failed")
                 return@plan
             }
+            // From now on, a detour missing from the remaining stops means "visited".
+            TripState.detour?.let { if (it in request.waypoints) TripState.detourApplied = true }
             if (navigating && altChoiceOpen) closeAltChoice(restore = false)
             TripState.plan = plan
             TripState.selectedIndex = plan.primaryIndex
@@ -2167,6 +2229,8 @@ class MainActivity : AppCompatActivity() {
             if (navigating && NavigationEngine.isActive) NavigationEngine.switchRoute(plan, plan.primaryIndex, request)
         }
     }
+
+    private var speedLimitPlan: RoutePlan? = null
 
     private fun drawPlan(plan: RoutePlan, selectedIndex: Int, fit: Boolean, note: String?, tourist: Boolean = true) {
         val results = plan.routes
@@ -2196,7 +2260,8 @@ class MainActivity : AppCompatActivity() {
         if (tourist) refreshTourist()
         // Driving: the speed limits of the first stretch load before Go.
         if (currentMode == ModeUi.DRIVING) {
-            SpeedLimitLookup.routeChanged()
+            // A new plan (not a redraw of the same one) may retry at once.
+            if (plan !== speedLimitPlan) { speedLimitPlan = plan; SpeedLimitLookup.routeChanged() }
             val along = currentPosition()?.let { primary.line.snap(it)?.alongM } ?: 0.0
             SpeedLimitLookup.prepare(this, primary, along)
         }

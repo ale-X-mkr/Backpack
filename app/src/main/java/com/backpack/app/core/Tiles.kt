@@ -44,10 +44,17 @@ object Tiles {
         }.take(max)
     }
 
-    /** Squares within [radiusM] of one or more lines, in order along the first line. */
-    fun alongLines(lines: List<List<LatLon>>, radiusM: Double): List<Tile> {
-        val out = LinkedHashSet<Tile>()
-        for (points in lines) {
+    /** Squares within [radiusM] of one or more lines, nearest-along first (lines interleaved). */
+    fun alongLines(lines: List<List<LatLon>>, radiusM: Double): List<Tile> = alongLinesOrdered(lines, radiusM).map { it.first }
+
+    /**
+     * Same, with the distance along its line where each square is first
+     * needed. All lines are interleaved by that distance, so cutting the list
+     * keeps the same stretch of every alternative, not all of the first line.
+     */
+    fun alongLinesOrdered(lines: List<List<LatLon>>, radiusM: Double): List<Pair<Tile, Double>> {
+        val first = HashMap<Tile, Pair<Double, Int>>()
+        for ((li, points) in lines.withIndex()) {
             if (points.isEmpty()) continue
             val line = Polyline(points)
             val step = minOf(radiusM, 1000.0).coerceAtLeast(100.0)
@@ -62,12 +69,17 @@ object Tiles {
                 val x1 = floor((p.lon + dLon) / SIZE).toInt()
                 val y0 = floor((p.lat - dLat) / SIZE).toInt()
                 val y1 = floor((p.lat + dLat) / SIZE).toInt()
-                for (x in x0..x1) for (y in y0..y1) out.add(Tile(x, y))
+                for (x in x0..x1) for (y in y0..y1) {
+                    val t = Tile(x, y)
+                    val old = first[t]
+                    if (old == null || at < old.first) first[t] = at to li
+                }
                 if (at >= line.length) break
                 at = minOf(at + step, line.length)
             }
         }
-        return out.toList()
+        return first.entries.sortedWith(compareBy({ it.value.first }, { it.value.second }))
+            .map { it.key to it.value.first }
     }
 
     private fun pointAt(line: Polyline, i: Int, at: Double): LatLon {

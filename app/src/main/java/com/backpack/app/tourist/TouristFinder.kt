@@ -64,8 +64,11 @@ class TouristFinder(context: Context) {
         worker.execute {
             val full = lines.filter { it.size >= 2 }.map { Polyline(it) }
             val parts = full.map { SpeedLimits.section(it, fromM, ahead) }
-            val coveredM = full.firstOrNull()?.let { minOf(it.length, fromM + ahead) } ?: 0.0
-            val tiles = Tiles.alongLines(parts, radius).take(MAX_TILES)
+            val ordered = Tiles.alongLinesOrdered(parts, radius)
+            val tiles = ordered.take(MAX_TILES).map { it.first }
+            // Cut list: the search reaches only as far as the last square kept.
+            val reach = if (ordered.size > MAX_TILES) (ordered[MAX_TILES - 1].second - radius).coerceAtLeast(0.0) else ahead
+            val coveredM = full.firstOrNull()?.let { minOf(it.length, fromM + reach) } ?: 0.0
             // Matching on thinned lines (≤ 400 points): accurate enough for a
             // corridor several hundred metres wide, and fast.
             val match = parts.map { Polyline(Tourist.sampleLine(it, maxPoints = 400, minStepM = 50.0)) }
@@ -166,29 +169,34 @@ class TouristFinder(context: Context) {
         if (ask.isEmpty() || gen != generation) { finish(emptyMap()); return }
         val batches = ask.chunked(50)
         val result = HashMap<String, Tourist.SiteInfo>()
-        val left = AtomicInteger(batches.size)
-        val langs = listOf(java.util.Locale.getDefault().language, "en").filter { it.isNotBlank() }.distinct()
-        for (batch in batches) {
-            val req = Request.Builder().url(Tourist.wikidataUrl(batch))
+        // Wikipedia codes for the phone's language (Java still reports some legacy codes).
+        val lang = when (val l = java.util.Locale.getDefault().language) { "in" -> "id"; "iw" -> "he"; "ji" -> "yi"; "nb" -> "no"; else -> l }
+        val langs = listOf(lang, "en").filter { it.isNotBlank() }.distinct()
+        // One request at a time (Wikimedia API etiquette).
+        fun next(k: Int) {
+            if (k >= batches.size || gen != generation) {
+                worker.execute {
+                    val copy = synchronized(result) { HashMap(result) }
+                    if (copy.isNotEmpty()) SiteInfoStore.add(app, copy)
+                    finish(copy)
+                }
+                return
+            }
+            val req = Request.Builder().url(Tourist.wikidataUrl(batches[k]))
                 .addHeader("User-Agent", OverpassClient.USER_AGENT)
                 .addHeader("Accept", "application/json")
                 .build()
             RoutePlanner.http.newCall(req).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) = part(null)
+                override fun onFailure(call: Call, e: IOException) = next(k + 1)
                 override fun onResponse(call: Call, response: Response) {
                     val body = response.use { if (it.isSuccessful) it.body?.string() else null }
-                    part(body?.let { try { Tourist.parseSiteInfo(it, langs) } catch (e: Exception) { null } })
-                }
-                fun part(p: Map<String, Tourist.SiteInfo>?) {
-                    synchronized(result) { if (p != null) result.putAll(p) }
-                    if (left.decrementAndGet() == 0) worker.execute {
-                        val copy = synchronized(result) { HashMap(result) }
-                        if (copy.isNotEmpty()) SiteInfoStore.add(app, copy)
-                        finish(copy)
-                    }
+                    val part = body?.let { try { Tourist.parseSiteInfo(it, langs) } catch (e: Exception) { null } }
+                    synchronized(result) { if (part != null) result.putAll(part) }
+                    next(k + 1)
                 }
             })
         }
+        next(0)
     }
 
     /**

@@ -177,4 +177,18 @@ class ReleaseCoreTest {
         assertEquals('A', RouteLabels.letter(0))
         assertEquals('C', RouteLabels.letter(2))
     }
+
+    @Test fun tilesOfAlternativesAreInterleaved() {
+        // Two 60 km routes leaving the same start, one north, one east.
+        val north = (0..60).map { Geo.project(origin, 0.0, it * 1000.0) }
+        val east = (0..60).map { Geo.project(origin, 90.0, it * 1000.0) }
+        val ordered = Tiles.alongLinesOrdered(listOf(north, east), 1000.0)
+        val first20 = ordered.take(20).map { it.first }.toSet()
+        val northTiles = Tiles.alongLines(listOf(north), 1000.0).toSet()
+        val eastTiles = Tiles.alongLines(listOf(east), 1000.0).toSet()
+        assertTrue(first20.any { it in eastTiles && it !in northTiles })
+        assertTrue(first20.any { it in northTiles && it !in eastTiles })
+        // Sorted by distance along the line.
+        assertTrue(ordered.zipWithNext().all { (a, b) -> a.second <= b.second })
+    }
 }

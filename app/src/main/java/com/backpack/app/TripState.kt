@@ -28,6 +28,15 @@ object TripState {
 
     /** The temporary "visit on the way" stop (in [waypoints]; not one of your 2 stops). */
     var detour: LatLon? = null
+    /** True once a route through [detour] was received (only then can "passed" be judged). */
+    var detourApplied = false
+
+    /** Removes the detour from the stops too (it never stays as a stop of its own). */
+    fun dropDetour() {
+        detour?.let { waypoints.remove(it) }
+        detour = null
+        detourApplied = false
+    }
 
     /** Destination and stops before a detour, a replaced stop or "Go here",
      *  for "Resume previous route" (kept until arrival or clear). */
@@ -44,6 +53,24 @@ object TripState {
         previous = Snapshot(d, currentStops.filter { it != detour })
     }
 
+    /** Trip fields as they were before a change, to put back if the new route fails. */
+    class Copy(
+        val destination: LatLon?, val waypoints: List<LatLon>, val detour: LatLon?, val detourApplied: Boolean,
+        val previous: Snapshot?, val visited: Set<LatLon>
+    )
+
+    fun copy() = Copy(destination, waypoints.toList(), detour, detourApplied, previous, visitedSinceSnapshot.toSet())
+
+    fun restore(c: Copy) {
+        destination = c.destination
+        waypoints.clear()
+        waypoints.addAll(c.waypoints)
+        detour = c.detour
+        detourApplied = c.detourApplied
+        previous = c.previous
+        visitedSinceSnapshot.addAll(c.visited)
+    }
+
     fun clear() {
         customStart = null
         destination = null
@@ -51,6 +78,7 @@ object TripState {
         plan = null
         selectedIndex = 0
         detour = null
+        detourApplied = false
         previous = null
     }
 }

@@ -30,6 +30,8 @@ object SettingsPopup {
         val travelMode: TravelMode
         /** (name, label) of the POI categories, for "default on launch". */
         val poiChoices: List<Pair<String, String>>
+        /** The popup opens (e.g. hold the automatic day/night switch meanwhile). */
+        fun onSettingsOpened()
         /** Called on close, only when the route options of a mode changed. */
         fun onRouteOptionsChanged(options: RouteOptions)
         /** Called on close: re-read settings (style, night mode, view...). */
@@ -53,7 +55,8 @@ object SettingsPopup {
             Page.values().forEach { tab -> tabViews[tab]?.let { p.styleChip(it, tab == page) } }
             p.clearBody()
             when (page) {
-                Page.ROUTE -> routePage(c, p, host.travelMode, { o }, { o = it }, prefs)
+                // Saved at once: a screen rebuild while the popup is open loses nothing.
+                Page.ROUTE -> routePage(c, p, host.travelMode, { o }, { o = it; Prefs.saveRouteOptions(c, it) }, prefs)
                 Page.NAVIGATION -> navigationPage(p, prefs)
                 Page.SPEED -> speedPage(p, prefs)
                 Page.PLACES -> placesPage(c, p, prefs, host)
@@ -80,12 +83,10 @@ object SettingsPopup {
 
         p.button("Done", primary = true) { p.dismiss() }
         p.dialog.setOnDismissListener {
-            if (o != originalOptions) {
-                Prefs.saveRouteOptions(c, o)
-                host.onRouteOptionsChanged(o)
-            }
             host.onSettingsClosed()
+            if (o != originalOptions) host.onRouteOptionsChanged(o)
         }
+        host.onSettingsOpened()
         p.show()
     }
 
