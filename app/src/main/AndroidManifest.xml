@@ -29,10 +29,65 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:windowSoftInputMode="adjustNothing">
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- 1.0.1: Backpack can be chosen as the navigation app. Other apps
+                 hand over a place with these links; Backpack puts it as the
+                 destination and shows the route (you press Go). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geo" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="google.navigation" />
+            </intent-filter>
+            <!-- Google Maps web links with the place in them (Android 12+: allow
+                 them once in Backpack's app info > Open by default). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="maps.google.com" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="google.com" />
+                <data android:host="www.google.com" />
+                <data android:host="google.fr" />
+                <data android:host="www.google.fr" />
+                <data android:host="google.de" />
+                <data android:host="www.google.de" />
+                <data android:host="google.es" />
+                <data android:host="www.google.es" />
+                <data android:host="google.it" />
+                <data android:host="www.google.it" />
+                <data android:host="google.co.uk" />
+                <data android:host="www.google.co.uk" />
+                <data android:host="google.ch" />
+                <data android:host="www.google.ch" />
+                <data android:host="google.be" />
+                <data android:host="www.google.be" />
+                <data android:host="google.nl" />
+                <data android:host="www.google.nl" />
+                <data android:host="google.at" />
+                <data android:host="www.google.at" />
+                <data android:host="google.pt" />
+                <data android:host="www.google.pt" />
+                <data android:pathPrefix="/maps" />
             </intent-filter>
         </activity>
 

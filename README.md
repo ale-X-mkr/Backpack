@@ -1,9 +1,32 @@
-# Backpack 1.0.0
+# Backpack 1.0.1
 
 Private, open-source GPS navigation for Android. Nothing from Google:
 no Play Services, no Google servers, no Material library.
 
-## New in 1.0.0 (first release)
+## New in 1.0.1
+- **One settings button:** the gear is gone; the sliders button (right
+  column) opens Settings by category, also while navigating (one row lower).
+- **Trip toggles on the left**, mirroring the right column: travel mode (toll
+  button to its right when driving), urgency, POI categories, then "resume".
+  POI order: Off, Sights, Food, Lodging, Parking, Fuel/Charging, Toilets,
+  Emergency.
+- **Communication area at the bottom:** search bar (magnifier on its right)
+  just over the route info and the Go / clear buttons, messages just over the
+  search bar (over the route info while navigating). While typing, the bar
+  and its suggestions sit just over the keyboard. Turn instructions stay at
+  the top. The speed circle sits at the right edge of the screen.
+- **Choose Backpack to navigate from other apps:** `geo:` links (contacts,
+  calendar, browsers...), `google.navigation:` and Google Maps web links with
+  the place in them (`?q=`, `?daddr=`, `/maps/dir/`, `/maps/place/…/@lat,lon`,
+  `/maps/search/`). The place becomes the destination and the route is shown;
+  check vehicle / options, then press Go. A travel mode sent with the link
+  (walk / bike / car) is taken over. While navigating, you are asked first.
+  Addresses without coordinates are looked up with Photon. Short
+  `maps.app.goo.gl` links are not supported (reading them means asking
+  Google). Android 12+: to open Google Maps web links in Backpack, allow them
+  once in Backpack's app info > Open by default > Add links.
+
+## 1.0.0 (first release)
 
 **Fewer server timeouts**
 - **Speed limits per route:** the roads of the next ~20 km of your route are
@@ -173,7 +196,7 @@ max 2 stops, alternative-route chips, all icons.
 ## Build
 - Kotlin 2.3.20 (needed by MapLibre 13.x), Java 17, compileSdk 35, targetSdk 34.
 - If Android Studio offers to update the Android Gradle Plugin, accept.
-- Unit tests for the routing, navigation and places core: `app/src/test` (35 tests).
+- Unit tests for the routing, navigation and places core: `app/src/test` (38 tests).
 
 ## Known limits
 - Routing still goes to openrouteservice.org (it sees the points of each
