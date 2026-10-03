@@ -1739,7 +1739,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun setMargins(id: Int, top: Int? = null, bottom: Int? = null, start: Int? = null, end: Int? = null) {
         val v = findViewById<View>(id)
-        val lp = v.layoutParams as FrameLayout.LayoutParams
+        // Urgency and POI sit inside the left column (LinearLayout params):
+        // the margin type common to all parents.
+        val lp = v.layoutParams as android.view.ViewGroup.MarginLayoutParams
         var changed = false
         top?.let { if (lp.topMargin != dp(it)) { lp.topMargin = dp(it); changed = true } }
         bottom?.let { if (lp.bottomMargin != dp(it)) { lp.bottomMargin = dp(it); changed = true } }
