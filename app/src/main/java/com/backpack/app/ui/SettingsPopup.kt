@@ -46,13 +46,20 @@ object SettingsPopup {
         var o = originalOptions
         val p = Popup(c, "Settings · v${BuildConfig.VERSION_NAME}")
 
-        // Tabs.
-        val tabs = FlowRow(c)
+        // Tabs (1.0.5): one row of text tabs, the current one bold with a
+        // red underline; scrolls sideways when they don't all fit.
+        val d = c.resources.displayMetrics.density
+        val tabRow = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
+        val tabScroll = android.widget.HorizontalScrollView(c).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(tabRow)
+        }
         val tabViews = HashMap<Page, TextView>()
         var current = start
         fun build(page: Page) {
             current = page
-            Page.values().forEach { tab -> tabViews[tab]?.let { p.styleChip(it, tab == page) } }
+            Page.values().forEach { tab -> tabViews[tab]?.let { p.styleTab(it, tab == page) } }
+            tabViews[page]?.let { t -> tabScroll.post { tabScroll.requestChildRectangleOnScreen(t, android.graphics.Rect(0, 0, t.width, t.height), false) } }
             p.clearBody()
             when (page) {
                 // Saved at once: a screen rebuild while the popup is open loses nothing.
@@ -66,18 +73,21 @@ object SettingsPopup {
             p.fit()
         }
         for (page in Page.values()) {
-            val chip = TextView(c).apply {
+            val tab = TextView(c).apply {
                 text = page.label
-                textSize = 13f
+                textSize = 14f
                 gravity = Gravity.CENTER
-                val d = c.resources.displayMetrics.density
-                setPadding((10 * d).toInt(), (5 * d).toInt(), (10 * d).toInt(), (5 * d).toInt())
+                setPadding((10 * d).toInt(), (6 * d).toInt(), (10 * d).toInt(), (7 * d).toInt())
                 setOnClickListener { if (current != page) build(page) }
             }
-            tabViews[page] = chip
-            tabs.addView(chip)
+            tabViews[page] = tab
+            tabRow.addView(tab)
         }
-        p.header.addView(tabs)
+        p.header.addView(tabScroll)
+        // Thin line under the whole tab row.
+        p.header.addView(android.view.View(c).apply {
+            setBackgroundColor(androidx.core.content.ContextCompat.getColor(c, com.backpack.app.R.color.rg_divider))
+        }, android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, Math.max(1, d.toInt())))
         p.header.visibility = android.view.View.VISIBLE
         build(start)
 

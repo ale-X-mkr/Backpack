@@ -253,6 +253,16 @@ class Popup(private val context: Context, title: String) {
         }
     }
 
+    /** A text tab: the current one bold in red with a red underline, the
+     *  others grey on no background. */
+    fun styleTab(tab: TextView, on: Boolean) {
+        tab.setTextColor(if (on) color(R.color.rg_active) else color(R.color.rg_text_secondary))
+        tab.setTypeface(Typeface.create("sans-serif-condensed", if (on) Typeface.BOLD else Typeface.NORMAL))
+        tab.background = if (!on) null else android.graphics.drawable.LayerDrawable(arrayOf(
+            GradientDrawable().apply { setColor(color(R.color.rg_active)) }
+        )).apply { setLayerInset(0, 0, 0, 0, 0); setLayerGravity(0, Gravity.BOTTOM or Gravity.FILL_HORIZONTAL); setLayerHeight(0, dp(3)) }
+    }
+
     private fun color(res: Int) = ContextCompat.getColor(context, res)
     private fun dp(v: Int) = (v * context.resources.displayMetrics.density).toInt()
 }

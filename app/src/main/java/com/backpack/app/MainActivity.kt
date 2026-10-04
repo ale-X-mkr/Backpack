@@ -107,24 +107,26 @@ class MainActivity : AppCompatActivity() {
         EMERGENCY(R.drawable.ic_urgency_emergency)
     }
 
-    /** [orsIds]: openrouteservice place categories (second source when Overpass is busy). */
+    /** [orsIds]: openrouteservice place categories (second source when Overpass is busy).
+     *  [color]: the category's colour (1.0.5) on the button and in the dropdown;
+     *  the map icons carry the same colour in their drawables. */
     private enum class PoiCategory(
         val overpassFilter: String, val iconRes: Int, val iconName: String, val label: String,
-        val orsIds: Map<Int, String> = emptyMap()
+        val orsIds: Map<Int, String> = emptyMap(), val color: Int? = null
     ) {
         NONE("", R.drawable.ic_poi_toggle, "", "Off"),
         /** Well-known places (same as Weekend mode), from Wikidata-ranked OSM data. */
-        SIGHTS("", R.drawable.ic_tourist, "", "Sights"),
+        SIGHTS("", R.drawable.ic_tourist, "", "Sights", color = 0xFF4B1F6F.toInt()),
         FOOD("[\"amenity\"~\"^(restaurant|cafe|fast_food)$\"]", R.drawable.ic_poi_food, "poi_food", "Food",
-            mapOf(570 to "restaurant", 564 to "cafe", 566 to "fast_food")),
+            mapOf(570 to "restaurant", 564 to "cafe", 566 to "fast_food"), 0xFF800000.toInt()),
         LODGING("[\"tourism\"~\"^(hotel|guest_house|motel)$\"]", R.drawable.ic_poi_lodging, "poi_lodging", "Lodging",
-            mapOf(108 to "hotel", 106 to "guest_house", 109 to "motel")),
-        PARKING("[\"amenity\"=\"parking\"]", R.drawable.ic_poi_parking, "poi_parking", "Parking", mapOf(601 to "parking")),
+            mapOf(108 to "hotel", 106 to "guest_house", 109 to "motel"), 0xFF3E5468.toInt()),
+        PARKING("[\"amenity\"=\"parking\"]", R.drawable.ic_poi_parking, "poi_parking", "Parking", mapOf(601 to "parking"), 0xFF0D3B8C.toInt()),
         FUEL("[\"amenity\"~\"^(fuel|charging_station)$\"]", R.drawable.ic_poi_fuel, "poi_fuel", "Fuel/Charging",
-            mapOf(596 to "fuel", 593 to "charging_station")),
-        TOILETS("[\"amenity\"=\"toilets\"]", R.drawable.ic_poi_toilets, "poi_toilets", "Toilets", mapOf(179 to "toilets")),
+            mapOf(596 to "fuel", 593 to "charging_station"), 0xFF1E6B2E.toInt()),
+        TOILETS("[\"amenity\"=\"toilets\"]", R.drawable.ic_poi_toilets, "poi_toilets", "Toilets", mapOf(179 to "toilets"), 0xFF1F78B4.toInt()),
         EMERGENCY("[\"amenity\"~\"^(hospital|police|fire_station)$\"]", R.drawable.ic_poi_emergency, "poi_emergency", "Emergency",
-            mapOf(206 to "hospital", 369 to "police", 367 to "fire_station"));
+            mapOf(206 to "hospital", 369 to "police", 367 to "fire_station"), 0xFFE51401.toInt());
 
         fun finderCategory() = PlacesFinder.Category(name, overpassFilter, orsIds)
     }
@@ -1580,6 +1582,8 @@ class MainActivity : AppCompatActivity() {
         navInstructionIcon.visibility = View.GONE
         navInstructionBar.visibility = View.GONE
         updateNavBarProximityColor(Double.MAX_VALUE) // planning: plain blue frame
+        // Back to the planned route's figures (not the last live ones).
+        selectedRoute()?.let { setRouteInfoText(it) }
         refreshNavBox()
         val m = map ?: return
         if (puckActive()) m.locationComponent.cameraMode = CameraMode.NONE
@@ -1796,13 +1800,74 @@ class MainActivity : AppCompatActivity() {
 
     private var keyboardOpen = false
 
-    /** Instruction box shown while navigating, or while planning when a
-     *  route is up (then only its distance / arrival / cost line). */
+    /** Instruction box: navigating only (1.0.5). */
     private fun refreshNavBox() {
-        val show = navUiActive || routeInfo.visibility == View.VISIBLE
-        val v = if (show) View.VISIBLE else View.GONE
+        val v = if (navUiActive) View.VISIBLE else View.GONE
         if (navBox.visibility != v) navBox.visibility = v
+        placeRouteInfo()
     }
+
+    /**
+     * Distance · arrival · cost: the last line of the instruction box while
+     * navigating; while planning a permanent message (message look, thin
+     * frame), the lowest one in the message band, just over Go / Clear.
+     */
+    private fun placeRouteInfo() {
+        val box = navBox as android.view.ViewGroup
+        val band = findViewById<android.view.ViewGroup>(R.id.message_band)
+        val target = if (navUiActive) box else band
+        if (routeInfo.parent === target) return
+        (routeInfo.parent as? android.view.ViewGroup)?.removeView(routeInfo)
+        val lp = LinearLayout.LayoutParams(
+            if (navUiActive) LinearLayout.LayoutParams.MATCH_PARENT else LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        if (navUiActive) {
+            routeInfo.background = null
+            routeInfo.setPadding(0, dp(2), 0, 0)
+        } else {
+            lp.topMargin = dp(4)
+            routeInfo.background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Color.parseColor("#B3333333"))
+                setStroke(Math.max(1, dp(1)), Color.parseColor("#2B6CB0"))
+            }
+            routeInfo.setPadding(dp(10), dp(3), dp(10), dp(3))
+        }
+        routeInfo.isClickable = true // a tap on it never reaches the map
+        target.addView(routeInfo, lp) // last child: the bottom line
+    }
+
+    /** Route info for a planned route (distance, arrival, cost). */
+    private fun setRouteInfoText(r: RouteResult) {
+        routeInfoDist.text = distanceLabel(r.distanceMeters)
+        routeInfoEta.text = etaLabel(r.durationSeconds)
+        routeInfoCost.text = if (r.tollDistanceMeters > 0) {
+            "Cost: ~€%.0f".format(r.tollDistanceMeters / 1000.0 * tollRatePerKm)
+        } else {
+            "Cost: --"
+        }
+    }
+
+    /** Message band: full width in portrait, compact bottom-left in landscape. */
+    private fun shapeMessageBand(land: Boolean) {
+        val band = findViewById<View>(R.id.message_band)
+        val lp = band.layoutParams as FrameLayout.LayoutParams
+        val w = if (land) FrameLayout.LayoutParams.WRAP_CONTENT else FrameLayout.LayoutParams.MATCH_PARENT
+        if (lp.width != w) { lp.width = w; band.layoutParams = lp }
+        val maxW = if (land) dp(280) else Int.MAX_VALUE
+        for (b in listOf(messageBubble, errorBubble)) {
+            val blp = b.layoutParams
+            if (blp.width != bw(land)) { blp.width = bw(land); b.layoutParams = blp }
+            if (b.maxWidth != maxW) b.maxWidth = maxW
+        }
+        if (routeInfo.parent === band) {
+            val rlp = routeInfo.layoutParams
+            if (rlp.width != bw(land)) { rlp.width = bw(land); routeInfo.layoutParams = rlp }
+        }
+    }
+
+    private fun bw(land: Boolean) = if (land) LinearLayout.LayoutParams.WRAP_CONTENT else LinearLayout.LayoutParams.MATCH_PARENT
 
     /**
      * Places every control (1.0.4, portrait and landscape):
@@ -1897,15 +1962,17 @@ class MainActivity : AppCompatActivity() {
             if (resumeShown) leftRows = 5
         }
 
-        // Route chips: centred under the box, stacked in portrait, side by side in landscape.
+        // Route chips (1.0.5): stacked, left-aligned (letters in a line), top
+        // left just right of the left column (under the box while navigating).
         val row = findViewById<LinearLayout>(R.id.route_options_row)
-        val orient = if (land) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-        if (row.orientation != orient) {
-            row.orientation = orient
-            row.gravity = android.view.Gravity.CENTER_HORIZONTAL
-            for (i in 0 until row.childCount) chipSpacing(row.getChildAt(i), land)
+        if (row.orientation != LinearLayout.VERTICAL) {
+            row.orientation = LinearLayout.VERTICAL
+            row.gravity = android.view.Gravity.START
+            for (i in 0 until row.childCount) chipSpacing(row.getChildAt(i))
         }
-        setMargins(R.id.route_options_scroll, top = if (boxShown) boxBottom + 6 else 12, start = 56, end = if (circleTopRight) 96 else 56)
+        moveTo(R.id.route_options_scroll, android.view.Gravity.TOP or android.view.Gravity.START)
+        setMargins(R.id.route_options_scroll, top = if (boxShown) boxBottom + 6 else 12,
+            start = if (navUiActive) 8 else 88, end = if (circleTopRight) 96 else 56)
 
         // While typing, the bottom buttons and the credit step aside; only
         // what was shown is hidden, and only that comes back.
@@ -1926,7 +1993,12 @@ class MainActivity : AppCompatActivity() {
         val bandBottom = if (searchOpen) searchBottom + 33 else 68
         // Landscape: bottom-left, never over the position arrow (screen centre).
         moveTo(R.id.message_band, android.view.Gravity.BOTTOM or if (land) android.view.Gravity.START else android.view.Gravity.CENTER_HORIZONTAL)
-        setMargins(R.id.message_band, bottom = bandBottom, start = if (land) 56 else 0)
+        shapeMessageBand(land)
+        // Search open: the route line steps aside (it would cover the lowest suggestion).
+        val hideInfo = searchOpen && routeInfo.parent === findViewById<View>(R.id.message_band)
+        if (hideInfo && routeInfo.visibility == View.VISIBLE) routeInfo.visibility = View.INVISIBLE
+        else if (!hideInfo && routeInfo.visibility == View.INVISIBLE) routeInfo.visibility = View.VISIBLE
+        setMargins(R.id.message_band, bottom = bandBottom, start = if (land) 56 else 8, end = if (land) 0 else 8)
 
         // Guards: columns (with a little margin around) and the bottom buttons.
         setMargins(R.id.guard_left, top = top0 - 6)
@@ -1943,11 +2015,11 @@ class MainActivity : AppCompatActivity() {
         if (lp.gravity != gravity) { lp.gravity = gravity; v.layoutParams = lp }
     }
 
-    /** Space between chips: under each other in portrait, side by side in landscape. */
-    private fun chipSpacing(chip: View, land: Boolean) {
+    /** Space between the stacked chips. */
+    private fun chipSpacing(chip: View) {
         val lp = chip.layoutParams as LinearLayout.LayoutParams
-        lp.marginEnd = if (land) dp(6) else 0
-        lp.bottomMargin = if (land) 0 else dp(4)
+        lp.marginEnd = 0
+        lp.bottomMargin = dp(4)
         chip.layoutParams = lp
     }
 
@@ -2049,7 +2121,10 @@ class MainActivity : AppCompatActivity() {
      *  on the usual grey backdrop (found), no ring otherwise. Off = grey pin. */
     private fun setPoiButtonStatus(button: ImageButton, found: Boolean?) {
         setStatusRing(button, found == true)
-        if (found == null) setIconActive(button, false) else button.imageTintList = null
+        // The selected category's own colour (clearing the tint would also
+        // clear the icon's colour); Off = grey.
+        val c = currentPoiCategory.color
+        if (found == null || c == null) setIconActive(button, false) else button.imageTintList = ColorStateList.valueOf(c)
     }
 
     private fun setupPoiToggle() {
@@ -2084,7 +2159,7 @@ class MainActivity : AppCompatActivity() {
             }
             row.addView(ImageView(this).apply {
                 setImageResource(cat.iconRes)
-                if (cat == PoiCategory.NONE || cat == PoiCategory.SIGHTS) imageTintList = ColorStateList.valueOf(if (selected) activeColor else inactiveColor)
+                imageTintList = ColorStateList.valueOf(cat.color ?: inactiveColor)
             }, LinearLayout.LayoutParams(dp(26), dp(26)))
             row.addView(TextView(this).apply {
                 text = cat.label
@@ -2635,13 +2710,7 @@ class MainActivity : AppCompatActivity() {
         drawRouteLines(results, sel)
         val primary = results[sel]
 
-        routeInfoDist.text = distanceLabel(primary.distanceMeters)
-        routeInfoEta.text = etaLabel(primary.durationSeconds)
-        routeInfoCost.text = if (primary.tollDistanceMeters > 0) {
-            "Cost: ~€%.0f".format(primary.tollDistanceMeters / 1000.0 * tollRatePerKm)
-        } else {
-            "Cost: --"
-        }
+        setRouteInfoText(primary)
         note?.let { showMessage(it) }
         routeInfo.visibility = View.VISIBLE
         placeLayout()
@@ -2737,7 +2806,7 @@ class MainActivity : AppCompatActivity() {
             chip.layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
             )
-            chipSpacing(chip, resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE)
+            chipSpacing(chip)
             chip.setOnClickListener { if (index != TripState.selectedIndex) promoteRouteToPrimary(index) }
             row.addView(chip)
         }
