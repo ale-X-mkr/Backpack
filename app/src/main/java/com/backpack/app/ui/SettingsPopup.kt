@@ -23,7 +23,7 @@ import com.backpack.app.net.TileCache
 object SettingsPopup {
 
     enum class Page(val label: String) {
-        ROUTE("Route"), NAVIGATION("Navigation"), SPEED("Speed"), PLACES("Places"), MAP("Map"), SERVERS("Servers")
+        ROUTE("Route"), NAVIGATION("Navigation"), SPEED("Speed"), PLACES("Places"), MAP("Map"), SERVERS("Servers"), CREDITS("Credits")
     }
 
     interface Host {
@@ -69,6 +69,7 @@ object SettingsPopup {
                 Page.PLACES -> placesPage(c, p, prefs, host)
                 Page.MAP -> mapPage(p, prefs)
                 Page.SERVERS -> serversPage(p, prefs)
+                Page.CREDITS -> creditsPage(p)
             }
             p.fit()
         }
@@ -231,6 +232,35 @@ object SettingsPopup {
             host.onPlacesCleared()
             android.widget.Toast.makeText(c, "Saved places cleared", android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * 1.0.8: who makes Backpack possible, with their licences and, where
+     * they accept donations, a link to their own official donation page.
+     * Backpack collects nothing itself.
+     */
+    private fun creditsPage(p: Popup) {
+        p.text("Backpack is free and built on these open projects. If it helps you, consider supporting them.")
+        fun source(name: String, what: String, site: String, donate: String?) {
+            p.section(name)
+            p.text(what, 12f)
+            p.link("Website", site, 12f)
+            donate?.let { p.link("Support them", it, 12f) }
+        }
+        source("OpenStreetMap contributors", "Map data, places, speed limits and addresses. \u00a9 OpenStreetMap contributors, Open Database License (ODbL).",
+            "https://www.openstreetmap.org/copyright", "https://supporting.openstreetmap.org/donate/")
+        source("OpenFreeMap \u00b7 OpenMapTiles", "The map tiles you see. \u00a9 OpenMapTiles, data \u00a9 OpenStreetMap contributors.",
+            "https://openfreemap.org", "https://github.com/sponsors/hyperknot")
+        source("MapLibre", "The map engine drawing the map on your phone (BSD licence).",
+            "https://maplibre.org", "https://opencollective.com/maplibre")
+        source("openrouteservice \u00b7 HeiGIT", "Routes, reroutes, reach areas and second places source.",
+            "https://openrouteservice.org", null)
+        source("Overpass API", "Searches the OpenStreetMap data for places, sights and speed limits.",
+            "https://overpass-api.de", null)
+        source("Photon \u00b7 komoot", "Address search while you type (Nominatim by the OpenStreetMap Foundation as fallback).",
+            "https://photon.komoot.io", null)
+        source("Wikipedia \u00b7 Wikidata \u00b7 Wikimedia", "Which places are well known, and the articles to read about them (Wikidata CC0, Wikipedia CC BY-SA).",
+            "https://www.wikidata.org", "https://donate.wikimedia.org")
     }
 
     private fun mapPage(p: Popup, prefs: android.content.SharedPreferences) {

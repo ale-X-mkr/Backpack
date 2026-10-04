@@ -265,6 +265,10 @@ class MainActivity : AppCompatActivity() {
         errorBubble = findViewById(R.id.error_bubble)
         applyBubbleColors()
         var lastBarHeight = 0
+        var lastBandHeight = 0
+        findViewById<View>(R.id.message_band).addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            if (v.height != lastBandHeight) { lastBandHeight = v.height; v.post { placeLayout() } }
+        }
         navBox.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
             if (v.height != lastBarHeight) { lastBarHeight = v.height; v.post { placeLayout() } }
         }
@@ -287,7 +291,7 @@ class MainActivity : AppCompatActivity() {
             setIconActive(this, false)
             setOnClickListener { resumePreviousRoute() }
         }
-        findViewById<TextView>(R.id.credit_text).setOnClickListener { showCredits() }
+        findViewById<TextView>(R.id.credit_text).setOnClickListener { SettingsPopup.show(this, settingsHost, SettingsPopup.Page.CREDITS) }
 
         setupAddressSearch()
         setupWaypointToggle()
@@ -788,25 +792,6 @@ class MainActivity : AppCompatActivity() {
         val glyphCenter = tv.baseline + b.exactCenterY()
         val shift = tv.height / 2f - glyphCenter
         if (Math.abs(tv.translationY - shift) > 0.5f) tv.translationY = shift
-    }
-
-    private fun showCredits() {
-        val p = Popup(this, "Map and data credits")
-        p.text("Map data © OpenStreetMap contributors, available under the Open Database License (ODbL).")
-        p.text("Map tiles: OpenFreeMap © OpenMapTiles.")
-        p.text("Routing and address search: openrouteservice.org by HeiGIT.")
-        p.text("Places and speed limits: Overpass API (OpenStreetMap data); openrouteservice places as a second source.")
-        p.text("Well-known places: Wikidata (CC0) and Wikipedia.")
-        p.text("Search: Photon (komoot) and Nominatim (OpenStreetMap Foundation).")
-        p.text("Map engine: MapLibre Native (BSD licence).")
-        p.button("OSM copyright") {
-            p.dismiss()
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/copyright")))
-            } catch (e: Exception) { }
-        }
-        p.button("Close", primary = true) { p.dismiss() }
-        p.show()
     }
 
     // ---------- Address search ----------
@@ -1775,8 +1760,8 @@ class MainActivity : AppCompatActivity() {
         if (overviewOn && p.anticipation) leaveOverview() // back to the drive view before a turn
         extendTouristIfNeeded(p, route)
         // Live remaining distance and arrival time.
-        routeInfoDist.text = distanceLabel(p.remainingM)
-        routeInfoEta.text = etaLabel(p.remainingS)
+        routeInfoDist.text = navInfo("Dist:", navDistance(p.remainingM), " \u00b7")
+        routeInfoEta.text = navInfo("ETA:", etaLabel(p.remainingS).removePrefix("ETA: "))
         LocationHub.lastGoodFix?.let { dimDisplayIfIdle(p.distanceToNextM, it) }
     }
 
@@ -1946,15 +1931,53 @@ class MainActivity : AppCompatActivity() {
             routeInfo.setPadding(0, dp(2), 0, 0)
         } else {
             lp.topMargin = dp(4)
+            lp.gravity = android.view.Gravity.CENTER_HORIZONTAL
+            // 1.0.8: message background, the selected chip's red frame.
             routeInfo.background = GradientDrawable().apply {
                 cornerRadius = dp(12).toFloat()
                 setColor(Color.parseColor("#B3333333"))
-                setStroke(Math.max(1, dp(1)), Color.parseColor("#2B6CB0"))
+                setStroke(Math.max(1, dp(3) / 2), activeColor)
             }
             routeInfo.setPadding(dp(10), dp(3), dp(10), dp(3))
         }
+        // White like the messages; cost only before Go (the route is chosen after).
+        for (t in listOf(routeInfoDist, routeInfoEta, routeInfoCost)) t.setTextColor(Color.WHITE)
+        routeInfoCost.visibility = if (navUiActive) View.GONE else View.VISIBLE
+        if (selectedRoute() != null || NavigationEngine.lastProgress != null) refreshRouteInfoText()
         routeInfo.isClickable = true // a tap on it never reaches the map
         target.addView(routeInfo, lp) // last child: the bottom line
+    }
+
+    /** After moving the line between band and box: the right text style. */
+    private fun refreshRouteInfoText() {
+        val p = NavigationEngine.lastProgress
+        val r = selectedRoute()
+        if (navUiActive && (p != null || r != null)) {
+            val m = p?.remainingM ?: r!!.distanceMeters
+            val sec = p?.remainingS ?: r!!.durationSeconds
+            routeInfoDist.text = navInfo("Dist:", navDistance(m), " \u00b7")
+            routeInfoEta.text = navInfo("ETA:", etaLabel(sec).removePrefix("ETA: "))
+        } else r?.let { setRouteInfoText(it) }
+    }
+
+    /** "96 km" (1 decimal under 10). */
+    private fun navDistance(m: Double): String {
+        val v = if (useMetric) m / 1000.0 else m / 1609.344
+        val unit = if (useMetric) "km" else "mi"
+        return if (v < 10) "%.1f %s".format(v, unit) else "%.0f %s".format(v, unit)
+    }
+
+    /** 1.0.8 navigation line: small label, bold bigger value with its unit. */
+    private fun navInfo(label: String, value: String, after: String = ""): CharSequence {
+        val s = android.text.SpannableStringBuilder()
+        s.append(label, android.text.style.RelativeSizeSpan(0.85f), 0)
+        s.append(" ")
+        val from = s.length
+        s.append(value)
+        s.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), from, s.length, 0)
+        s.setSpan(android.text.style.RelativeSizeSpan(1.25f), from, s.length, 0)
+        s.append(after)
+        return s
     }
 
     /** Route info for a planned route (distance, arrival, cost). */
@@ -2082,17 +2105,17 @@ class MainActivity : AppCompatActivity() {
             if (resumeShown) leftRows = 5
         }
 
-        // Route chips (1.0.5): stacked, left-aligned (letters in a line), top
-        // left just right of the left column (under the box while navigating).
+        // Route chips (1.0.8): stacked, left-aligned (letters in a line),
+        // bottom-left just over the messages (placed below, once the message
+        // band is placed); hidden while the search box is open (kept).
         val row = findViewById<LinearLayout>(R.id.route_options_row)
         if (row.orientation != LinearLayout.VERTICAL) {
             row.orientation = LinearLayout.VERTICAL
             row.gravity = android.view.Gravity.START
             for (i in 0 until row.childCount) chipSpacing(row.getChildAt(i))
         }
-        moveTo(R.id.route_options_scroll, android.view.Gravity.TOP or android.view.Gravity.START)
-        setMargins(R.id.route_options_scroll, top = if (boxShown) boxBottom + 6 else 12,
-            start = if (navUiActive) 8 else 88, end = if (circleTopRight) 96 else 56)
+        moveTo(R.id.route_options_scroll, android.view.Gravity.BOTTOM or android.view.Gravity.START)
+        findViewById<View>(R.id.route_options_scroll).visibility = if (searchOpen) View.GONE else View.VISIBLE
 
         // While typing, the bottom buttons and the credit step aside; only
         // what was shown is hidden, and only that comes back.
@@ -2119,6 +2142,11 @@ class MainActivity : AppCompatActivity() {
         if (hideInfo && routeInfo.visibility == View.VISIBLE) routeInfo.visibility = View.INVISIBLE
         else if (!hideInfo && routeInfo.visibility == View.INVISIBLE) routeInfo.visibility = View.VISIBLE
         setMargins(R.id.message_band, bottom = bandBottom, start = if (land) 56 else 8, end = if (land) 0 else 8)
+        // Chips just over the messages (their measured height; 0 when none shown).
+        val band = findViewById<View>(R.id.message_band)
+        val bandH = if (band.visibility == View.VISIBLE) (band.height / resources.displayMetrics.density).toInt() else 0
+        // Landscape: right of the left column's small side buttons (toll, sights origin).
+        setMargins(R.id.route_options_scroll, bottom = bandBottom + bandH + 6, start = if (land) 88 else 8, end = 56, top = 0)
 
         // Guards: columns (with a little margin around) and the bottom buttons.
         setMargins(R.id.guard_left, top = top0 - 6)
@@ -2889,9 +2917,8 @@ class MainActivity : AppCompatActivity() {
 
     /** Shows the whole route (and alternatives) above the bottom controls. */
     /**
-     * 1.0.7: every proposed route in view, flat and north up, clear of the
-     * columns and the bottom buttons, then half a zoom level farther so the
-     * options sit well inside the screen.
+     * Every proposed route in view, flat and north up (1.0.7), filling 90 %
+     * of the free map area (1.0.8).
      */
     private fun fitCamera(results: List<RouteResult>) {
         val m = map ?: return
@@ -2900,10 +2927,27 @@ class MainActivity : AppCompatActivity() {
         if (all.size < 2) return
         try {
             val bounds = LatLngBounds.Builder().includes(all.map { LatLng(it.lat, it.lon) }).build()
-            val pad = intArrayOf(dp(100), dp(110), dp(64), dp(130))
+            // 1.0.8: the free map area = screen minus the side columns, the
+            // top band and the bottom controls (Go/Clear + messages); the
+            // routes fill 90 % of it in the direction they reach first
+            // (5 % margin each side), portrait or landscape alike.
+            val root = findViewById<View>(android.R.id.content)
+            val w = root.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+            val h = root.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+            // Bottom: Go/Clear (68), the route line (~30) and, with several
+            // routes, the stacked chips (~30 each) -- estimated, as they are
+            // only being laid out at this moment.
+            val chips = if (results.size >= 2) minOf(results.size, 4) * 30 + 6 else 0
+            val bottomUi = dp(68 + 30 + chips)
+            val left = dp(54); val right = dp(54)
+            val top = if (currentMode == ModeUi.DRIVING) dp(100) else dp(56)
+            val freeW = (w - left - right).coerceAtLeast(dp(100))
+            val freeH = (h - top - bottomUi).coerceAtLeast(dp(100))
+            val mx = (freeW * 0.05).toInt(); val my = (freeH * 0.05).toInt()
+            val pad = intArrayOf(left + mx, top + my, right + mx, bottomUi + my)
             val cam = m.getCameraForLatLngBounds(bounds, pad, 0.0, 0.0) ?: return
             m.animateCamera(CameraUpdateFactory.newCameraPosition(
-                CameraPosition.Builder().target(cam.target).zoom(cam.zoom - 0.5).bearing(0.0).tilt(0.0)
+                CameraPosition.Builder().target(cam.target).zoom(cam.zoom).bearing(0.0).tilt(0.0)
                     .padding(0.0, 0.0, 0.0, 0.0).build()
             ), 800)
         } catch (e: Exception) { }
@@ -2941,18 +2985,19 @@ class MainActivity : AppCompatActivity() {
             val sel = index == selected
             val chip = TextView(this)
             chip.text = "${km}km · $eta$costPart$unpavedPart"
-            chip.textSize = 12f
-            chip.setPadding(dp(6), dp(3), dp(10), dp(3))
+            chip.textSize = 13.2f // 1.0.8: 10 % bigger
+            val d = resources.displayMetrics.density
+            chip.setPadding((6.6f * d).toInt(), (3.3f * d).toInt(), (11f * d).toInt(), (3.3f * d).toInt())
             chip.gravity = android.view.Gravity.CENTER_VERTICAL
             chip.compoundDrawablePadding = dp(6)
             chip.setTextColor(ContextCompat.getColor(this, R.color.route_chip_text))
             chip.setTypeface(chip.typeface, if (sel) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
             if (index < 4) {
-                val badge = android.graphics.drawable.BitmapDrawable(resources, LetterBadge.bitmap(this, RouteLabels.letter(index), sel, 17f))
+                val badge = android.graphics.drawable.BitmapDrawable(resources, LetterBadge.bitmap(this, RouteLabels.letter(index), sel, 18.7f))
                 chip.setCompoundDrawablesWithIntrinsicBounds(badge, null, null, null)
             }
             chip.background = GradientDrawable().apply {
-                cornerRadius = dp(12).toFloat()
+                cornerRadius = dp(13).toFloat()
                 setColor(ContextCompat.getColor(this@MainActivity, R.color.route_chip_bg))
                 if (sel) setStroke(Math.max(1, dp(3) / 2), activeColor) else setStroke(Math.max(1, dp(1) / 2), ContextCompat.getColor(this@MainActivity, R.color.rg_control_edge))
             }

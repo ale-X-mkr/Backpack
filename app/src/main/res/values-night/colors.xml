@@ -3,7 +3,7 @@
     <color name="rg_active_soft">#E0B03A3A</color>
     <color name="rg_icon_inactive">#FFD6D6D6</color>
     <color name="rg_inactive_soft">#E0505050</color>
-    <color name="rg_control_backdrop">#59BDBDBD</color>
+    <color name="rg_control_backdrop">#80BDBDBD</color>
     <color name="rg_control_edge">#40303030</color>
     <color name="rg_text">#FFEEEEEE</color>
     <color name="rg_text_secondary">#FFB0B0B0</color>

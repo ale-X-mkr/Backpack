@@ -4,8 +4,8 @@
     <color name="rg_active_soft">#E08A0000</color>
     <color name="rg_icon_inactive">#FF4E4E4E</color>
     <color name="rg_inactive_soft">#E0707070</color>
-    <!-- Map controls: 35 % mid-light grey backdrop, faint dark-grey edge. -->
-    <color name="rg_control_backdrop">#59BDBDBD</color>
+    <!-- Map controls: 50 % mid-light grey backdrop (1.0.8, was 35 %), faint dark-grey edge. -->
+    <color name="rg_control_backdrop">#80BDBDBD</color>
     <color name="rg_control_edge">#40303030</color>
     <color name="rg_text">#FF1A1A1A</color>
     <color name="rg_text_secondary">#FF555555</color>
