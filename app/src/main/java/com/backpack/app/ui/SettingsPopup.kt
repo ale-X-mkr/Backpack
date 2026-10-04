@@ -213,6 +213,13 @@ object SettingsPopup {
             val cur = prefs.getString(Settings.KEY_DEFAULT_POI, "NONE")
             choices.firstOrNull { it.first == cur } ?: choices[0]
         }) { prefs.edit().putString(Settings.KEY_DEFAULT_POI, it.first).apply() }
+        p.section("Sights category: reach")
+        val reach = com.backpack.app.core.Reach.MINUTES.map { it to (if (it < 60) "$it min" else "${it / 60} h") }
+        p.choices(reach, { it.second }, {
+            val cur = prefs.getInt(Settings.KEY_SIGHTS_REACH_MIN, com.backpack.app.core.Reach.DEFAULT_MINUTES)
+            reach.firstOrNull { it.first == cur } ?: reach[1]
+        }) { prefs.edit().putInt(Settings.KEY_SIGHTS_REACH_MIN, it.first).apply() }
+        p.text("Well-known places you can reach in this time with the current travel mode, around you or the map centre (small button next to POI). By car the public route service answers up to 1 h; 2 h uses a distance estimate.", 11f)
         p.section("Weekend sights route")
         intField(p, prefs, "Max extra time (%), 0 = off", Settings.KEY_SIGHTS_MAX_PCT, Settings.DEFAULT_SIGHTS_MAX_PCT, 0, 100)
         p.text("In Weekend mode, an alternative passing clearly more well-known places is taken if it is at most this much slower.", 11f)

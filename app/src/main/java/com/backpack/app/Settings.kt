@@ -20,6 +20,10 @@ object Settings {
     const val KEY_ORS_KEY = "ors_key"
     const val KEY_OVERPASS_URL = "overpass_url"
     const val KEY_SIGHTS_MAX_PCT = "weekend_sights_max_pct"
+    /** 1.0.7: Sights category reach, minutes (30 / 60 / 120). */
+    const val KEY_SIGHTS_REACH_MIN = "sights_reach_minutes"
+    /** 1.0.7: Sights around "me" (true) or the map centre (false). */
+    const val KEY_SIGHTS_AROUND_ME = "sights_around_me"
     /** Navigation view tilt: -1 = automatic (45° driving, 25° otherwise), else degrees 0..60. */
     const val KEY_NAV_TILT = "nav_tilt"
     /** Navigation zoom offset in zoom levels: +1 closer, 0 normal, -1 farther. */

@@ -71,10 +71,12 @@ object OverpassClient {
         query: String,
         quick: Boolean = false,
         onSwitch: (() -> Unit)? = null,
+        /** Heavy query (1.0.7 sights within reach): each server once, no second round. */
+        singleRound: Boolean = false,
         done: (body: String?, failure: Failure?) -> Unit
     ) {
         val list = servers(c.applicationContext)
-        attempt(list, 0, round = 0, maxRounds = if (quick) 1 else 2, query = query, quick = quick, lastFailure = null, onSwitch = onSwitch, done = done)
+        attempt(list, 0, round = 0, maxRounds = if (quick || singleRound) 1 else 2, query = query, quick = quick, lastFailure = null, onSwitch = onSwitch, done = done)
     }
 
     private fun attempt(

@@ -131,7 +131,10 @@ class MapLayers(private val context: Context) {
                 Expression.stop(0, 6f), Expression.stop(3, 11f)
             )),
             PropertyFactory.circleStrokeColor(if (night) 0xFF1A1A1A.toInt() else 0xFFFFFFFF.toInt()),
-            PropertyFactory.circleStrokeWidth(2f)
+            PropertyFactory.circleStrokeWidth(2f),
+            // 1.0.7: places of the routes not selected are dimmed.
+            PropertyFactory.circleOpacity(dimmed()),
+            PropertyFactory.circleStrokeOpacity(dimmed())
         ))
         add(SymbolLayer(LAYER_TOUR_LABEL, SRC_TOUR).withProperties(
             PropertyFactory.textField(Expression.step(
@@ -144,6 +147,7 @@ class MapLayers(private val context: Context) {
             )),
             PropertyFactory.textFont(arrayOf("Noto Sans Regular")),
             PropertyFactory.textSize(11f),
+            PropertyFactory.textOpacity(dimmed()),
             PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
             PropertyFactory.textOffset(arrayOf(0f, 1.1f)),
             PropertyFactory.textMaxWidth(8f),
@@ -200,10 +204,19 @@ class MapLayers(private val context: Context) {
         pushPoints(SRC_POI, pois)
     }
 
-    fun setTourist(list: List<TouristPoi>) {
+    fun setTourist(list: List<TouristPoi>, dim: Set<String> = emptySet()) {
         tourist = list
+        touristDim = dim
         pushTourist()
     }
+
+    private var touristDim: Set<String> = emptySet()
+
+    /** 1 for a normal place, 0.35 for a dimmed one. */
+    private fun dimmed() = Expression.interpolate(
+        Expression.linear(), Expression.toNumber(Expression.get("dim")),
+        Expression.stop(0, 1f), Expression.stop(1, 0.35f)
+    )
 
     /** Key of the tourist place under the finger, or null. */
     fun touristAt(map: MapLibreMap, screen: PointF): String? {
@@ -221,6 +234,7 @@ class MapLayers(private val context: Context) {
                 it.addStringProperty("name", p.name)
                 it.addStringProperty("cat", p.category.name)
                 it.addNumberProperty("stars", p.stars)
+                it.addNumberProperty("dim", if (p.key in touristDim) 1 else 0)
             }
         }
         s.getSourceAs<GeoJsonSource>(SRC_TOUR)?.setGeoJson(FeatureCollection.fromFeatures(features))

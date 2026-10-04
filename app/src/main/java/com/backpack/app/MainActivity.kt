@@ -28,6 +28,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.backpack.app.core.Geo
+import com.backpack.app.core.Reach
 import com.backpack.app.core.LatLon
 import com.backpack.app.core.NavLink
 import com.backpack.app.core.PoiPlace
@@ -46,6 +47,7 @@ import com.backpack.app.core.TravelMode
 import com.backpack.app.core.Tourist
 import com.backpack.app.core.TouristPoi
 import com.backpack.app.search.SearchClient
+import com.backpack.app.tourist.ReachArea
 import com.backpack.app.tourist.TouristFinder
 import com.backpack.app.location.LocationHub
 import com.backpack.app.map.MapLayers
@@ -291,6 +293,7 @@ class MainActivity : AppCompatActivity() {
         setupWaypointToggle()
         setupNavigationButton()
         setupPoiToggle()
+        setupSightsOrigin()
         setupModeButtons()
         setupPreferenceRow()
         setupTollToggle()
@@ -434,6 +437,7 @@ class MainActivity : AppCompatActivity() {
             else -> LocationHub.lastKnownGps(this)?.let { LatLng(it.latitude, it.longitude) } ?: LatLng(60.3913, 5.3221)
         }
         m.cameraPosition = CameraPosition.Builder().target(start).zoom(saved?.third ?: 12.0).build()
+        m.uiSettings.isTiltGesturesEnabled = navUiActive
 
         m.addOnMapClickListener { p ->
             hideSuggestions()
@@ -443,6 +447,9 @@ class MainActivity : AppCompatActivity() {
             val touristKey = layers.touristAt(m, screen)
             val tourist = touristKey?.let { k -> touristResults.firstOrNull { it.key == k } }
             if (tourist != null) {
+                // A place of another proposed route: that route is selected
+                // first, so the extra time shown is for its own route.
+                touristDimOwner[tourist.key]?.let { if (!NavigationEngine.isActive) promoteRouteToPrimary(it) }
                 showTouristPlace(tourist)
                 return@addOnMapClickListener true
             }
@@ -574,6 +581,8 @@ class MainActivity : AppCompatActivity() {
             }
             if (navUiActive) adaptTrackingZoom(location)
             queryPois()
+            // Sights around you: searched again once you moved ~2 km.
+            if (!navUiActive && TripState.plan == null && touristOn && currentPoiCategory == PoiCategory.SIGHTS && sightsAroundMe()) refreshTourist()
         } else {
             // Likely signal loss / reacquisition noise: position, progress
             // and off-route detection keep using the last good fix.
@@ -632,7 +641,7 @@ class MainActivity : AppCompatActivity() {
         }
         val locateButton = findViewById<ImageButton>(R.id.locate_button)
         setIconActive(locateButton, true)
-        m.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(current.latitude, current.longitude), 15.0))
+        flyFlat(LatLng(current.latitude, current.longitude), 15.0)
         handler.postDelayed({ setIconActive(locateButton, false) }, 900L)
     }
 
@@ -935,7 +944,7 @@ class MainActivity : AppCompatActivity() {
             goHere(point, label)
             return
         }
-        map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(point.lat, point.lon), 14.0))
+        flyFlat(LatLng(point.lat, point.lon), 14.0)
         if (resolveStartPoint() == null) {
             TripState.pendingLink = point to label
             TripState.pendingLinkMode = mode
@@ -971,7 +980,7 @@ class MainActivity : AppCompatActivity() {
             showPlacePopup(place.name, place.detail.ifBlank { place.name }, point, null, "")
             return
         }
-        map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(point.lat, point.lon), 14.0))
+        flyFlat(LatLng(point.lat, point.lon), 14.0)
         handleDestinationTap(point)
     }
 
@@ -1114,6 +1123,8 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
+        // Sights category: places reachable in the chosen time (1.0.7).
+        if (currentPoiCategory == PoiCategory.SIGHTS) { refreshReach(force); return }
         val target = m.cameraPosition.target ?: return
         val center = LatLon(target.latitude, target.longitude)
         val near = { c: LatLon? -> c != null && Geo.distance(c, center) < 1000.0 }
@@ -1128,6 +1139,84 @@ class MainActivity : AppCompatActivity() {
             { if (force) onPlacesServerSwitch() }) { all, error, _ ->
             onTouristCandidates(all, error, null, center, announce = force, scenic = false)
         }
+    }
+
+    // ---------- Sights within reach (1.0.7) ----------
+
+    private var reachOrigin: LatLon? = null
+    private var reachRetryAfterMs = 0L
+    private var reachSettings: String? = null
+    /** "within 1 h on foot of you" style text for the result message. */
+    private var reachLabel: String? = null
+
+    private fun sightsAroundMe() = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
+        .getBoolean(Settings.KEY_SIGHTS_AROUND_ME, true)
+
+    private fun sightsReachMinutes() = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
+        .getInt(Settings.KEY_SIGHTS_REACH_MIN, Reach.DEFAULT_MINUTES)
+
+    /**
+     * Well-known places reachable within the chosen time (Settings > Places)
+     * in the current travel mode, around you or the map centre. Searched
+     * again after you moved ~2 km (around you) or the map ~3 km (centre).
+     */
+    private fun refreshReach(force: Boolean) {
+        val aroundMe = sightsAroundMe()
+        val minutes = sightsReachMinutes()
+        val origin = (if (aroundMe) currentPosition() else null) ?: cameraCenter() ?: return
+        val settings = "$aroundMe/${currentMode.name}/$minutes"
+        val prev = reachOrigin
+        // Moved by a quarter of the reach (at least 2 km around you, 3 km
+        // for the map centre): the area changed enough to search again.
+        val step = maxOf(if (aroundMe) 2000.0 else 3000.0, 0.25 * minOf(Reach.radiusM(currentMode.mode, minutes), Reach.MAX_SEARCH_M))
+        val moved = prev == null || Geo.distance(prev, origin) >= step
+        if (!force && settings == reachSettings && !moved) return
+        // After a failed search: again 2 min later at the earliest (not on every fix).
+        if (!force && System.currentTimeMillis() < reachRetryAfterMs) return
+        val announce = force || settings != reachSettings
+        reachOrigin = origin
+        reachSettings = settings
+        touristPendingRoute = null
+        touristPendingCenter = origin
+        val mode = currentMode
+        val time = if (minutes < 60) "$minutes min" else "${minutes / 60} h"
+        val how = when (mode.mode) {
+            com.backpack.app.core.TravelMode.WALKING -> "on foot"
+            com.backpack.app.core.TravelMode.CYCLING -> "by bike"
+            com.backpack.app.core.TravelMode.DRIVING -> "by car"
+        }
+        ReachArea.get(this, origin, mode.mode, minutes) { ring, exact ->
+            // Still wanted (no route meanwhile, same settings and place)?
+            if (isDestroyed || !touristOn || TripState.plan != null || currentPoiCategory != PoiCategory.SIGHTS ||
+                reachSettings != settings || reachOrigin !== origin
+            ) return@get
+            reachLabel = "within ${if (exact) "" else "about "}$time $how of ${if (aroundMe) "you" else "the map centre"}"
+            val key = "%.3f,%.3f,%s,%d,%b".format(java.util.Locale.ROOT, origin.lat, origin.lon, mode.name, minutes, exact)
+            touristFinder.inReach(ring, key, { if (announce) onPlacesServerSwitch() }) { all, error, _ ->
+                if (all == null) { reachOrigin = null; reachRetryAfterMs = System.currentTimeMillis() + 120_000L }
+                onTouristCandidates(all, error, null, origin, announce = announce, scenic = false)
+            }
+        }
+    }
+
+    /** Small button next to POI (Sights only): around me <-> map centre. */
+    private fun setupSightsOrigin() {
+        val b = findViewById<ImageButton>(R.id.sights_origin_button)
+        b.setOnClickListener {
+            val me = !sightsAroundMe()
+            getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE).edit().putBoolean(Settings.KEY_SIGHTS_AROUND_ME, me).apply()
+            refreshSightsOrigin()
+            showMessage(if (me) "Sights around you" else "Sights around the map centre")
+            if (TripState.plan == null) refreshTourist(force = true)
+        }
+        refreshSightsOrigin()
+    }
+
+    private fun refreshSightsOrigin() {
+        val b = findViewById<ImageButton>(R.id.sights_origin_button)
+        b.visibility = if (currentPoiCategory == PoiCategory.SIGHTS) View.VISIBLE else View.GONE
+        b.setImageResource(if (sightsAroundMe()) R.drawable.ic_location_marker else R.drawable.ic_map_center)
+        setIconActive(b, true)
     }
 
     private fun onTouristCandidates(
@@ -1171,8 +1260,10 @@ class MainActivity : AppCompatActivity() {
         if (error != null) showError("Some places may be missing ($error)", retry = { refreshTourist(force = true) })
         if (!announce) return
         showMessage(note ?: when {
-            shown.isEmpty() -> if (plan != null) "No well-known places along this route" else "No well-known places here"
+            shown.isEmpty() -> if (plan != null) "No well-known places along this route"
+                else if (currentPoiCategory == PoiCategory.SIGHTS && reachLabel != null) "No well-known places $reachLabel" else "No well-known places here"
             plan != null -> "${shown.size} well-known places along your route (hold the button for the list)"
+            currentPoiCategory == PoiCategory.SIGHTS && reachLabel != null -> "${shown.size} well-known places $reachLabel"
             else -> "${shown.size} well-known places here"
         })
     }
@@ -1195,17 +1286,34 @@ class MainActivity : AppCompatActivity() {
         touristPendingCenter = null
     }
 
-    /** Ranks the stored candidates for [route] (or the area) and shows them. */
+    /** Places of the routes not selected (dimmed) -> their route index (1.0.7). */
+    private var touristDimOwner: Map<String, Int> = emptyMap()
+
+    /**
+     * Ranks the stored candidates for [route] (or the area) and shows them.
+     * While choosing among several routes, the places of the other routes
+     * are shown too, dimmed (1.0.7). Returns the selected route's places.
+     */
     private fun showTouristFor(route: RouteResult?): List<TouristPoi> {
         val all = TripState.touristCandidates
         val radius = Tourist.corridorRadius(currentMode.mode)
-        val shown = if (route != null) {
-            Tourist.rank(Tourist.placeOnRoute(all, route.line).filter { it.offsetM <= radius * 1.05 }, TouristFinder.ROUTE_LIMIT)
-        } else {
-            Tourist.rank(all, TouristFinder.AREA_LIMIT)
+        fun along(r: RouteResult) = Tourist.rank(Tourist.placeOnRoute(all, r.line).filter { it.offsetM <= radius * 1.05 }, TouristFinder.ROUTE_LIMIT)
+        val owner = HashMap<String, Int>()
+        val shown = if (route != null) along(route) else {
+            Tourist.rank(all, if (currentPoiCategory == PoiCategory.SIGHTS) TouristFinder.REACH_LIMIT else TouristFinder.AREA_LIMIT)
         }
-        touristResults = shown
-        layers.setTourist(shown)
+        val extra = ArrayList<TouristPoi>()
+        val plan = TripState.plan
+        if (route != null && plan != null && plan.routes.size > 1 && !navUiActive) {
+            val keys = shown.map { it.key }.toHashSet()
+            for ((i, r) in plan.routes.withIndex()) {
+                if (i == TripState.selectedIndex) continue
+                for (p in along(r)) if (keys.add(p.key)) { extra.add(p); owner[p.key] = i }
+            }
+        }
+        touristDimOwner = owner
+        touristResults = shown + extra
+        layers.setTourist(shown + extra, owner.keys)
         if (currentPoiCategory == PoiCategory.SIGHTS) setPoiButtonStatus(findViewById(R.id.poi_toggle_button), shown.isNotEmpty())
         return shown
     }
@@ -1223,7 +1331,7 @@ class MainActivity : AppCompatActivity() {
         val onRoute = touristRoute() != null && TripState.destination != null
         val p = Popup(this, if (onRoute) "Along your route" else "Well-known places here")
         // While navigating, places already behind you are left out.
-        val rows = touristResults.map { it to aheadOnRoute(it) }
+        val rows = touristResults.filter { it.key !in touristDimOwner }.map { it to aheadOnRoute(it) }
             .filter { (_, a) -> !onRoute || a == null || a.first > -50.0 }
             .sortedBy { (_, a) -> if (onRoute) a?.first ?: Double.MAX_VALUE else 0.0 }
         if (rows.isEmpty()) p.text("No places ahead on your route.")
@@ -1527,6 +1635,7 @@ class MainActivity : AppCompatActivity() {
     private fun startNavigationUi() {
         val first = !navUiActive
         navUiActive = true
+        map?.uiSettings?.isTiltGesturesEnabled = true
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         wakeDisplay()
         findViewById<ImageButton>(R.id.nav_go_button).setImageResource(R.drawable.ic_navigation_stop)
@@ -1576,6 +1685,8 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.overview_button).visibility = View.GONE
         navUiActive = false
+        // Outside navigation the map stays flat: no tilting by accident.
+        map?.uiSettings?.isTiltGesturesEnabled = false
         deadReckoningActive = false
         handler.removeCallbacks(deadReckoningRunnable)
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1942,7 +2053,7 @@ class MainActivity : AppCompatActivity() {
         // Left column (planning): mode, urgency, POI, settings, resume.
         setMargins(R.id.mode_row, top = top0)
         setMargins(R.id.urgency_button, top = gap)
-        setMargins(R.id.poi_toggle_button, top = gap)
+        setMargins(R.id.poi_row, top = gap)
         setMargins(R.id.route_options_button, top = top0 + 3 * step)
         var leftRows = if (navUiActive) 0 else 4
 
@@ -2191,9 +2302,13 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val button = findViewById<ImageButton>(R.id.poi_toggle_button)
+        val leavingSights = currentPoiCategory == PoiCategory.SIGHTS
+        val touristWasShown = touristOn
         currentPoiCategory = cat
         button.setImageResource(cat.iconRes)
         saveToggleState()
+        refreshSightsOrigin()
+        reachSettings = null // next Sights search starts fresh
         poiRequestGeneration++
         placesFinder.cancel()
         poiResults = emptyList()
@@ -2202,15 +2317,21 @@ class MainActivity : AppCompatActivity() {
             PoiCategory.NONE -> {
                 setPoiButtonStatus(button, null)
                 touristModeChanged()
+                // Weekend stays on: back to the places of the visible area.
+                if (leavingSights && touristOn && TripState.plan == null) refreshTourist(force = true)
                 showMessage("POI layer off")
             }
             PoiCategory.SIGHTS -> {
                 setPoiButtonStatus(button, false)
                 showMessage("Looking for well-known places...")
                 touristModeChanged()
+                // Weekend already showed places of the visible area: now those within reach.
+                if (touristWasShown && TripState.plan == null) refreshTourist(force = true)
             }
             else -> {
                 touristModeChanged() // leaving Sights clears them unless Weekend
+                // Weekend stays on: back to the places of the visible area.
+                if (leavingSights && touristOn && TripState.plan == null) refreshTourist(force = true)
                 setPoiButtonStatus(button, false)
                 showMessage("Checking for ${cat.label}...")
                 queryPois(force = true)
@@ -2303,6 +2424,8 @@ class MainActivity : AppCompatActivity() {
         syncDrivingModeUI()
         saveToggleState()
         rerouteIfPossible("${mode.label} mode selected")
+        // Sights within reach depend on the travel mode.
+        if (TripState.plan == null && currentPoiCategory == PoiCategory.SIGHTS) refreshTourist()
     }
 
     private fun refreshModeButtonHighlight() {
@@ -2409,6 +2532,8 @@ class MainActivity : AppCompatActivity() {
             settingsOpen = false
             if (isDestroyed) return
             loadSettings()
+            // A new Sights reach time applies at once.
+            if (TripState.plan == null && currentPoiCategory == PoiCategory.SIGHTS) refreshTourist()
             // Map style changed (day/night itself rebuilds the screen).
             val m = map
             if (m != null && loadedStyleUrl != null && loadedStyleUrl != Prefs.mapStyleUrl(this@MainActivity)) loadStyle(m)
@@ -2763,14 +2888,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Shows the whole route (and alternatives) above the bottom controls. */
+    /**
+     * 1.0.7: every proposed route in view, flat and north up, clear of the
+     * columns and the bottom buttons, then half a zoom level farther so the
+     * options sit well inside the screen.
+     */
     private fun fitCamera(results: List<RouteResult>) {
         val m = map ?: return
+        if (navUiActive) return // the navigation view keeps its own camera
         val all = results.flatMap { it.points }
         if (all.size < 2) return
-        val bounds = LatLngBounds.Builder().includes(all.map { LatLng(it.lat, it.lon) }).build()
         try {
-            m.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, dp(60), dp(170), dp(60), dp(170)), 800)
+            val bounds = LatLngBounds.Builder().includes(all.map { LatLng(it.lat, it.lon) }).build()
+            val pad = intArrayOf(dp(100), dp(110), dp(64), dp(130))
+            val cam = m.getCameraForLatLngBounds(bounds, pad, 0.0, 0.0) ?: return
+            m.animateCamera(CameraUpdateFactory.newCameraPosition(
+                CameraPosition.Builder().target(cam.target).zoom(cam.zoom - 0.5).bearing(0.0).tilt(0.0)
+                    .padding(0.0, 0.0, 0.0, 0.0).build()
+            ), 800)
         } catch (e: Exception) { }
+    }
+
+    /** Planning moves: flat, north up (3D is for navigation only). */
+    private fun flyFlat(target: LatLng, zoom: Double) {
+        val m = map ?: return
+        m.animateCamera(CameraUpdateFactory.newCameraPosition(
+            CameraPosition.Builder().target(target).zoom(zoom).bearing(0.0).tilt(0.0).padding(0.0, 0.0, 0.0, 0.0).build()
+        ))
     }
 
     /** One chip per route: distance, duration, estimated toll, unpaved share. */

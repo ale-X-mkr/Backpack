@@ -141,6 +141,14 @@ object Tourist {
     fun boxQuery(south: Double, west: Double, north: Double, east: Double): String =
         query("nwr(%.5f,%.5f,%.5f,%.5f)".format(java.util.Locale.ROOT, south, west, north, east))
 
+    /** Overpass query for places inside the reach polygon (one request, for
+     *  areas too big for the cached squares, e.g. 1 h by car). */
+    fun reachQuery(ring: List<LatLon>): String {
+        val sel = "nwr(poly:\"${Reach.polyFilter(ring)}\")"
+        val parts = FILTERS.trim().lines().joinToString("\n") { " $sel${it.trim()}" }
+        return "[out:json][timeout:25];\n(\n$parts\n);\nout center tags;"
+    }
+
     private fun query(selector: String): String {
         val parts = FILTERS.trim().lines().joinToString("\n") { " $selector${it.trim()}" }
         // No result cap: Overpass returns in id order (points before areas), so a

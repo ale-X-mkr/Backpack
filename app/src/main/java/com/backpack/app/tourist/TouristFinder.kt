@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import com.backpack.app.core.LatLon
 import com.backpack.app.core.Polyline
+import com.backpack.app.core.Reach
 import com.backpack.app.core.SpeedLimits
 import com.backpack.app.core.Tile
 import com.backpack.app.core.Tiles
@@ -84,10 +85,48 @@ class TouristFinder(context: Context) {
         }
     }
 
+    /**
+     * 1.0.7: inside the area reachable in the chosen time ([ring]). Small
+     * areas (walking, cycling) use the cached squares; a big one (by car)
+     * is one Overpass request with the polygon itself.
+     */
+    fun inReach(ring: List<LatLon>, key: String, onSwitch: () -> Unit, callback: ResultCallback) {
+        val gen = ++generation
+        worker.execute {
+            val b = Reach.bounds(ring)
+            val tiles = Tiles.inBox(b[0], b[1], b[2], b[3], max = Int.MAX_VALUE)
+            if (tiles.size <= MAX_TILES) {
+                load(gen, tiles, emptyList(), 0.0, 0.0, onSwitch, callback, ring = ring)
+                return@execute
+            }
+            val deliver = { pois: List<TouristPoi>?, error: String? ->
+                main.post { if (gen == generation) callback.onResult(pois, error, 0.0) }
+            }
+            // Same area as last time (kept in memory): no new request.
+            val cached = synchronized(reachMemory) { if (reachMemory.first == key) reachMemory.second else null }
+            if (cached != null) { withPopularity(gen, cached) { deliver(it, null) }; return@execute }
+            main.post {
+                if (gen != generation) return@post
+                OverpassClient.query(app, Tourist.reachQuery(ring), onSwitch = { if (gen == generation) onSwitch() }, singleRound = true) { body, failure ->
+                    store.execute {
+                        val parsed = body?.let { try { Tourist.parseOverpass(it) } catch (e: Exception) { null } }
+                        if (parsed == null) {
+                            deliver(null, if (body == null) failure?.message ?: "Places search failed" else OverpassClient.Failure.BAD_ANSWER.message)
+                            return@execute
+                        }
+                        val inside = parsed.distinctBy { it.wikidata }.filter { Reach.contains(ring, it.point) }
+                        synchronized(reachMemory) { reachMemory = key to inside }
+                        if (gen == generation) withPopularity(gen, inside) { deliver(it, null) }
+                    }
+                }
+            }
+        }
+    }
+
     /** Worker thread: cached squares, then the missing ones from Overpass. */
     private fun load(
         gen: Int, tiles: List<Tile>, lines: List<Polyline>, radius: Double, coveredM: Double,
-        onSwitch: () -> Unit, callback: ResultCallback, box: DoubleArray? = null
+        onSwitch: () -> Unit, callback: ResultCallback, box: DoubleArray? = null, ring: List<LatLon>? = null
     ) {
         val deliver = { pois: List<TouristPoi>?, error: String? ->
             main.post { if (gen == generation) callback.onResult(pois, error, coveredM) }
@@ -140,7 +179,8 @@ class TouristFinder(context: Context) {
         // so places along an alternative count as much as along the first route.
         val inside = found.distinctBy { it.wikidata }.mapNotNull { p ->
             if (lines.isEmpty()) {
-                if (box != null && (p.point.lat < box[0] || p.point.lat > box[2] || p.point.lon < box[1] || p.point.lon > box[3])) null else p
+                if (ring != null) { if (Reach.contains(ring, p.point)) p else null }
+                else if (box != null && (p.point.lat < box[0] || p.point.lat > box[2] || p.point.lon < box[1] || p.point.lon > box[3])) null else p
             } else {
                 val best = lines.mapNotNull { it.snap(p.point) }.minByOrNull { it.offsetM }
                 if (best == null || best.offsetM > radius * 1.05) null else p.copy(offsetM = best.offsetM, alongM = best.alongM)
@@ -234,6 +274,8 @@ class TouristFinder(context: Context) {
         /** Parses and stores answers (never blocked by a waiting search). */
         private val store = java.util.concurrent.Executors.newSingleThreadExecutor()
         private val inFlight = java.util.concurrent.ConcurrentHashMap<Tile, CountDownLatch>()
+        /** Last big reach area and its places (before popularity). */
+        private var reachMemory: Pair<String?, List<TouristPoi>> = null to emptyList()
         private const val DAY_MS = 24L * 3600_000L
 
         const val USER_AGENT = OverpassClient.USER_AGENT
@@ -243,6 +285,8 @@ class TouristFinder(context: Context) {
         private const val MAX_WIKIDATA = 300
         const val ROUTE_LIMIT = 25
         const val AREA_LIMIT = 20
+        /** Sights within reach (1.0.7). */
+        const val REACH_LIMIT = 40
     }
 }
 

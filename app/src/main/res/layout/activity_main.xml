@@ -208,18 +208,44 @@
             android:elevation="0dp"
             android:stateListAnimator="@null" />
 
-        <ImageButton
-            android:id="@+id/poi_toggle_button"
-            android:scaleType="fitCenter"
-            android:layout_width="38dp"
+        <!-- POI categories; with Sights, the small "around me / map centre"
+             button to its right (1.0.7). -->
+        <FrameLayout
+            android:id="@+id/poi_row"
+            android:layout_width="72dp"
             android:layout_height="38dp"
             android:layout_marginTop="15dp"
-            android:src="@drawable/ic_poi_toggle"
-            android:background="@drawable/icon_backdrop"
-            android:padding="4dp"
-            android:contentDescription="Points of interest"
-            android:elevation="0dp"
-            android:stateListAnimator="@null" />
+            android:clipChildren="false">
+
+            <ImageButton
+                android:id="@+id/poi_toggle_button"
+                android:scaleType="fitCenter"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_gravity="start"
+                android:src="@drawable/ic_poi_toggle"
+                android:background="@drawable/icon_backdrop"
+                android:padding="4dp"
+                android:contentDescription="Points of interest"
+                android:elevation="0dp"
+                android:stateListAnimator="@null" />
+
+            <ImageButton
+                android:id="@+id/sights_origin_button"
+                android:scaleType="fitCenter"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="44dp"
+                android:src="@drawable/ic_location_marker"
+                android:background="@drawable/icon_backdrop"
+                android:padding="4dp"
+                android:contentDescription="Sights around me or the map centre"
+                android:elevation="0dp"
+                android:stateListAnimator="@null"
+                android:visibility="gone" />
+
+        </FrameLayout>
 
     </LinearLayout>
 
