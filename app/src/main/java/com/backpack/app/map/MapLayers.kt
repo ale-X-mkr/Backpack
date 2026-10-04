@@ -233,7 +233,7 @@ class MapLayers(private val context: Context) {
 
     /** Index of an alternative route line under the finger, or null. */
     fun alternativeAt(map: MapLibreMap, screen: PointF): Int? {
-        val r = 14f * context.resources.displayMetrics.density
+        val r = 20f * context.resources.displayMetrics.density
         val box = RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r)
         val hit = map.queryRenderedFeatures(box, LAYER_ALT).firstOrNull() ?: return null
         return hit.getNumberProperty("idx")?.toInt()
@@ -271,8 +271,15 @@ class MapLayers(private val context: Context) {
     }
 
     /** Index of the route whose letter is under the finger, or null. */
+    /** True when the tap touches the selected (red) route line. */
+    fun selectedRouteAt(map: MapLibreMap, screen: PointF): Boolean {
+        val r = 20f * context.resources.displayMetrics.density
+        val box = RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r)
+        return map.queryRenderedFeatures(box, LAYER_ROUTE, LAYER_ROUTE_CASING).isNotEmpty()
+    }
+
     fun letterAt(map: MapLibreMap, screen: PointF): Int? {
-        val r = 14f * context.resources.displayMetrics.density
+        val r = 20f * context.resources.displayMetrics.density
         val box = RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r)
         return map.queryRenderedFeatures(box, LAYER_LABELS).firstOrNull()?.getNumberProperty("idx")?.toInt()
     }

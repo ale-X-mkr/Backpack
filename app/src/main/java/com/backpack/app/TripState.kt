@@ -13,6 +13,10 @@ object TripState {
     var destination: LatLon? = null
     val waypoints: MutableList<LatLon> = mutableListOf()
     var plan: RoutePlan? = null
+    /** 1.0.6: alternatives under review after "find alternative route"
+     *  (navigation stopped) and each one's request, used when it is started. */
+    var altReviewPlan: RoutePlan? = null
+    var altReviewRequests: Map<Int, com.backpack.app.core.RouteRequest> = emptyMap()
     var selectedIndex: Int = 0
 
     // Tourist mode results and what they were searched for.
@@ -86,6 +90,8 @@ object TripState {
 
     fun clear() {
         customStart = null
+        altReviewPlan = null
+        altReviewRequests = emptyMap()
         destination = null
         waypoints.clear()
         plan = null

@@ -456,7 +456,12 @@ class MainActivity : AppCompatActivity() {
             val choosing = !NavigationEngine.isActive || altChoiceOpen
             val idx = if (choosing) layers.letterAt(m, screen) ?: layers.alternativeAt(m, screen) else null
             if (idx != null) {
+                // Touching a route only selects it (its figures in the route
+                // line); nothing is recalculated, Go starts it.
                 if (idx != TripState.selectedIndex) promoteRouteToPrimary(idx)
+            } else if (choosing && !waypointModeArmed && TripState.plan != null && layers.selectedRouteAt(m, screen)) {
+                // The selected route itself: never a new destination.
+                if (!NavigationEngine.isActive) showMessage("Route ${RouteLabels.letter(TripState.selectedIndex)} selected \u00b7 Go to start")
             } else if (!overviewOn) {
                 handleDestinationTap(LatLon(p.latitude, p.longitude))
             }
@@ -1509,7 +1514,10 @@ class MainActivity : AppCompatActivity() {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         val start = resolveStartPoint() ?: route.points.first()
-        NavigationEngine.start(this, plan, TripState.selectedIndex, buildRequest(start, end))
+        // A route picked among the alternatives keeps its own request
+        // (preference) for later reroutes.
+        val req = (if (plan === altReviewPlan) altReviewRequests[TripState.selectedIndex] else null) ?: buildRequest(start, end)
+        NavigationEngine.start(this, plan, TripState.selectedIndex, req)
         startNavigationUi()
         // Before the first GPS fix: show the departure step.
         if (NavigationEngine.lastProgress == null) updateNavBar(route.steps.firstOrNull(), null)
@@ -1900,7 +1908,8 @@ class MainActivity : AppCompatActivity() {
         // Instruction box: 80 % of the old full width while navigating;
         // planning: as wide as its one line.
         val boxLp = navBox.layoutParams
-        val boxW = if (navUiActive) ((screenW - dp(16)) * 0.8f).toInt() else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        // Portrait: full width; landscape: 80 %.
+        val boxW = if (navUiActive) ((screenW - dp(16)) * (if (land) 0.8f else 1f)).toInt() else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         if (boxLp.width != boxW) { boxLp.width = boxW; navBox.layoutParams = boxLp }
         // Room for the speed circle at the box's right end (driving, navigating).
         val circleInBox = navUiActive && driving
@@ -2841,6 +2850,14 @@ class MainActivity : AppCompatActivity() {
      *  navigation stopped meanwhile). */
     private var altOriginalRoute: RouteResult? = null
     private var altRequests: Map<Int, RouteRequest> = emptyMap()
+    /** Alternatives under review after "find alternative route" (navigation
+     *  stopped) and the request of each, used if that route is started. */
+    private var altReviewPlan: RoutePlan?
+        get() = TripState.altReviewPlan
+        set(v) { TripState.altReviewPlan = v }
+    private var altReviewRequests: Map<Int, RouteRequest>
+        get() = TripState.altReviewRequests
+        set(v) { TripState.altReviewRequests = v }
     private val altPlannerA by lazy { RoutePlanner(this) }
     private val altPlannerB by lazy { RoutePlanner(this) }
 
@@ -2907,7 +2924,9 @@ class MainActivity : AppCompatActivity() {
                 showMessage("Route changed meanwhile -- tap again for alternatives")
                 return
             }
-            val routes = mutableListOf(left)
+            // A = your route from here, routed again (real turn steps, so it
+            // can be started); the stitched rest only if that failed.
+            val routes = mutableListOf(resA?.routes?.firstOrNull() ?: left)
             val reqs = mutableMapOf<Int, RouteRequest>()
             fun addDistinct(r: RouteResult, req: RouteRequest) {
                 val same = routes.any {
@@ -2923,13 +2942,23 @@ class MainActivity : AppCompatActivity() {
                 showMessage("No other route found")
                 return
             }
+            // 1.0.5: navigation stops; the routes stay in memory for review
+            // (A = the one you were on). Touch one to see its figures, Go to
+            // start it -- nothing is recalculated meanwhile.
             val plan = RoutePlan(routes.take(4), 0, null)
-            altRequests = reqs
-            altChoiceOpen = true
-            altOriginalRoute = current
+            reqs[0] = reqA
+            setIconActive(findViewById(R.id.alt_route_button), false)
+            NavigationEngine.stop()
+            TripState.customStart = null       // from where you are now
+            TripState.waypoints.clear()        // only the stops still ahead
+            TripState.waypoints.addAll(stops)
+            altReviewPlan = plan
+            altReviewRequests = reqs
             TripState.plan = plan
             TripState.selectedIndex = 0
-            drawPlan(plan, 0, fit = false, note = "Tap a route to switch (yours is highlighted)", tourist = false)
+            TripState.committed = TripState.copy()
+            refreshPins()
+            drawPlan(plan, 0, fit = true, note = "Navigation paused \u00b7 touch a route to compare, Go to start", tourist = false)
         }
         altPlannerA.plan(reqA) { plan, _ -> resA = plan; finish() }
         altPlannerB.plan(reqB) { plan, _ -> resB = plan; finish() }
