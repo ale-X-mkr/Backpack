@@ -29,14 +29,24 @@ object ReachArea {
 
     private val main = Handler(Looper.getMainLooper())
     private val memory = LinkedHashMap<String, List<LatLon>>()
+    private val waiting = HashMap<String, MutableList<Done>>()
     @Volatile private var failedAtMs = 0L
 
     fun get(c: Context, center: LatLon, mode: TravelMode, minutes: Int, done: Done) {
         val app = c.applicationContext
         val key = "%.3f,%.3f,%s,%d".format(java.util.Locale.ROOT, center.lat, center.lon, mode.name, minutes)
         synchronized(memory) { memory[key] }?.let { done.onArea(it, true); return }
+        // Same area already asked (sights + places layers at once): wait for that answer.
+        synchronized(waiting) {
+            waiting[key]?.let { it.add(done); return }
+            waiting[key] = mutableListOf(done)
+        }
+        val answer = { ring: List<LatLon>, exact: Boolean ->
+            val all = synchronized(waiting) { waiting.remove(key) } ?: emptyList()
+            main.post { for (d in all) d.onArea(ring, exact) }
+        }
         // Never farther than Reach.MAX_SEARCH_M (one light request): cut = estimate.
-        val circle = { done.onArea(Reach.circle(center, minOf(Reach.radiusM(mode, minutes), Reach.MAX_SEARCH_M)), false) }
+        val circle = { answer(Reach.circle(center, minOf(Reach.radiusM(mode, minutes), Reach.MAX_SEARCH_M)), false) }
         val keys = Prefs.orsKeys(app)
         val base = Prefs.orsBaseUrl(app)
         // Public service: driving only up to 1 h; no key = no request. After a
@@ -50,20 +60,21 @@ object ReachArea {
                 .post(Reach.orsBody(center, minutes).toString().toRequestBody("application/json".toMediaType()))
             keys.getOrNull(k)?.let { b.addHeader("Authorization", it) }
             RoutePlanner.http.newCall(b.build()).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) { failedAtMs = System.currentTimeMillis(); main.post(circle) }
+                override fun onFailure(call: Call, e: IOException) { failedAtMs = System.currentTimeMillis(); circle() }
                 override fun onResponse(call: Call, response: Response) {
-                    val text = response.use { if (it.isSuccessful) it.body?.string() else null }
+                    val text = try { response.use { if (it.isSuccessful) it.body?.string() else null } }
+                        catch (e: Exception) { failedAtMs = System.currentTimeMillis(); circle(); return }
                     if (text == null && (response.code == 401 || response.code == 403 || response.code == 429) && k + 1 < keys.size) {
                         attempt(k + 1); return
                     }
                     val ring = text?.let { try { Reach.parseIsochrone(it) } catch (e: Exception) { null } }
                         ?.let { Reach.clip(it, center).first }
-                    if (ring == null) { failedAtMs = System.currentTimeMillis(); main.post(circle); return }
+                    if (ring == null) { failedAtMs = System.currentTimeMillis(); circle(); return }
                     synchronized(memory) {
                         memory[key] = ring
                         while (memory.size > 8) memory.remove(memory.keys.first())
                     }
-                    main.post { done.onArea(ring, true) }
+                    answer(ring, true)
                 }
             })
         }

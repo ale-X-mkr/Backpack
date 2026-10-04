@@ -304,6 +304,23 @@ object Tourist {
         return 2.0 * offsetM * 1.3 / speed
     }
 
+    /** 1.0.9: distance off the route a place may be for a there-and-back
+     *  detour of at most [seconds] (inverse of [estimateDetourSeconds]),
+     *  kept within what one search covers well for the mode. */
+    fun offsetForDetour(seconds: Double, mode: TravelMode): Double {
+        val speed = when (mode) {
+            TravelMode.WALKING -> 1.3
+            TravelMode.CYCLING -> 4.5
+            TravelMode.DRIVING -> 11.0
+        }
+        val cap = when (mode) {
+            TravelMode.WALKING -> 1500.0
+            TravelMode.CYCLING -> 4000.0
+            TravelMode.DRIVING -> 10000.0
+        }
+        return (seconds * speed / 2.6).coerceIn(100.0, cap)
+    }
+
     fun minutesLabel(seconds: Double): String {
         val m = (seconds / 60.0).roundToInt()
         return if (m < 1) "< 1 min" else if (m < 60) "$m min" else "%d h %02d".format(m / 60, m % 60)

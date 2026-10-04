@@ -58,9 +58,10 @@ class TouristFinder(context: Context) {
      * Around one or more route lines, from [fromM] metres along them (your
      * position while navigating) up to the mode's search distance ahead.
      */
-    fun alongRoutes(lines: List<List<LatLon>>, mode: TravelMode, fromM: Double, onSwitch: () -> Unit, callback: ResultCallback) {
+    fun alongRoutes(lines: List<List<LatLon>>, mode: TravelMode, fromM: Double, radiusM: Double, onSwitch: () -> Unit, callback: ResultCallback) {
         val gen = ++generation
-        val radius = Tourist.corridorRadius(mode).toDouble()
+        // 1.0.9: corridor = the longest detour allowed (Settings > Places).
+        val radius = radiusM
         val ahead = Tourist.searchAheadM(mode)
         worker.execute {
             val full = lines.filter { it.size >= 2 }.map { Polyline(it) }

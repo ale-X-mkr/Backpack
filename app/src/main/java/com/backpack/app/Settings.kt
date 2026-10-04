@@ -22,6 +22,13 @@ object Settings {
     const val KEY_SIGHTS_MAX_PCT = "weekend_sights_max_pct"
     /** 1.0.7: Sights category reach, minutes (30 / 60 / 120). */
     const val KEY_SIGHTS_REACH_MIN = "sights_reach_minutes"
+    /** 1.0.9: longest there-and-back detour (minutes) for places shown along a route. */
+    const val KEY_DETOUR_WEEKEND_MIN = "detour_weekend_minutes"
+    const val KEY_DETOUR_WORK_MIN = "detour_work_minutes"
+    const val DEFAULT_DETOUR_WEEKEND_MIN = 20
+    const val DEFAULT_DETOUR_WORK_MIN = 5
+    /** Emergency places: fixed. */
+    const val EMERGENCY_DETOUR_MIN = 15
     /** 1.0.7: Sights around "me" (true) or the map centre (false). */
     const val KEY_SIGHTS_AROUND_ME = "sights_around_me"
     /** Navigation view tilt: -1 = automatic (45° driving, 25° otherwise), else degrees 0..60. */

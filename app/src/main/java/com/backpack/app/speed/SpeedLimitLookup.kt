@@ -62,7 +62,7 @@ object SpeedLimitLookup {
             val part = SpeedLimits.simplify(SpeedLimits.section(line, until, SECTION_M), 5.0)
             val query = SpeedLimits.corridorQuery(part, CORRIDOR_M)
             main.post {
-                OverpassClient.query(app, query) { body, _ ->
+                OverpassClient.query(app, query, priority = true) { body, _ ->
                     if (body == null) {
                         sectionInFlight = false
                         sectionFailedAtMs = System.currentTimeMillis()

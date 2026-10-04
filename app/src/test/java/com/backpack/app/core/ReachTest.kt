@@ -28,6 +28,15 @@ class ReachTest {
         assertEquals("time", body.getString("range_type"))
     }
 
+    @Test fun detourOffset() {
+        // 5 min by car there and back: ~1.27 km off the route; round trip check.
+        val off = Tourist.offsetForDetour(300.0, TravelMode.DRIVING)
+        assertEquals(1269.0, off, 2.0)
+        assertEquals(300.0, Tourist.estimateDetourSeconds(off, TravelMode.DRIVING), 0.5)
+        assertEquals(10000.0, Tourist.offsetForDetour(3600.0, TravelMode.DRIVING), 0.0)
+        assertEquals(100.0, Tourist.offsetForDetour(10.0, TravelMode.WALKING), 0.0)
+    }
+
     @Test fun circleContainsAndBounds() {
         val ring = Reach.circle(c, 10_000.0)
         assertEquals(48, ring.size)

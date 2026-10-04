@@ -221,6 +221,10 @@ object SettingsPopup {
             reach.firstOrNull { it.first == cur } ?: reach[1]
         }) { prefs.edit().putInt(Settings.KEY_SIGHTS_REACH_MIN, it.first).apply() }
         p.text("Well-known places you can reach in this time with the current travel mode, around you or the map centre (small button next to POI). By car the public route service answers up to 1 h; 2 h uses a distance estimate.", 11f)
+        p.section("Places along a route: longest detour")
+        intField(p, prefs, "Weekend (min, there and back)", Settings.KEY_DETOUR_WEEKEND_MIN, Settings.DEFAULT_DETOUR_WEEKEND_MIN, 1, 60)
+        intField(p, prefs, "Work (min, there and back)", Settings.KEY_DETOUR_WORK_MIN, Settings.DEFAULT_DETOUR_WORK_MIN, 1, 30)
+        p.text("With a destination: Weekend shows well-known places (plus your POI category) along the route within this detour; Work only your POI category, with the shorter detour; Emergency adds hospitals, police and fire stations (15 min) and hides sights. Without a destination: within reach (above) of you or the map centre.", 11f)
         p.section("Weekend sights route")
         intField(p, prefs, "Max extra time (%), 0 = off", Settings.KEY_SIGHTS_MAX_PCT, Settings.DEFAULT_SIGHTS_MAX_PCT, 0, 100)
         p.text("In Weekend mode, an alternative passing clearly more well-known places is taken if it is at most this much slower.", 11f)

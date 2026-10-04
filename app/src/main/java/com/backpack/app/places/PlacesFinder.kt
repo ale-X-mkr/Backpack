@@ -49,10 +49,49 @@ class PlacesFinder(context: Context) {
     fun cancel() { generation++ }
 
     fun inBox(category: Category, south: Double, west: Double, north: Double, east: Double, onSwitch: () -> Unit, callback: ResultCallback) {
-        val gen = ++generation
-        val cache = TileCache.of(app, category.layer, 3L * 24 * 3600_000L)
         val center = LatLon((south + north) / 2, (west + east) / 2)
         val tiles = Tiles.inBox(south, west, north, east, max = 16)
+        search(category, tiles, center, onSwitch, callback) { p ->
+            if (p.point.lat in south..north && p.point.lon in west..east) Geo.distance(p.point, center) else null
+        }
+    }
+
+    /**
+     * 1.0.9: along route lines (the route ahead), places at most [radiusM]
+     * off the nearest line, in route order; squares from the cache first.
+     */
+    fun alongRoutes(category: Category, lines: List<List<LatLon>>, radiusM: Double, onSwitch: () -> Unit, callback: ResultCallback) {
+        // Matched on thinned lines (≤ 400 points): fast, and accurate enough for the corridor.
+        val polylines = lines.filter { it.size >= 2 }
+            .map { com.backpack.app.core.Polyline(com.backpack.app.core.Tourist.sampleLine(it, maxPoints = 400, minStepM = 50.0)) }
+        if (polylines.isEmpty()) { generation++; callback.onResult(emptyList(), null, null, false); return }
+        val tiles = Tiles.alongLinesOrdered(lines, radiusM).take(MAX_ROUTE_TILES).map { it.first }
+        // Second source (Overpass down) asks around a point ~2 km ahead, not where you are.
+        val first = com.backpack.app.core.Polyline(lines.first())
+        val center = com.backpack.app.core.SpeedLimits.pointAt(first, minOf(2000.0, first.length))
+        search(category, tiles, center, onSwitch, callback) { p ->
+            val best = polylines.mapNotNull { it.snap(p.point) }.minByOrNull { it.offsetM }
+            if (best == null || best.offsetM > radiusM) null else best.alongM
+        }
+    }
+
+    /** 1.0.9: inside the reach area [ring] around [origin], nearest first
+     *  (the squares nearest the origin, at most [MAX_AREA_TILES]). */
+    fun inReach(category: Category, ring: List<LatLon>, origin: LatLon, onSwitch: () -> Unit, callback: ResultCallback) {
+        val area = com.backpack.app.core.Reach.thin(ring, 300) // fast inside-test
+        val b = com.backpack.app.core.Reach.bounds(area)
+        val tiles = Tiles.inBox(b[0], b[1], b[2], b[3], max = Int.MAX_VALUE)
+            .sortedBy { Geo.distance(LatLon(it.south + Tiles.SIZE / 2, it.west + Tiles.SIZE / 2), origin) }
+            .take(MAX_AREA_TILES)
+        search(category, tiles, origin, onSwitch, callback) { p ->
+            if (com.backpack.app.core.Reach.contains(area, p.point)) Geo.distance(p.point, origin) else null
+        }
+    }
+
+    /** [rank]: null = left out, else the sort key (smaller first). */
+    private fun search(category: Category, tiles: List<Tile>, center: LatLon, onSwitch: () -> Unit, callback: ResultCallback, rank: (PoiPlace) -> Double?) {
+        val gen = ++generation
+        val cache = TileCache.of(app, category.layer, 3L * 24 * 3600_000L)
         // Cache files are read and written off the screen's thread.
         io.execute {
             val found = ArrayList<PoiPlace>()
@@ -61,27 +100,34 @@ class PlacesFinder(context: Context) {
                 val list = cache.get(t)?.let { try { Places.fromJson(it) } catch (e: Exception) { null } }
                 if (list == null) missing.add(t) else found.addAll(list)
             }
-            main.post { if (gen == generation) fetchMissing(gen, category, cache, center, south, west, north, east, found, missing, onSwitch, callback) }
+            main.post { if (gen == generation) fetchMissing(gen, category, cache, center, found, missing, onSwitch, callback, rank) }
         }
     }
 
     private fun fetchMissing(
         gen: Int, category: Category, cache: TileCache, center: LatLon,
-        south: Double, west: Double, north: Double, east: Double,
-        found: List<PoiPlace>, missing: List<Tile>, onSwitch: () -> Unit, callback: ResultCallback
+        found: List<PoiPlace>, missing: List<Tile>, onSwitch: () -> Unit, callback: ResultCallback,
+        rank: (PoiPlace) -> Double?
     ) {
         fun finish(extra: List<PoiPlace>, error: String?, note: String?, serverFailed: Boolean) {
             if (gen != generation) return
-            val all = (found + extra).distinctBy { it.key }
-                .filter { it.point.lat in south..north && it.point.lon in west..east }
-                .sortedBy { Geo.distance(it.point, center) }
-                .take(MAX_SHOWN)
-            if (all.isEmpty() && error != null) callback.onResult(null, error, null, true)
-            else callback.onResult(all, null, note ?: error?.let { "Some places may be missing ($it)" }, serverFailed)
+            // Matching against the route / area off the screen's thread (1.0.9).
+            io.execute {
+                val all = (found + extra).distinctBy { it.key }
+                    .mapNotNull { p -> rank(p)?.let { p to it } }
+                    .sortedBy { it.second }
+                    .map { it.first }
+                    .take(MAX_SHOWN)
+                main.post {
+                    if (gen != generation) return@post
+                    if (all.isEmpty() && error != null) callback.onResult(null, error, null, true)
+                    else callback.onResult(all, null, note ?: error?.let { "Some places may be missing ($it)" }, serverFailed)
+                }
+            }
         }
         if (missing.isEmpty()) { finish(emptyList(), null, null, false); return }
         val query = Places.tileQuery(category.overpassFilter, missing)
-        OverpassClient.query(app, query, onSwitch = { if (gen == generation) onSwitch() }) { body, failure ->
+        OverpassClient.query(app, query, onSwitch = { if (gen == generation) onSwitch() }, isStale = { gen != generation }) { body, failure ->
             if (body != null) {
                 io.execute {
                     // Stored even if a newer search came meanwhile: nothing wasted.
@@ -90,24 +136,23 @@ class PlacesFinder(context: Context) {
                     main.post {
                         if (gen != generation) return@post
                         if (parsed != null) finish(parsed, null, null, false)
-                        else fallback(gen, category, center, south, west, north, east, OverpassClient.Failure.BAD_ANSWER.message, ::finish)
+                        else fallback(gen, category, center, OverpassClient.Failure.BAD_ANSWER.message, ::finish)
                     }
                 }
                 return@query
             }
             if (gen != generation) return@query
-            fallback(gen, category, center, south, west, north, east, failure?.message ?: "Places search failed", ::finish)
+            fallback(gen, category, center, failure?.message ?: "Places search failed", ::finish)
         }
     }
 
     /** Second source: openrouteservice places around the centre. */
     private fun fallback(
-        gen: Int, category: Category, center: LatLon, south: Double, west: Double, north: Double, east: Double,
+        gen: Int, category: Category, center: LatLon,
         error: String, finish: (List<PoiPlace>, String?, String?, Boolean) -> Unit
     ) {
-        val half = minOf(Geo.distance(LatLon(south, center.lon), LatLon(north, center.lon)),
-            Geo.distance(LatLon(center.lat, west), LatLon(center.lat, east))) / 2
-        orsPlaces(category, center, half.toInt().coerceIn(300, 2000)) { list ->
+        // Around the centre / start (the ranking above keeps only what fits).
+        orsPlaces(category, center, 2000) { list ->
             if (gen != generation) return@orsPlaces
             if (list == null) finish(emptyList(), error, null, true)
             else finish(list, null, "Places servers busy -- showing openrouteservice places nearby", true)
@@ -146,6 +191,8 @@ class PlacesFinder(context: Context) {
 
     companion object {
         const val MAX_SHOWN = 60
+        private const val MAX_ROUTE_TILES = 60
+        private const val MAX_AREA_TILES = 36
         private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
         @Volatile private var orsFailedAtMs = 0L
     }

@@ -194,13 +194,7 @@ class MainActivity : AppCompatActivity() {
     private var lastAlarmAtMs = 0L
 
     // POIs.
-    private var poiRequestGeneration = 0
-    private var lastPoiQueryAtMs = 0L
-    private var lastPoiQueryCenter: LatLon? = null
-    private val placesFinder by lazy { PlacesFinder(this) }
-    private var poiFailures = 0
-    private var poiRetryAtMs = 0L
-    /** Everyday places on the map (tap one for its popup). */
+    /** Everyday places on the map, both layers (tap one for its popup). */
     private var poiResults: List<PoiPlace> = emptyList()
 
     private val activeColor by lazy { ContextCompat.getColor(this, R.color.rg_active) }
@@ -586,7 +580,7 @@ class MainActivity : AppCompatActivity() {
             if (navUiActive) adaptTrackingZoom(location)
             queryPois()
             // Sights around you: searched again once you moved ~2 km.
-            if (!navUiActive && TripState.plan == null && touristOn && currentPoiCategory == PoiCategory.SIGHTS && sightsAroundMe()) refreshTourist()
+            if (!navUiActive && TripState.plan == null && touristOn && sightsAroundMe()) refreshTourist()
         } else {
             // Likely signal loss / reacquisition noise: position, progress
             // and off-route detection keep using the last good fix.
@@ -1022,7 +1016,8 @@ class MainActivity : AppCompatActivity() {
     private val detourPlanner by lazy { RoutePlanner(this) }
     /** Well-known places are shown in Weekend mode or with the Sights POI category. */
     private val touristOn: Boolean
-        get() = urgencyMode == UrgencyMode.WEEKEND || currentPoiCategory == PoiCategory.SIGHTS
+        // 1.0.9: Weekend's default layer, or the Sights category; never in Emergency (no distractions).
+        get() = urgencyMode != UrgencyMode.EMERGENCY && (urgencyMode == UrgencyMode.WEEKEND || currentPoiCategory == PoiCategory.SIGHTS)
     // Results live in TripState: a rotation or day/night switch keeps them.
     private var touristResults: List<TouristPoi>
         get() = TripState.touristResults
@@ -1098,7 +1093,7 @@ class MainActivity : AppCompatActivity() {
             val startIndex = TripState.selectedIndex
             // While navigating: from where you are (the squares behind you are not needed).
             val fromM = if (navUiActive) (NavigationEngine.lastProgress?.alongM ?: 0.0) else 0.0
-            touristFinder.alongRoutes(lines, currentMode.mode, fromM, { onPlacesServerSwitch() }) { all, error, coveredM ->
+            touristFinder.alongRoutes(lines, currentMode.mode, fromM, corridorM(), { onPlacesServerSwitch() }) { all, error, coveredM ->
                 // Only a search that answered counts as covering the stretch;
                 // a failed one is tried again 2 min later, not on every fix.
                 if (all != null && error == null) TripState.touristCoveredM = coveredM
@@ -1108,22 +1103,9 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
-        // Sights category: places reachable in the chosen time (1.0.7).
-        if (currentPoiCategory == PoiCategory.SIGHTS) { refreshReach(force); return }
-        val target = m.cameraPosition.target ?: return
-        val center = LatLon(target.latitude, target.longitude)
-        val near = { c: LatLon? -> c != null && Geo.distance(c, center) < 1000.0 }
-        if (!force && touristRouteKey == null && (near(touristAreaCenter) || near(touristPendingCenter))) return
-        touristPendingRoute = null
-        touristPendingCenter = center
-        val box = m.projection.visibleRegion.latLngBounds
-        val maxSpan = 25000.0 / 111000.0
-        val latSpan = (box.latitudeNorth - box.latitudeSouth).coerceIn(0.0, maxSpan)
-        val lonSpan = (box.longitudeEast - box.longitudeWest).coerceIn(0.0, maxSpan)
-        touristFinder.inBox(center.lat - latSpan / 2, center.lon - lonSpan / 2, center.lat + latSpan / 2, center.lon + lonSpan / 2,
-            { if (force) onPlacesServerSwitch() }) { all, error, _ ->
-            onTouristCandidates(all, error, null, center, announce = force, scenic = false)
-        }
+        // No route: well-known places within reach of you / the map centre
+        // (Weekend and the Sights category alike, 1.0.7 / 1.0.9).
+        refreshReach(force)
     }
 
     // ---------- Sights within reach (1.0.7) ----------
@@ -1172,7 +1154,7 @@ class MainActivity : AppCompatActivity() {
         }
         ReachArea.get(this, origin, mode.mode, minutes) { ring, exact ->
             // Still wanted (no route meanwhile, same settings and place)?
-            if (isDestroyed || !touristOn || TripState.plan != null || currentPoiCategory != PoiCategory.SIGHTS ||
+            if (isDestroyed || !touristOn || TripState.plan != null ||
                 reachSettings != settings || reachOrigin !== origin
             ) return@get
             reachLabel = "within ${if (exact) "" else "about "}$time $how of ${if (aroundMe) "you" else "the map centre"}"
@@ -1184,24 +1166,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Small button next to POI (Sights only): around me <-> map centre. */
+    /** Small button next to POI (no route): places around me <-> map centre. */
     private fun setupSightsOrigin() {
         val b = findViewById<ImageButton>(R.id.sights_origin_button)
         b.setOnClickListener {
             val me = !sightsAroundMe()
             getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE).edit().putBoolean(Settings.KEY_SIGHTS_AROUND_ME, me).apply()
             refreshSightsOrigin()
-            showMessage(if (me) "Sights around you" else "Sights around the map centre")
-            if (TripState.plan == null) refreshTourist(force = true)
+            showMessage(if (me) "Places around you" else "Places around the map centre")
+            if (TripState.plan == null) { if (touristOn) refreshTourist(force = true); queryPois(force = true) }
         }
         refreshSightsOrigin()
     }
 
     private fun refreshSightsOrigin() {
         val b = findViewById<ImageButton>(R.id.sights_origin_button)
-        b.visibility = if (currentPoiCategory == PoiCategory.SIGHTS) View.VISIBLE else View.GONE
-        b.setImageResource(if (sightsAroundMe()) R.drawable.ic_location_marker else R.drawable.ic_map_center)
-        setIconActive(b, true)
+        // 1.0.9: whenever places are searched around a point (no route).
+        val v = if (TripState.plan == null && (currentPoiCategory != PoiCategory.NONE || touristOn)) View.VISIBLE else View.GONE
+        if (b.visibility != v) b.visibility = v
+        val icon = if (sightsAroundMe()) R.drawable.ic_location_marker else R.drawable.ic_map_center
+        if (b.tag != icon) { b.tag = icon; b.setImageResource(icon); setIconActive(b, true) }
     }
 
     private fun onTouristCandidates(
@@ -1233,7 +1217,7 @@ class MainActivity : AppCompatActivity() {
         ) {
             TripState.scenicCheckedPlan = plan
             val choice = Tourist.scenicChoice(plan.routes, TripState.selectedIndex, all,
-                Tourist.corridorRadius(currentMode.mode), sightsMaxFraction())
+                corridorM().toInt(), sightsMaxFraction())
             if (choice != null) {
                 drawPlan(plan, choice.index, fit = false, note = null, tourist = false)
                 note = "Weekend sights route: ${choice.places} well-known places instead of ${choice.basePlaces}, +" +
@@ -1246,9 +1230,9 @@ class MainActivity : AppCompatActivity() {
         if (!announce) return
         showMessage(note ?: when {
             shown.isEmpty() -> if (plan != null) "No well-known places along this route"
-                else if (currentPoiCategory == PoiCategory.SIGHTS && reachLabel != null) "No well-known places $reachLabel" else "No well-known places here"
+                else if (reachLabel != null) "No well-known places $reachLabel" else "No well-known places here"
             plan != null -> "${shown.size} well-known places along your route (hold the button for the list)"
-            currentPoiCategory == PoiCategory.SIGHTS && reachLabel != null -> "${shown.size} well-known places $reachLabel"
+            reachLabel != null -> "${shown.size} well-known places $reachLabel"
             else -> "${shown.size} well-known places here"
         })
     }
@@ -1281,11 +1265,11 @@ class MainActivity : AppCompatActivity() {
      */
     private fun showTouristFor(route: RouteResult?): List<TouristPoi> {
         val all = TripState.touristCandidates
-        val radius = Tourist.corridorRadius(currentMode.mode)
+        val radius = corridorM()
         fun along(r: RouteResult) = Tourist.rank(Tourist.placeOnRoute(all, r.line).filter { it.offsetM <= radius * 1.05 }, TouristFinder.ROUTE_LIMIT)
         val owner = HashMap<String, Int>()
         val shown = if (route != null) along(route) else {
-            Tourist.rank(all, if (currentPoiCategory == PoiCategory.SIGHTS) TouristFinder.REACH_LIMIT else TouristFinder.AREA_LIMIT)
+            Tourist.rank(all, TouristFinder.REACH_LIMIT)
         }
         val extra = ArrayList<TouristPoi>()
         val plan = TripState.plan
@@ -1686,6 +1670,7 @@ class MainActivity : AppCompatActivity() {
         navInstructionIcon.visibility = View.GONE
         navInstructionBar.visibility = View.GONE
         updateNavBarProximityColor(Double.MAX_VALUE) // planning: plain blue frame
+        handler.post { queryPois() } // back to the whole planned route / the area
         // Back to the planned route's figures (not the last live ones).
         selectedRoute()?.let { setRouteInfoText(it) }
         refreshNavBox()
@@ -1759,6 +1744,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (overviewOn && p.anticipation) leaveOverview() // back to the drive view before a turn
         extendTouristIfNeeded(p, route)
+        queryPois() // the stretch ahead, every 40 % of it
         // Live remaining distance and arrival time.
         routeInfoDist.text = navInfo("Dist:", navDistance(p.remainingM), " \u00b7")
         routeInfoEta.text = navInfo("ETA:", etaLabel(p.remainingS).removePrefix("ETA: "))
@@ -2033,6 +2019,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun placeLayout() {
         refreshNavBox()
+        refreshSightsOrigin()
         val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val driving = currentMode == ModeUi.DRIVING
         val density = resources.displayMetrics.density
@@ -2330,36 +2317,25 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val button = findViewById<ImageButton>(R.id.poi_toggle_button)
-        val leavingSights = currentPoiCategory == PoiCategory.SIGHTS
-        val touristWasShown = touristOn
         currentPoiCategory = cat
         button.setImageResource(cat.iconRes)
         saveToggleState()
         refreshSightsOrigin()
-        reachSettings = null // next Sights search starts fresh
-        poiRequestGeneration++
-        placesFinder.cancel()
-        poiResults = emptyList()
-        layers.setPois(emptyList())
+        selSlot.reset()
+        refreshPoiPins()
         when (cat) {
             PoiCategory.NONE -> {
                 setPoiButtonStatus(button, null)
                 touristModeChanged()
-                // Weekend stays on: back to the places of the visible area.
-                if (leavingSights && touristOn && TripState.plan == null) refreshTourist(force = true)
                 showMessage("POI layer off")
             }
             PoiCategory.SIGHTS -> {
                 setPoiButtonStatus(button, false)
                 showMessage("Looking for well-known places...")
                 touristModeChanged()
-                // Weekend already showed places of the visible area: now those within reach.
-                if (touristWasShown && TripState.plan == null) refreshTourist(force = true)
             }
             else -> {
                 touristModeChanged() // leaving Sights clears them unless Weekend
-                // Weekend stays on: back to the places of the visible area.
-                if (leavingSights && touristOn && TripState.plan == null) refreshTourist(force = true)
                 setPoiButtonStatus(button, false)
                 showMessage("Checking for ${cat.label}...")
                 queryPois(force = true)
@@ -2367,61 +2343,165 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Places of the chosen category in the visible area (capped at ~25 km),
-     *  per map square from the phone's cache or one Overpass request; again
-     *  when the map moved more than ~1 km. Only the newest request renders. */
-    private fun queryPois(force: Boolean = false) {
-        if (currentPoiCategory == PoiCategory.NONE || currentPoiCategory == PoiCategory.SIGHTS) return
-        val m = map ?: return
-        val target = m.cameraPosition.target ?: return
-        val center = LatLon(target.latitude, target.longitude)
-        val now = System.currentTimeMillis()
-        val movedFar = lastPoiQueryCenter?.let { Geo.distance(it, center) > 1000.0 } ?: true
-        if (!force && (now - lastPoiQueryAtMs < 20000L || !movedFar)) return
-        // After failures, automatic retries wait 1, 2, then 5 min (a tap always retries).
-        if (!force && now < poiRetryAtMs) return
-        lastPoiQueryAtMs = now
-        lastPoiQueryCenter = center
+    // ---------- POI categories (1.0.9: adaptive) ----------
 
-        val category = currentPoiCategory
-        val thisGeneration = ++poiRequestGeneration
-        val box = m.projection.visibleRegion.latLngBounds
-        val maxSpanDegrees = 25000.0 / 111000.0
-        val latSpan = (box.latitudeNorth - box.latitudeSouth).coerceIn(0.0, maxSpanDegrees)
-        val lonSpan = (box.longitudeEast - box.longitudeWest).coerceIn(0.0, maxSpanDegrees)
-        placesFinder.inBox(category.finderCategory(), center.lat - latSpan / 2, center.lon - lonSpan / 2,
-            center.lat + latSpan / 2, center.lon + lonSpan / 2,
-            onSwitch = { if (thisGeneration == poiRequestGeneration && force) onPlacesServerSwitch() }
-        ) { results, error, note, serverFailed ->
-            if (thisGeneration != poiRequestGeneration || isDestroyed) return@inBox
-            val button = findViewById<ImageButton>(R.id.poi_toggle_button)
-            if (results == null) {
-                // Allow a new try as soon as asked (or after a map move, after a pause).
-                lastPoiQueryCenter = null
-                poiFailures++
-                poiRetryAtMs = System.currentTimeMillis() + when (poiFailures) { 1 -> 60_000L; 2 -> 120_000L; else -> 300_000L }
-                setPoiButtonStatus(button, false)
-                showError(error ?: "Places search failed", retry = { queryPois(force = true) })
-                return@inBox
+    /** One category search: its finder, results and retry state. */
+    private inner class PoiSlot {
+        val finder = PlacesFinder(this@MainActivity)
+        var results: List<PoiPlace> = emptyList()
+        var category: PoiCategory? = null
+        var key: String? = null
+        var origin: LatLon? = null
+        var sayKey: String? = null
+        var gen = 0
+        var failures = 0
+        var retryAtMs = 0L
+
+        fun reset() {
+            gen++
+            finder.cancel()
+            results = emptyList()
+            category = null
+            key = null
+            origin = null
+        }
+    }
+
+    /** The category you picked, and Emergency's own (automatic) layer. */
+    private val selSlot by lazy { PoiSlot() }
+    private val emgSlot by lazy { PoiSlot() }
+
+    /** Longest there-and-back detour for places along a route (minutes). */
+    private fun detourMinutes(emergencyLayer: Boolean = false): Int {
+        val prefs = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
+        return when {
+            emergencyLayer -> Settings.EMERGENCY_DETOUR_MIN
+            urgencyMode == UrgencyMode.WEEKEND -> prefs.getInt(Settings.KEY_DETOUR_WEEKEND_MIN, Settings.DEFAULT_DETOUR_WEEKEND_MIN)
+            else -> prefs.getInt(Settings.KEY_DETOUR_WORK_MIN, Settings.DEFAULT_DETOUR_WORK_MIN)
+        }
+    }
+
+    /** That detour as a corridor half-width around the route. */
+    private fun corridorM(emergencyLayer: Boolean = false): Double =
+        Tourist.offsetForDetour(detourMinutes(emergencyLayer) * 60.0, currentMode.mode)
+
+    /** Both layers on the map; taps look places up in both. */
+    private fun refreshPoiPins() {
+        poiResults = (selSlot.results + emgSlot.results).distinctBy { it.key }
+        val pins = selSlot.results.map { MapLayers.Pin(it.key, it.point, (selSlot.category ?: PoiCategory.NONE).iconName) } +
+            emgSlot.results.filter { p -> selSlot.results.none { it.key == p.key } }
+                .map { MapLayers.Pin(it.key, it.point, PoiCategory.EMERGENCY.iconName) }
+        layers.setPois(pins)
+    }
+
+    /**
+     * 1.0.9 adaptive POIs:
+     * - your category (not Off / Sights), any urgency mode;
+     * - Emergency mode adds hospitals, police and fire stations by itself.
+     * With a route: along it (the route ahead while navigating), within the
+     * detour allowed (Weekend / Work in Settings > Places, emergency 15 min).
+     * Without: within reach of you or the map centre (Emergency: of you).
+     */
+    private fun queryPois(force: Boolean = false) {
+        val sel = currentPoiCategory.takeIf { it != PoiCategory.NONE && it != PoiCategory.SIGHTS }
+        val emg = if (urgencyMode == UrgencyMode.EMERGENCY && sel != PoiCategory.EMERGENCY) PoiCategory.EMERGENCY else null
+        if (sel == null) { if (selSlot.category != null) { selSlot.reset(); refreshPoiPins() } } else runPoiSlot(selSlot, sel, sel == PoiCategory.EMERGENCY, force)
+        if (emg == null) { if (emgSlot.category != null) { emgSlot.reset(); refreshPoiPins() } } else runPoiSlot(emgSlot, emg, true, force)
+    }
+
+    private fun runPoiSlot(slot: PoiSlot, cat: PoiCategory, emergencyLayer: Boolean, force: Boolean) {
+        val now = System.currentTimeMillis()
+        if (slot.category != cat) { slot.reset(); slot.category = cat }
+        val plan = TripState.plan
+        val route = if (navUiActive) NavigationEngine.route ?: selectedRoute() else selectedRoute()
+        val announce: Boolean
+        if (plan != null && route != null && route.points.size >= 2) {
+            // Along the route ahead: searched again every 40 % of the stretch.
+            val radius = corridorM(emergencyLayer)
+            val ahead = minOf(Tourist.searchAheadM(currentMode.mode), 60_000.0)
+            val from = if (navUiActive) NavigationEngine.lastProgress?.alongM ?: 0.0 else 0.0
+            val key = "R/${System.identityHashCode(route)}/${cat.name}/${radius.toInt()}/${(from / (ahead * 0.4)).toInt()}"
+            if (!force && key == slot.key) return
+            if (!force && now < slot.retryAtMs) return
+            // Said once per destination / category / detour (not on every reroute).
+            val sayKey = "${TripState.destination}/${cat.name}/${radius.toInt()}"
+            announce = force || sayKey != slot.sayKey
+            slot.sayKey = sayKey
+            slot.key = key
+            slot.origin = null
+            val gen = ++slot.gen
+            val stretch = com.backpack.app.core.SpeedLimits.section(route.line, from, ahead)
+            val minutes = detourMinutes(emergencyLayer)
+            slot.finder.alongRoutes(cat.finderCategory(), listOf(stretch), radius,
+                onSwitch = { if (gen == slot.gen && force) onPlacesServerSwitch() }
+            ) { results, error, note, serverFailed ->
+                onPoiResults(slot, gen, cat, results, error, note, serverFailed, announce, "within $minutes min of your route")
             }
-            if (serverFailed) {
-                // Shown from the phone / openrouteservice, but Overpass failed:
-                // automatic retries for the missing squares wait too.
-                poiFailures++
-                poiRetryAtMs = System.currentTimeMillis() + when (poiFailures) { 1 -> 60_000L; 2 -> 120_000L; else -> 300_000L }
-            } else {
-                poiFailures = 0
-                poiRetryAtMs = 0L
+            return
+        }
+        // No route: within reach of you or the map centre.
+        // The automatic emergency layer is always around you; a category you picked follows the toggle.
+        val aroundMe = slot === emgSlot || sightsAroundMe()
+        val origin = (if (aroundMe) currentPosition() else null) ?: cameraCenter() ?: return
+        val minutes = sightsReachMinutes()
+        val key = "A/${cat.name}/${currentMode.name}/$minutes/$aroundMe"
+        val step = maxOf(if (aroundMe) 2000.0 else 3000.0, 0.25 * minOf(Reach.radiusM(currentMode.mode, minutes), Reach.MAX_SEARCH_M))
+        val moved = slot.origin?.let { Geo.distance(it, origin) >= step } ?: true
+        if (!force && key == slot.key && !moved) return
+        if (!force && now < slot.retryAtMs) return
+        announce = force || key != slot.key
+        slot.key = key
+        slot.origin = origin
+        val gen = ++slot.gen
+        val time = if (minutes < 60) "$minutes min" else "${minutes / 60} h"
+        val how = when (currentMode.mode) {
+            com.backpack.app.core.TravelMode.WALKING -> "on foot"
+            com.backpack.app.core.TravelMode.CYCLING -> "by bike"
+            com.backpack.app.core.TravelMode.DRIVING -> "by car"
+        }
+        ReachArea.get(this, origin, currentMode.mode, minutes) { ring, exact ->
+            if (isDestroyed || gen != slot.gen) return@get
+            val where = "within ${if (exact) "" else "about "}$time $how of ${if (aroundMe) "you" else "the map centre"}"
+            slot.finder.inReach(cat.finderCategory(), ring, origin,
+                onSwitch = { if (gen == slot.gen && force) onPlacesServerSwitch() }
+            ) { results, error, note, serverFailed ->
+                onPoiResults(slot, gen, cat, results, error, note, serverFailed, announce, where)
             }
-            poiResults = results
-            layers.setPois(results.map { MapLayers.Pin(it.key, it.point, category.iconName) })
-            setPoiButtonStatus(button, results.isNotEmpty())
-            when {
-                note != null -> showMessage(note)
-                !force -> {}
-                results.isEmpty() -> showMessage("No ${category.label} found here")
-                else -> showMessage("${results.size} ${category.label} \u00b7 tap one for details")
-            }
+        }
+    }
+
+    private fun onPoiResults(
+        slot: PoiSlot, gen: Int, cat: PoiCategory, results: List<PoiPlace>?, error: String?, note: String?,
+        serverFailed: Boolean, announce: Boolean, where: String
+    ) {
+        if (gen != slot.gen || isDestroyed) return
+        val mine = slot === selSlot
+        val button = findViewById<ImageButton>(R.id.poi_toggle_button)
+        if (results == null) {
+            // Allowed again when asked, or after a pause (1, 2, then 5 min).
+            slot.key = null
+            slot.failures++
+            slot.retryAtMs = System.currentTimeMillis() + when (slot.failures) { 1 -> 60_000L; 2 -> 120_000L; else -> 300_000L }
+            if (mine) setPoiButtonStatus(button, false)
+            // One error per refresh: the emergency layer speaks only if yours did not fail.
+            if (mine || selSlot.category == null || selSlot.key != null) showError(error ?: "Places search failed", retry = { queryPois(force = true) })
+            return
+        }
+        if (serverFailed) {
+            slot.failures++
+            slot.retryAtMs = System.currentTimeMillis() + when (slot.failures) { 1 -> 60_000L; 2 -> 120_000L; else -> 300_000L }
+        } else {
+            slot.failures = 0
+            slot.retryAtMs = 0L
+        }
+        slot.results = results
+        refreshPoiPins()
+        if (mine) setPoiButtonStatus(button, results.isNotEmpty())
+        when {
+            note != null -> showMessage(note)
+            !announce -> {}
+            results.isEmpty() -> showMessage("No ${cat.label} $where")
+            else -> showMessage("${results.size} ${cat.label} $where \u00b7 tap one for details")
         }
     }
 
@@ -2452,8 +2532,10 @@ class MainActivity : AppCompatActivity() {
         syncDrivingModeUI()
         saveToggleState()
         rerouteIfPossible("${mode.label} mode selected")
-        // Sights within reach depend on the travel mode.
-        if (TripState.plan == null && currentPoiCategory == PoiCategory.SIGHTS) refreshTourist()
+        // Reach and detour distances depend on the travel mode.
+        if (TripState.plan == null && touristOn) refreshTourist()
+        // With a route the new plan brings its own search (drawPlan).
+        if (TripState.plan == null) queryPois(force = true)
     }
 
     private fun refreshModeButtonHighlight() {
@@ -2509,22 +2591,25 @@ class MainActivity : AppCompatActivity() {
             }
             urgencyButton.setImageResource(urgencyMode.iconRes)
             showMessage(
-                if (urgencyMode == UrgencyMode.WEEKEND) "Weekend mode selected \u00b7 showing well-known places"
-                else "${urgencyMode.name.lowercase().replaceFirstChar { it.uppercase() }} mode selected"
+                when (urgencyMode) {
+                    UrgencyMode.WEEKEND -> "Weekend mode \u00b7 well-known places shown"
+                    UrgencyMode.WORK -> "Work mode \u00b7 only your POI category, short detours"
+                    UrgencyMode.EMERGENCY -> "Emergency mode \u00b7 hospitals, police, fire stations shown"
+                }
             )
             saveToggleState()
             touristModeChanged()
-
-            if (urgencyMode == UrgencyMode.EMERGENCY && currentPoiCategory != PoiCategory.EMERGENCY) {
-                // Sights category (if any) replaced by Emergency.
-                selectPoiCategory(PoiCategory.EMERGENCY)
-            }
+            // 1.0.9: Emergency adds the emergency places on its own (your
+            // category stays); Weekend / Work change the detour allowed.
+            refreshSightsOrigin()
 
             val start = resolveStartPoint()
             val end = TripState.destination
             if (start != null && end != null && currentMode == ModeUi.DRIVING && currentPreference == PreferenceUi.RECOMMENDED) {
                 showMessage("Finding route...")
-                requestBestRoute(start, end)
+                requestBestRoute(start, end) // the new plan searches its places
+            } else {
+                queryPois(force = true)
             }
         }
         // Hold: list of well-known places (Weekend).
@@ -2560,8 +2645,9 @@ class MainActivity : AppCompatActivity() {
             settingsOpen = false
             if (isDestroyed) return
             loadSettings()
-            // A new Sights reach time applies at once.
-            if (TripState.plan == null && currentPoiCategory == PoiCategory.SIGHTS) refreshTourist()
+            // A new reach time / detour applies at once.
+            if (touristOn) refreshTourist(force = true)
+            queryPois(force = true)
             // Map style changed (day/night itself rebuilds the screen).
             val m = map
             if (m != null && loadedStyleUrl != null && loadedStyleUrl != Prefs.mapStyleUrl(this@MainActivity)) loadStyle(m)
@@ -2797,6 +2883,7 @@ class MainActivity : AppCompatActivity() {
         routeInfo.visibility = View.GONE
         placeLayout()
         if (navUiActive) stopNavigationUi()
+        queryPois() // no route: places around you / the map centre again
         findViewById<ImageButton>(R.id.nav_go_button).visibility = View.GONE
         findViewById<ImageButton>(R.id.clear_route_button).visibility = View.GONE
         findViewById<LinearLayout>(R.id.route_options_row).apply {
@@ -2882,6 +2969,7 @@ class MainActivity : AppCompatActivity() {
 
         if (fit) fitCamera(results)
         if (tourist) refreshTourist()
+        queryPois() // places along this route (new key = new search)
         // Driving: the speed limits of the first stretch load before Go.
         if (currentMode == ModeUi.DRIVING) {
             // A new plan (not a redraw of the same one) may retry at once.

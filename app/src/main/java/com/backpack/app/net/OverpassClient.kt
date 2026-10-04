@@ -73,10 +73,45 @@ object OverpassClient {
         onSwitch: (() -> Unit)? = null,
         /** Heavy query (1.0.7 sights within reach): each server once, no second round. */
         singleRound: Boolean = false,
+        /** Speed limits of the road ahead: first in the queue. */
+        priority: Boolean = false,
+        /** Replaced search: skipped when its turn comes (answered with nothing). */
+        isStale: (() -> Boolean)? = null,
         done: (body: String?, failure: Failure?) -> Unit
     ) {
         val list = servers(c.applicationContext)
-        attempt(list, 0, round = 0, maxRounds = if (quick || singleRound) 1 else 2, query = query, quick = quick, lastFailure = null, onSwitch = onSwitch, done = done)
+        val rounds = if (quick || singleRound) 1 else 2
+        // Speed limits (quick) run on their own; every other query waits its
+        // turn, so places, sights and emergency layers never hold more than
+        // the 2 slots a user gets on the public servers (1.0.9).
+        if (quick) { attempt(list, 0, 0, rounds, query, true, null, onSwitch, done); return }
+        val job = HeavyJob(isStale, { done(null, null) }) { finished ->
+            attempt(list, 0, 0, rounds, query, false, null, onSwitch) { body, failure ->
+                done(body, failure)
+                finished()
+            }
+        }
+        main.post { if (priority) heavyQueue.addFirst(job) else heavyQueue.addLast(job); runNextHeavy() }
+    }
+
+    private class HeavyJob(val isStale: (() -> Boolean)?, val skip: () -> Unit, val run: (finished: () -> Unit) -> Unit)
+
+    private val heavyQueue = ArrayDeque<HeavyJob>()
+    private var heavyBusy = false
+    private var heavyRun = 0
+
+    /** Main thread only. One heavy query at a time; a watchdog frees the
+     *  queue if one never reports back (3 min). */
+    private fun runNextHeavy() {
+        while (!heavyBusy) {
+            val job = heavyQueue.removeFirstOrNull() ?: return
+            if (job.isStale?.invoke() == true) { job.skip(); continue }
+            heavyBusy = true
+            val run = ++heavyRun
+            val release = { if (heavyBusy && heavyRun == run) { heavyBusy = false; runNextHeavy() } }
+            main.postDelayed({ release() }, 180_000L)
+            job.run { main.post { release() } }
+        }
     }
 
     private fun attempt(
@@ -122,7 +157,8 @@ object OverpassClient {
         statusHttp.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) = go() // no status page: just try
             override fun onResponse(call: Call, response: Response) {
-                val text = response.use { if (it.isSuccessful) it.body?.string() else null }
+                // A broken read must still go on (else the query never runs).
+                val text = try { response.use { if (it.isSuccessful) it.body?.string() else null } } catch (e: Exception) { null }
                 val wait = text?.let { OverpassCheck.statusWait(it) }
                 statusMemo[server] = System.currentTimeMillis() to wait
                 when {
@@ -147,7 +183,9 @@ object OverpassClient {
 
             override fun onResponse(call: Call, response: Response) {
                 val code = response.code
-                val body = response.use { if (it.isSuccessful) it.body?.string() else null }
+                // A timeout / reset while reading counts as a failed server, never a lost answer.
+                val body = try { response.use { if (it.isSuccessful) it.body?.string() else null } }
+                    catch (e: Exception) { next(Failure.TIMEOUT); return }
                 when {
                     body == null -> {
                         if (code == 429) statusMemo[server] = System.currentTimeMillis() to 60
