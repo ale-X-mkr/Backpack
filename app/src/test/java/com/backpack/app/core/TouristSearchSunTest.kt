@@ -92,7 +92,7 @@ class TouristSearchSunTest {
         assertTrue(q.contains("nwr(around:4000,45.000,6.000,"))
         assertTrue(q.contains("out center tags;"))
         assertTrue(q.contains("out center tags"))
-        assertEquals(4, Regex("nwr\\(around").findAll(q).count())
+        assertEquals(12, Regex("nwr\\(around").findAll(q).count()) // 1.1.0: 12 kinds of places
         val trimmed = Tourist.trimEnds(pts)
         assertTrue(Geo.distance(trimmed.first(), pts.first()) >= 500.0)
         assertTrue(Geo.distance(trimmed.last(), pts.last()) >= 500.0)
@@ -174,7 +174,7 @@ class WeekendAndOverpassTest {
 
     @Test fun multiCorridorQueryHasAllLines() {
         val q = Tourist.corridorQueryMulti(listOf(listOf(start, Geo.project(start, 0.0, 500.0)), listOf(start)), 1500)
-        org.junit.Assert.assertEquals(8, Regex("nwr\\(around:1500,").findAll(q).count())
+        org.junit.Assert.assertEquals(24, Regex("nwr\\(around:1500,").findAll(q).count())
     }
 
     @Test fun overpassRuntimeErrorIsAFailure() {

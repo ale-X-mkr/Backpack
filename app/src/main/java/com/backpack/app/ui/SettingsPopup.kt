@@ -301,6 +301,10 @@ object SettingsPopup {
         p.section("Places and speed limits (Overpass)")
         urlField(p, prefs, "Own Overpass server, tried first (optional)", Settings.KEY_OVERPASS_URL, "https://.../api/interpreter")
         p.text("Without it: overpass-api.de, then overpass.private.coffee. Each server's free capacity is checked before asking.", 11f)
+        p.toggle("Also use VK Maps (maps.mail.ru, no limits, run in Russia)", { prefs.getBoolean(Settings.KEY_OVERPASS_VK, false) }) {
+            prefs.edit().putBoolean(Settings.KEY_OVERPASS_VK, it).apply()
+        }
+        p.text("Off by default: the areas you look at would also go to a server in Russia. Tried last.", 11f)
         p.section("Privacy")
         p.text("No account, no tracking. Routing gets the trip's points; places servers only the ~5 km squares looked at; " +
             "speed limits the road ahead. Search positions are rounded to ~1 km. Nothing about your trips is stored, except the places cache (Places page).", 11f)

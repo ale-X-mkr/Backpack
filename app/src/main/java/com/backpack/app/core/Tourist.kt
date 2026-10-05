@@ -9,7 +9,13 @@ enum class TouristCategory(val label: String) {
     MUSEUM("Museum"),
     HISTORIC("Historic"),
     VIEWPOINT("Viewpoint"),
-    NATURE("Nature")
+    NATURE("Nature"),
+    /** 1.1.0: waterfalls, springs, hot springs, geysers. */
+    WATER("Waterfall / spring"),
+    /** 1.1.0: national parks, nature reserves, protected areas. */
+    PARK("Nature park"),
+    /** 1.1.0: UNESCO World Heritage. */
+    HERITAGE("World Heritage")
 }
 
 data class TouristPoi(
@@ -29,8 +35,14 @@ data class TouristPoi(
     /** Position along the route (0 without a route). */
     val alongM: Double = 0.0,
     /** Article found through Wikidata when the OSM data has no wikipedia tag. */
-    val articleUrl: String? = null
+    val articleUrl: String? = null,
+    /** 1.1.0: Wikivoyage travel guide page, when there is one. */
+    val voyageUrl: String? = null
 ) {
+    /** Same place twice (area and point, or two sources): one key. Named
+     *  natural spots without Wikidata (1.1.0) use their OSM key. */
+    val identity: String get() = wikidata.ifEmpty { key }
+
     /** 0..3 stars from how widely it is written about. */
     val stars: Int get() = when {
         sitelinks >= 50 -> 3
@@ -55,11 +67,21 @@ data class TouristPoi(
  */
 object Tourist {
 
+    // 1.1.0: more kinds (water, parks, UNESCO, lighthouses, city walls...),
+    // and named natural spots without a Wikipedia article (ranked lower).
     private const val FILTERS = """
  ["tourism"~"^(attraction|museum|gallery|viewpoint|theme_park|zoo|aquarium)$"]["wikidata"];
- ["historic"~"^(castle|monument|ruins|archaeological_site|fort|manor|city_gate|palace|tower|monastery)$"]["wikidata"];
- ["natural"~"^(peak|waterfall|cave_entrance|volcano|glacier|arch|beach|gorge)$"]["wikidata"];
- ["amenity"="place_of_worship"]["building"~"^(cathedral|basilica)$"]["wikidata"];"""
+ ["historic"~"^(castle|monument|ruins|archaeological_site|fort|manor|city_gate|palace|tower|monastery|citywalls|aqueduct|battlefield|church|tomb)$"]["wikidata"];
+ ["natural"~"^(peak|waterfall|cave_entrance|volcano|glacier|arch|beach|gorge|spring|hot_spring|geyser|cliff)$"]["wikidata"];
+ ["waterway"="waterfall"]["wikidata"];
+ ["man_made"="lighthouse"]["wikidata"];
+ ["boundary"~"^(national_park|protected_area)$"]["wikidata"];
+ ["leisure"="nature_reserve"]["wikidata"];
+ ["heritage:operator"="whc"]["name"];
+ ["amenity"="place_of_worship"]["building"~"^(cathedral|basilica)$"]["wikidata"];
+ ["natural"~"^(waterfall|hot_spring|geyser|cave_entrance|arch|gorge)$"]["name"][!"wikidata"];
+ ["waterway"="waterfall"]["name"][!"wikidata"];
+ ["tourism"="viewpoint"]["name"][!"wikidata"];"""
 
     /** Corridor half-width around the route, by travel mode. */
     fun corridorRadius(mode: TravelMode): Int = when (mode) {
@@ -193,7 +215,12 @@ object Tourist {
         val tourism = tags.optString("tourism", "")
         val historic = tags.optString("historic", "")
         val natural = tags.optString("natural", "")
+        val boundary = tags.optString("boundary", "")
         return when {
+            tags.optString("heritage:operator", "") == "whc" -> TouristCategory.HERITAGE
+            boundary == "national_park" || boundary == "protected_area" || tags.optString("leisure", "") == "nature_reserve" -> TouristCategory.PARK
+            natural in setOf("waterfall", "spring", "hot_spring", "geyser") || tags.optString("waterway", "") == "waterfall" -> TouristCategory.WATER
+            tags.optString("man_made", "") == "lighthouse" -> TouristCategory.HISTORIC
             tourism == "museum" || tourism == "gallery" -> TouristCategory.MUSEUM
             tourism == "viewpoint" -> TouristCategory.VIEWPOINT
             natural.isNotEmpty() && tourism.isEmpty() && historic.isEmpty() -> TouristCategory.NATURE
@@ -212,11 +239,13 @@ object Tourist {
         for (i in 0 until elements.length()) {
             val e = elements.getJSONObject(i)
             val tags = e.optJSONObject("tags") ?: continue
-            val wikidata = tags.optString("wikidata", "")
-            if (!wikidata.matches(Regex("Q[0-9]+"))) continue
             val name = tags.optString("name", "").ifBlank { tags.optString("name:en", "") }
             if (name.isBlank()) continue
+            // Without Wikidata only for the named natural spots / viewpoints / UNESCO lines.
+            val wikidata = tags.optString("wikidata", "").takeIf { it.matches(Regex("Q[0-9]+")) } ?: ""
             val category = classify(tags) ?: continue
+            // Without Wikidata: only natural spots, viewpoints and UNESCO sites (1.1.0).
+            if (wikidata.isEmpty() && category !in setOf(TouristCategory.WATER, TouristCategory.NATURE, TouristCategory.VIEWPOINT, TouristCategory.HERITAGE)) continue
             val center = e.optJSONObject("center")
             val lat = center?.optDouble("lat", Double.NaN) ?: e.optDouble("lat", Double.NaN)
             val lon = center?.optDouble("lon", Double.NaN) ?: e.optDouble("lon", Double.NaN)
@@ -234,7 +263,7 @@ object Tourist {
             )
         }
         // A castle mapped as both an area and a point: keep one.
-        return out.distinctBy { it.wikidata }
+        return out.distinctBy { it.identity }
     }
 
     /** Wikidata wbgetentities URL for up to 50 ids, sitelinks only. */
@@ -255,8 +284,9 @@ object Tourist {
         return out
     }
 
-    /** Popularity of a place and the best Wikipedia article to read about it. */
-    data class SiteInfo(val sitelinks: Int, val articleUrl: String?)
+    /** Popularity of a place, the best Wikipedia article to read about it,
+     *  and (1.1.0) its Wikivoyage travel guide page. */
+    data class SiteInfo(val sitelinks: Int, val articleUrl: String?, val voyageUrl: String? = null)
 
     /**
      * id -> sitelink count + article in the first of [languages] that has
@@ -274,9 +304,87 @@ object Tourist {
                 val title = links.optJSONObject(lang.replace('-', '_') + "wiki")?.optString("title", "").orEmpty()
                 if (title.isNotBlank()) { url = Places.wikipediaUrl("$lang:$title"); break }
             }
-            out[id] = SiteInfo(links.length(), url)
+            out[id] = SiteInfo(links.length(), url, voyageUrl(links, languages))
         }
         return out
+    }
+
+    /** 1.1.0: Wikivoyage page from a Wikidata sitelinks object, first language that has one. */
+    fun voyageUrl(links: JSONObject, languages: List<String>): String? {
+        for (lang in languages) {
+            val title = links.optJSONObject(lang.replace('-', '_') + "wikivoyage")?.optString("title", "").orEmpty()
+            if (title.isNotBlank()) {
+                return "https://$lang.wikivoyage.org/wiki/" + java.net.URLEncoder.encode(title.replace(' ', '_'), "UTF-8").replace("%2F", "/").replace("%3A", ":")
+            }
+        }
+        return null
+    }
+
+    // ---------- 1.1.0: Wikipedia "nearby" as a second source ----------
+
+    /** Wikipedia articles with coordinates around [center] (max 10 km),
+     *  with their Wikidata id. */
+    fun wikiNearbyUrl(lang: String, center: LatLon, radiusM: Int): String =
+        "https://$lang.wikipedia.org/w/api.php?action=query&format=json&generator=geosearch" +
+            "&ggscoord=%.5f%%7C%.5f".format(java.util.Locale.ROOT, center.lat, center.lon) +
+            "&ggsradius=${radiusM.coerceIn(10, 10000)}&ggslimit=50&prop=coordinates%7Cpageprops&ppprop=wikibase_item"
+
+    data class WikiHit(val wikidata: String, val title: String, val point: LatLon)
+
+    fun parseWikiNearby(body: String): List<WikiHit> {
+        val pages = JSONObject(body).optJSONObject("query")?.optJSONObject("pages") ?: return emptyList()
+        val out = mutableListOf<WikiHit>()
+        val keys = pages.keys()
+        while (keys.hasNext()) {
+            val p = pages.optJSONObject(keys.next()) ?: continue
+            val q = p.optJSONObject("pageprops")?.optString("wikibase_item", "").orEmpty()
+            val c = p.optJSONArray("coordinates")?.optJSONObject(0) ?: continue
+            if (!q.matches(Regex("Q[0-9]+"))) continue
+            out.add(WikiHit(q, p.optString("title", ""), LatLon(c.optDouble("lat"), c.optDouble("lon"))))
+        }
+        return out
+    }
+
+    /** Kinds of Wikidata items (P31, direct) that count as places to visit. */
+    val WIKIDATA_KINDS: Map<String, TouristCategory> = mapOf(
+        "Q570116" to TouristCategory.SIGHT, "Q4989906" to TouristCategory.HISTORIC, "Q23413" to TouristCategory.HISTORIC,
+        "Q16560" to TouristCategory.HISTORIC, "Q57821" to TouristCategory.HISTORIC, "Q839954" to TouristCategory.HISTORIC,
+        "Q109607" to TouristCategory.HISTORIC, "Q44613" to TouristCategory.HISTORIC, "Q160742" to TouristCategory.HISTORIC,
+        "Q2977" to TouristCategory.HISTORIC, "Q16970" to TouristCategory.HISTORIC, "Q39715" to TouristCategory.HISTORIC,
+        "Q12518" to TouristCategory.HISTORIC, "Q33506" to TouristCategory.MUSEUM, "Q207694" to TouristCategory.MUSEUM,
+        "Q34038" to TouristCategory.WATER, "Q124714" to TouristCategory.WATER, "Q177380" to TouristCategory.WATER,
+        "Q8502" to TouristCategory.NATURE, "Q35509" to TouristCategory.NATURE, "Q40080" to TouristCategory.NATURE,
+        "Q8072" to TouristCategory.NATURE, "Q46169" to TouristCategory.PARK, "Q179049" to TouristCategory.PARK,
+        "Q6017969" to TouristCategory.VIEWPOINT, "Q9259" to TouristCategory.HERITAGE
+    )
+
+    /** SPARQL for the direct kinds (P31) of [ids] (Wikidata Query Service). */
+    fun kindsQuery(ids: List<String>): String =
+        "SELECT ?item ?kind WHERE { VALUES ?item { " + ids.joinToString(" ") { "wd:$it" } + " } ?item wdt:P31 ?kind . }"
+
+    /** id -> category, only for the kinds above (heritage wins, then the first found). */
+    fun parseKinds(body: String): Map<String, TouristCategory> {
+        val rows = JSONObject(body).optJSONObject("results")?.optJSONArray("bindings") ?: return emptyMap()
+        val out = HashMap<String, TouristCategory>()
+        for (i in 0 until rows.length()) {
+            val r = rows.getJSONObject(i)
+            val item = r.optJSONObject("item")?.optString("value", "").orEmpty().substringAfterLast('/')
+            val kind = r.optJSONObject("kind")?.optString("value", "").orEmpty().substringAfterLast('/')
+            val cat = WIKIDATA_KINDS[kind] ?: continue
+            if (out[item] == null || cat == TouristCategory.HERITAGE) out[item] = cat
+        }
+        return out
+    }
+
+    /** 1.1.0: Nominatim reverse (town level) -> (name, Wikidata id) for the destination's travel guide. */
+    fun parseReverseTown(body: String): Pair<String, String?>? {
+        val o = JSONObject(body)
+        val name = o.optString("name", "").ifBlank { o.optJSONObject("address")?.let { a ->
+            listOf("city", "town", "village", "municipality").map { a.optString(it, "") }.firstOrNull { it.isNotBlank() }
+        }.orEmpty() }
+        if (name.isBlank()) return null
+        val q = o.optJSONObject("extratags")?.optString("wikidata", "").orEmpty().takeIf { it.matches(Regex("Q[0-9]+")) }
+        return name to q
     }
 
     /** Adds distance from / position along the route. */

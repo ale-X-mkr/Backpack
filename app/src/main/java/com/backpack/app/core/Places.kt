@@ -82,6 +82,18 @@ object Places {
         "hospital" -> "Hospital"
         "police" -> "Police"
         "fire_station" -> "Fire station"
+        "drinking_water" -> "Drinking water"
+        "hostel" -> "Hostel"
+        "camp_site" -> "Campsite"
+        "alpine_hut", "wilderness_hut" -> "Mountain hut"
+        "caravan_site" -> "Caravan site"
+        "laundry" -> "Laundry"
+        "dry_cleaning" -> "Dry cleaning"
+        "pharmacy" -> "Pharmacy"
+        "atm" -> "ATM"
+        "bureau_de_change" -> "Money exchange"
+        "bank" -> "Bank"
+        "bicycle" -> "Bike shop / repair"
         "" -> "Place"
         else -> kind.replace('_', ' ').replaceFirstChar { it.uppercase() }
     }

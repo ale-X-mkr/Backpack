@@ -128,7 +128,15 @@ class MainActivity : AppCompatActivity() {
             mapOf(596 to "fuel", 593 to "charging_station"), 0xFF1E6B2E.toInt()),
         TOILETS("[\"amenity\"=\"toilets\"]", R.drawable.ic_poi_toilets, "poi_toilets", "Toilets", mapOf(179 to "toilets"), 0xFF1F78B4.toInt()),
         EMERGENCY("[\"amenity\"~\"^(hospital|police|fire_station)$\"]", R.drawable.ic_poi_emergency, "poi_emergency", "Emergency",
-            mapOf(206 to "hospital", 369 to "police", 367 to "fire_station"), 0xFFE51401.toInt());
+            mapOf(206 to "hospital", 369 to "police", 367 to "fire_station"), 0xFFE51401.toInt()),
+        // 1.1.0: backpacker essentials (OpenStreetMap only).
+        WATER("[\"amenity\"=\"drinking_water\"]", R.drawable.ic_poi_water, "poi_water", "Drinking water", emptyMap(), 0xFF0097A7.toInt()),
+        SLEEP("[\"tourism\"~\"^(hostel|camp_site|alpine_hut|wilderness_hut|caravan_site)$\"]", R.drawable.ic_poi_sleep, "poi_sleep", "Hostel / camping", emptyMap(), 0xFF6D4C41.toInt()),
+        LAUNDRY("[\"shop\"~\"^(laundry|dry_cleaning)$\"]", R.drawable.ic_poi_laundry, "poi_laundry", "Laundry", emptyMap(), 0xFF5E35B1.toInt()),
+        PHARMACY("[\"amenity\"=\"pharmacy\"]", R.drawable.ic_poi_pharmacy, "poi_pharmacy", "Pharmacy", emptyMap(), 0xFF00897B.toInt()),
+        MONEY("[\"amenity\"~\"^(atm|bureau_de_change|bank)$\"]", R.drawable.ic_poi_money, "poi_money", "ATM / exchange", emptyMap(), 0xFF827717.toInt()),
+        WIFI("[\"internet_access\"~\"^(wlan|yes|wifi)$\"][\"internet_access:fee\"!=\"yes\"]", R.drawable.ic_poi_wifi, "poi_wifi", "Free Wi-Fi", emptyMap(), 0xFF3949AB.toInt()),
+        BIKE("[\"shop\"=\"bicycle\"]", R.drawable.ic_poi_bike, "poi_bike", "Bike repair", emptyMap(), 0xFFEF6C00.toInt());
 
         fun finderCategory() = PlacesFinder.Category(name, overpassFilter, orsIds)
     }
@@ -442,6 +450,8 @@ class MainActivity : AppCompatActivity() {
             // A tap on the map closes the search box, nothing else.
             if (searchOpen) { closeSearch(); return@addOnMapClickListener true }
             val screen = m.projection.toScreenLocation(p)
+            // 1.1.0: the destination pin: its town's travel guide.
+            if (layers.pinAt(m, screen) == "dest") { showDestinationGuide(); return@addOnMapClickListener true }
             val touristKey = layers.touristAt(m, screen)
             val tourist = touristKey?.let { k -> touristResults.firstOrNull { it.key == k } }
             if (tourist != null) {
@@ -1318,10 +1328,28 @@ class MainActivity : AppCompatActivity() {
         p.show()
     }
 
+    /** 1.1.0: destination pin tapped: the town's Wikivoyage guide, if any. */
+    private fun showDestinationGuide() {
+        val dest = TripState.destination ?: return
+        showMessage("Looking for a travel guide...")
+        com.backpack.app.tourist.TravelGuide.forPoint(dest) { name, url ->
+            if (isDestroyed) return@forPoint
+            val p = Popup(this, name ?: "Destination")
+            when {
+                url != null -> { p.text("Travel guide for $name, written by travellers (Wikivoyage, CC BY-SA)."); p.link("Open the travel guide", url) }
+                name != null -> p.text("No Wikivoyage travel guide for $name yet.")
+                else -> p.text("No travel guide found (no town here, or no connection).")
+            }
+            p.button("Close", primary = true) { p.dismiss() }
+            p.show()
+        }
+    }
+
     private fun showTouristPlace(poi: TouristPoi) {
         val known = if (poi.sitelinks > 0) " \u00b7 written about on ${poi.sitelinks} Wikipedia/Wikimedia sites" else ""
         showPlacePopup(poi.name, "${starsText(poi.stars)}${poi.category.label}$known", poi.point,
-            poi.readMoreUrl, if (poi.wikipediaUrl != null || poi.articleUrl != null) "Read about it on Wikipedia" else "Read about it on Wikidata")
+            poi.readMoreUrl, if (poi.wikipediaUrl != null || poi.articleUrl != null) "Read about it on Wikipedia" else "Read about it on Wikidata",
+            poi.voyageUrl)
     }
 
     private fun showPoiPlace(place: PoiPlace) {
@@ -1341,7 +1369,7 @@ class MainActivity : AppCompatActivity() {
      * then the router's exact value), a link to read about it, and
      * Go here / Add stop.
      */
-    private fun showPlacePopup(title: String, detail: String, point: LatLon, readMoreUrl: String?, linkLabel: String) {
+    private fun showPlacePopup(title: String, detail: String, point: LatLon, readMoreUrl: String?, linkLabel: String, voyageUrl: String? = null) {
         val p = Popup(this, title)
         p.text(detail)
         val route = touristRoute()
@@ -1369,6 +1397,7 @@ class MainActivity : AppCompatActivity() {
         }
         // Tap to read about it in the browser.
         readMoreUrl?.let { p.link(linkLabel, it) }
+        voyageUrl?.let { p.link("Travel guide (Wikivoyage)", it) }
         if (end != null && !passed) p.button("Add stop", primary = true) { p.dismiss(); addStopFlow(point, title) }
         p.button("Go here", primary = end == null) { p.dismiss(); goHere(point, title) }
         p.button("Close") { p.dismiss() }

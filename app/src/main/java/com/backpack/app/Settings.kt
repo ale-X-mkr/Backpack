@@ -19,6 +19,8 @@ object Settings {
     const val KEY_ORS_URL = "ors_url"
     const val KEY_ORS_KEY = "ors_key"
     const val KEY_OVERPASS_URL = "overpass_url"
+    /** 1.1.0: VK Maps public Overpass mirror, opt-in. */
+    const val KEY_OVERPASS_VK = "overpass_vk"
     const val KEY_SIGHTS_MAX_PCT = "weekend_sights_max_pct"
     /** 1.0.7: Sights category reach, minutes (30 / 60 / 120). */
     const val KEY_SIGHTS_REACH_MIN = "sights_reach_minutes"

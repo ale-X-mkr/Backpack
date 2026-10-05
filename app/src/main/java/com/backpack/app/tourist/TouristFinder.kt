@@ -49,7 +49,8 @@ class TouristFinder(context: Context) {
 
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
-    private val cache = TileCache.of(app, "sights", 14L * DAY_MS)
+    // 1.1.0: new kinds of places -> a new cache (the old squares lack them).
+    private val cache = TileCache.of(app, "sights2", 14L * DAY_MS)
     @Volatile private var generation = 0
 
     fun cancel() { generation++ }
@@ -111,11 +112,16 @@ class TouristFinder(context: Context) {
                 OverpassClient.query(app, Tourist.reachQuery(ring), onSwitch = { if (gen == generation) onSwitch() }, singleRound = true) { body, failure ->
                     store.execute {
                         val parsed = body?.let { try { Tourist.parseOverpass(it) } catch (e: Exception) { null } }
-                        if (parsed == null) {
+                        val list = parsed ?: run {
+                            // 1.1.0: Overpass failed: Wikipedia's nearby articles around the centre.
+                            val b = Reach.bounds(ring)
+                            wikiNearby(gen, listOf(LatLon((b[0] + b[2]) / 2, (b[1] + b[3]) / 2))).ifEmpty { null }
+                        }
+                        if (list == null) {
                             deliver(null, if (body == null) failure?.message ?: "Places search failed" else OverpassClient.Failure.BAD_ANSWER.message)
                             return@execute
                         }
-                        val inside = parsed.distinctBy { it.wikidata }.filter { Reach.contains(ring, it.point) }
+                        val inside = list.distinctBy { it.identity }.filter { Reach.contains(ring, it.point) }
                         synchronized(reachMemory) { reachMemory = key to inside }
                         if (gen == generation) withPopularity(gen, inside) { deliver(it, null) }
                     }
@@ -174,11 +180,26 @@ class TouristFinder(context: Context) {
             if (list != null) found.addAll(list) else if (error == null) error = "Places search failed"
         }
         if (gen != generation) return
+        // 1.1.0: Overpass failed (part): Wikipedia's nearby articles fill in.
+        if (error != null) {
+            val probes = when {
+                lines.isNotEmpty() -> lines.first().let { l ->
+                    val step = maxOf(10_000.0, l.length / 4)
+                    generateSequence(0.0) { it + step }.takeWhile { it <= l.length }.take(5)
+                        .map { com.backpack.app.core.SpeedLimits.pointAt(l, it) }.toList()
+                }
+                ring != null -> Reach.bounds(ring).let { b -> listOf(LatLon((b[0] + b[2]) / 2, (b[1] + b[3]) / 2)) }
+                box != null -> listOf(LatLon((box[0] + box[2]) / 2, (box[1] + box[3]) / 2))
+                else -> emptyList()
+            }
+            val extra = wikiNearby(gen, probes)
+            if (extra.isNotEmpty()) { found.addAll(extra); error = null }
+        }
         if (found.isEmpty() && error != null) { deliver(null, error); return }
 
         // Inside the corridor (or the box) only; distance to the NEAREST line,
         // so places along an alternative count as much as along the first route.
-        val inside = found.distinctBy { it.wikidata }.mapNotNull { p ->
+        val inside = found.distinctBy { it.identity }.mapNotNull { p ->
             if (lines.isEmpty()) {
                 if (ring != null) { if (Reach.contains(ring, p.point)) p else null }
                 else if (box != null && (p.point.lat < box[0] || p.point.lat > box[2] || p.point.lon < box[1] || p.point.lon > box[3])) null else p
@@ -195,7 +216,7 @@ class TouristFinder(context: Context) {
         val known = SiteInfoStore.load(app)
         // Keep the Wikidata request small: with a Wikipedia tag first, then
         // areas (castles, cathedrals...) before points, then closest to the route.
-        val ask = pois.filter { it.wikidata !in known }
+        val ask = pois.filter { it.wikidata.isNotEmpty() && it.wikidata !in known }
             .sortedWith(compareBy<TouristPoi> { if (it.wikipedia != null) 0 else 1 }
                 .thenBy { if (it.key.startsWith("n")) 1 else 0 }
                 .thenBy { it.offsetM })
@@ -204,7 +225,7 @@ class TouristFinder(context: Context) {
             done(pois.map { p ->
                 val i = info[p.wikidata] ?: known[p.wikidata]
                 // Unknown (Wikidata unreachable): "has a Wikipedia tag" counts as known.
-                p.copy(sitelinks = i?.sitelinks ?: if (p.wikipedia != null) 1 else 0, articleUrl = i?.articleUrl)
+                p.copy(sitelinks = i?.sitelinks ?: if (p.wikipedia != null) 1 else 0, articleUrl = i?.articleUrl, voyageUrl = i?.voyageUrl)
             })
         }
         if (ask.isEmpty() || gen != generation) { finish(emptyMap()); return }
@@ -264,6 +285,42 @@ class TouristFinder(context: Context) {
         return outcome
     }
 
+    /**
+     * 1.1.0 second source, blocking (worker / store thread): Wikipedia
+     * articles with coordinates near [probes] (10 km each), kept only when
+     * Wikidata says they are a place to visit (castle, museum, waterfall...).
+     */
+    private fun wikiNearby(gen: Int, probes: List<LatLon>): List<TouristPoi> {
+        if (probes.isEmpty()) return emptyList()
+        val lang = when (val l = java.util.Locale.getDefault().language) { "in" -> "id"; "iw" -> "he"; "nb" -> "no"; else -> l }.ifBlank { "en" }
+        fun get(url: String): String? = try {
+            RoutePlanner.http.newCall(Request.Builder().url(url).addHeader("User-Agent", OverpassClient.USER_AGENT)
+                .addHeader("Accept", "application/json").build()).execute().use { if (it.isSuccessful) it.body?.string() else null }
+        } catch (e: Exception) { null }
+        val hits = LinkedHashMap<String, Pair<Tourist.WikiHit, String>>()
+        for (p in probes) {
+            if (gen != generation) return emptyList()
+            for (l in listOf(lang, "en").distinct()) {
+                val body = get(Tourist.wikiNearbyUrl(l, p, 10_000)) ?: continue
+                val list = try { Tourist.parseWikiNearby(body) } catch (e: Exception) { emptyList() }
+                for (h in list) if (h.wikidata !in hits) hits[h.wikidata] = h to l
+                if (list.isNotEmpty()) break
+            }
+        }
+        if (hits.isEmpty()) return emptyList()
+        val kinds = HashMap<String, com.backpack.app.core.TouristCategory>()
+        for (chunk in hits.keys.toList().chunked(100)) {
+            if (gen != generation) return emptyList()
+            val url = "https://query.wikidata.org/sparql?format=json&query=" +
+                java.net.URLEncoder.encode(Tourist.kindsQuery(chunk), "UTF-8")
+            get(url)?.let { b -> try { kinds.putAll(Tourist.parseKinds(b)) } catch (e: Exception) { } }
+        }
+        return hits.values.mapNotNull { (h, l) ->
+            val cat = kinds[h.wikidata] ?: return@mapNotNull null
+            TouristPoi("q" + h.wikidata, h.title, h.point, cat, h.wikidata, "$l:${h.title}")
+        }
+    }
+
     /** Waits for [latch]; false when this search was replaced meanwhile. */
     private fun await(gen: Int, latch: CountDownLatch): Boolean {
         while (!latch.await(500, TimeUnit.MILLISECONDS)) if (gen != generation) return false
@@ -315,7 +372,7 @@ internal object SiteInfoStore {
             val o = JSONObject()
             for ((id, v) in m) {
                 val a = JSONArray().put(v.first).put(v.second.sitelinks)
-                v.second.articleUrl?.let { a.put(it) }
+                    .put(v.second.articleUrl ?: "").put(v.second.voyageUrl ?: "")
                 o.put(id, a)
             }
             File(c.cacheDir, "places").mkdirs()
@@ -336,7 +393,7 @@ internal object SiteInfoStore {
             while (keys.hasNext()) {
                 val id = keys.next()
                 val a = o.optJSONArray(id) ?: continue
-                out[id] = a.optLong(0) to Tourist.SiteInfo(a.optInt(1), a.optString(2, "").ifBlank { null })
+                out[id] = a.optLong(0) to Tourist.SiteInfo(a.optInt(1), a.optString(2, "").ifBlank { null }, a.optString(3, "").ifBlank { null })
             }
         } catch (e: Exception) { }
         return out

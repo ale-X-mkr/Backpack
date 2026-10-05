@@ -58,7 +58,14 @@ class MapLayers(private val context: Context) {
         "poi_lodging" to R.drawable.ic_poi_lodging,
         "poi_parking" to R.drawable.ic_poi_parking,
         "poi_toilets" to R.drawable.ic_poi_toilets,
-        "poi_emergency" to R.drawable.ic_poi_emergency
+        "poi_emergency" to R.drawable.ic_poi_emergency,
+        "poi_water" to R.drawable.ic_poi_water,
+        "poi_sleep" to R.drawable.ic_poi_sleep,
+        "poi_laundry" to R.drawable.ic_poi_laundry,
+        "poi_pharmacy" to R.drawable.ic_poi_pharmacy,
+        "poi_money" to R.drawable.ic_poi_money,
+        "poi_wifi" to R.drawable.ic_poi_wifi,
+        "poi_bike" to R.drawable.ic_poi_bike
     )
 
     fun install(style: Style) {
@@ -215,6 +222,13 @@ class MapLayers(private val context: Context) {
         val r = 18f * context.resources.displayMetrics.density
         val box = RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r)
         return map.queryRenderedFeatures(box, LAYER_POI).firstOrNull()?.getStringProperty("id")
+    }
+
+    /** 1.1.0: id of the pin (start, stop, destination) under the finger, or null. */
+    fun pinAt(map: MapLibreMap, screen: PointF): String? {
+        val r = 18f * context.resources.displayMetrics.density
+        val box = RectF(screen.x - r, screen.y - r, screen.x + r, screen.y + r)
+        return map.queryRenderedFeatures(box, LAYER_PINS).firstOrNull()?.getStringProperty("id")
     }
 
     fun setPins(pins: List<Pin>) {
@@ -384,7 +398,11 @@ class MapLayers(private val context: Context) {
             TouristCategory.MUSEUM to 0xFF6A1B9A.toInt(),
             TouristCategory.HISTORIC to 0xFF8D5524.toInt(),
             TouristCategory.VIEWPOINT to 0xFF00796B.toInt(),
-            TouristCategory.NATURE to 0xFF2E7D32.toInt()
+            TouristCategory.NATURE to 0xFF2E7D32.toInt(),
+            // 1.1.0
+            TouristCategory.WATER to 0xFF0277BD.toInt(),
+            TouristCategory.PARK to 0xFF33691E.toInt(),
+            TouristCategory.HERITAGE to 0xFFB8860B.toInt()
         )
         private const val LAYER_ALT_CASING = "bp-alt-casing"
         const val LAYER_ALT = "bp-alt"

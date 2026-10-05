@@ -1,0 +1,12 @@
+<!-- 1.1.0 POI category icon (laundry). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#5E35B1">
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="evenOdd"
+        android:pathData="M5,2h14c0.55,0 1,0.45 1,1v18c0,0.55 -0.45,1 -1,1H5c-0.55,0 -1,-0.45 -1,-1V3c0,-0.55 0.45,-1 1,-1zM12,8.5a5,5 0,1 0,0.001 0zM7,4a1,1 0,1 0,0.001 0zM10,4a1,1 0,1 0,0.001 0z" />
+</vector>

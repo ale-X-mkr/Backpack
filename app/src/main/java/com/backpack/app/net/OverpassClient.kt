@@ -34,6 +34,8 @@ object OverpassClient {
 
     const val MAIN = "https://overpass-api.de/api/interpreter"
     const val PRIVATE_COFFEE = "https://overpass.private.coffee/api/interpreter"
+    /** 1.1.0: listed on the OSM wiki, no limits; opt-in (Settings > Servers). */
+    const val VK_MAPS = "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
     const val USER_AGENT = "Backpack/1.0 (private Android navigation app; OpenStreetMap data)"
 
     private val main = Handler(Looper.getMainLooper())
@@ -57,9 +59,10 @@ object OverpassClient {
     }
 
     fun servers(c: Context): List<String> {
-        val own = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(Settings.KEY_OVERPASS_URL, "")?.trim().orEmpty()
-        return (listOf(own) + listOf(MAIN, PRIVATE_COFFEE)).filter { it.startsWith("https://") || it.startsWith("http://") }.distinct()
+        val prefs = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
+        val own = prefs.getString(Settings.KEY_OVERPASS_URL, "")?.trim().orEmpty()
+        val vk = if (prefs.getBoolean(Settings.KEY_OVERPASS_VK, false)) listOf(VK_MAPS) else emptyList()
+        return (listOf(own) + listOf(MAIN, PRIVATE_COFFEE) + vk).filter { it.startsWith("https://") || it.startsWith("http://") }.distinct()
     }
 
     /**
