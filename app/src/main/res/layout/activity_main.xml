@@ -635,11 +635,27 @@
         android:textSize="16sp"
         android:textColor="#FF1A1A1A"
         android:textColorHint="#6B7280"
-        android:paddingHorizontal="12dp"
+        android:paddingStart="12dp"
         android:paddingVertical="0dp"
+        android:paddingEnd="38dp"
         android:imeOptions="actionSearch"
         android:inputType="text"
         android:singleLine="true" />
+
+    <!-- 1.1.1: voice search (the phone's own recognizer), inside the search box. -->
+    <ImageButton
+        android:id="@+id/search_mic"
+        android:scaleType="fitCenter"
+        android:layout_width="29dp"
+        android:layout_height="29dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginBottom="68dp"
+        android:layout_marginEnd="10dp"
+        android:src="@drawable/ic_mic"
+        android:background="@null"
+        android:padding="4dp"
+        android:contentDescription="Voice search"
+        android:visibility="gone" />
 
     <ImageButton
         android:id="@+id/search_button"

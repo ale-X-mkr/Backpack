@@ -817,6 +817,10 @@ class MainActivity : AppCompatActivity() {
         setIconActive(searchButton, false)
         // 1.0.4: the magnifier opens / closes the floating search box.
         searchButton.setOnClickListener { if (searchOpen) closeSearch() else openSearch() }
+        findViewById<ImageButton>(R.id.search_mic).apply {
+            setIconActive(this, true)
+            setOnClickListener { startVoiceSearch() }
+        }
         searchInput.setOnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) hideSuggestions()
         }
@@ -827,6 +831,7 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(e: android.text.Editable?) {
                 suggestRunnable?.let { handler.removeCallbacks(it) }
                 val text = e?.toString()?.trim().orEmpty()
+                if (text.isEmpty() && searchInput.hasFocus()) { searchClient.cancel(); showRecent(); return }
                 if (text.length < 3 || !searchInput.hasFocus()) {
                     searchClient.cancel()
                     hideSuggestions()
@@ -860,8 +865,10 @@ class MainActivity : AppCompatActivity() {
         val searchInput = findViewById<EditText>(R.id.search_input)
         searchInput.visibility = View.VISIBLE
         setIconActive(findViewById(R.id.search_button), true)
+        findViewById<View>(R.id.search_mic).visibility = if (voiceAvailable()) View.VISIBLE else View.GONE
         placeLayout()
         searchInput.requestFocus()
+        if (searchInput.text.isNullOrBlank()) showRecent()
         searchInput.post {
             (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager)
                 .showSoftInput(searchInput, InputMethodManager.SHOW_IMPLICIT)
@@ -876,6 +883,7 @@ class MainActivity : AppCompatActivity() {
         hideSuggestions()
         closeSearchKeyboard()
         findViewById<View>(R.id.search_input).visibility = View.GONE
+        findViewById<View>(R.id.search_mic).visibility = View.GONE
         setIconActive(findViewById(R.id.search_button), false)
         placeLayout()
     }
@@ -971,6 +979,7 @@ class MainActivity : AppCompatActivity() {
      *  (Go here / Add stop), the trip is not replaced by itself. */
     private fun goToPlace(place: com.backpack.app.core.Place) {
         closeSearch()
+        addRecent(place)
         val point = place.point
         if (NavigationEngine.isActive) {
             if (overviewOn) scheduleOverviewReturn()
@@ -988,7 +997,80 @@ class MainActivity : AppCompatActivity() {
             .hideSoftInputFromWindow(searchInput.windowToken, 0)
     }
 
-    private fun showSuggestions(places: List<com.backpack.app.core.Place>) {
+    // ---------- 1.1.1 Recent searches (phone only) ----------
+
+    private fun recentPlaces(): List<com.backpack.app.core.Place> = try {
+        val a = org.json.JSONArray(getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE).getString(Settings.KEY_RECENT_SEARCHES, "[]"))
+        (0 until a.length()).mapNotNull { i ->
+            a.optJSONObject(i)?.let { o -> com.backpack.app.core.Place(o.optString("n"), o.optString("d"), LatLon(o.optDouble("a"), o.optDouble("o"))) }
+        }
+    } catch (e: Exception) { emptyList() }
+
+    private fun saveRecent(list: List<com.backpack.app.core.Place>) {
+        val a = org.json.JSONArray()
+        for (p in list.take(10)) a.put(org.json.JSONObject().put("n", p.name).put("d", p.detail).put("a", p.point.lat).put("o", p.point.lon))
+        getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE).edit().putString(Settings.KEY_RECENT_SEARCHES, a.toString()).apply()
+    }
+
+    /** Newest first, the same place once. */
+    private fun addRecent(place: com.backpack.app.core.Place) {
+        saveRecent(listOf(place) + recentPlaces().filter { Geo.distance(it.point, place.point) > 30.0 })
+    }
+
+    /** Empty search box: the last destinations (hold one to forget it). */
+    private fun showRecent() {
+        val recent = recentPlaces()
+        if (recent.isEmpty()) { hideSuggestions(); return }
+        showSuggestions(recent, recent = true)
+    }
+
+    // ---------- 1.1.1 Voice search (the phone's own recognizer) ----------
+
+    private val voiceLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { r ->
+        val text = r.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()
+        if (r.resultCode != RESULT_OK || text.isNullOrEmpty()) return@registerForActivityResult
+        val input = findViewById<EditText>(R.id.search_input)
+        input.requestFocus()
+        input.setText(text)
+        input.setSelection(text.length)
+    }
+
+    private fun voiceAvailable(): Boolean = try {
+        packageManager.queryIntentActivities(Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0).isNotEmpty()
+    } catch (e: Exception) { false }
+
+    /** Name of the speech recognizer chosen on the phone (Settings > voice input). */
+    private fun recognizerName(): String {
+        val flat = android.provider.Settings.Secure.getString(contentResolver, "voice_recognition_service")
+        val pkg = flat?.let { android.content.ComponentName.unflattenFromString(it)?.packageName } ?: return "the phone's default speech recognizer"
+        return try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() } catch (e: Exception) { pkg }
+    }
+
+    private fun startVoiceSearch() {
+        val prefs = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
+        fun launch() {
+            try {
+                voiceLauncher.launch(Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                    .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    .putExtra(android.speech.RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                    .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Where to?"))
+            } catch (e: Exception) { showError("No voice input on this phone") }
+        }
+        if (prefs.getBoolean(Settings.KEY_VOICE_INFO_SHOWN, false)) { launch(); return }
+        val p = Popup(this, "Voice search")
+        val name = recognizerName()
+        p.text("Your voice is handled by: $name.")
+        p.text("If that is Google, your voice may go to Google. FUTO Voice Input or Sayboard (F-Droid) work offline: your voice stays on the phone. Choose one in Android settings > voice input.", 12f)
+        p.button("Cancel") { p.dismiss() }
+        p.button("Continue", primary = true) {
+            p.dismiss()
+            prefs.edit().putBoolean(Settings.KEY_VOICE_INFO_SHOWN, true).apply()
+            launch()
+        }
+        p.show()
+    }
+
+    private fun showSuggestions(places: List<com.backpack.app.core.Place>, recent: Boolean = false) {
         val scroll = findViewById<View>(R.id.search_results_scroll)
         val list = findViewById<LinearLayout>(R.id.search_results)
         list.removeAllViews()
@@ -1013,6 +1095,11 @@ class MainActivity : AppCompatActivity() {
             row.maxLines = 3
             row.setPadding(dp(12), dp(7), dp(12), dp(7))
             row.setOnClickListener { goToPlace(place) }
+            if (recent) row.setOnLongClickListener {
+                saveRecent(recentPlaces().filter { Geo.distance(it.point, place.point) > 30.0 })
+                showRecent()
+                true
+            }
             list.addView(row)
         }
         scroll.visibility = View.VISIBLE
@@ -2202,6 +2289,7 @@ class MainActivity : AppCompatActivity() {
         // typing), the messages and suggestions over it.
         val searchBottom = if (keyboardOpen) 8 else 68
         setMargins(R.id.search_input, bottom = searchBottom, start = 8, end = 8)
+        setMargins(R.id.search_mic, bottom = searchBottom, end = 10)
         setMargins(R.id.search_results_scroll, bottom = searchBottom + 33, start = 8, end = 8)
         val bandBottom = if (searchOpen) searchBottom + 33 else 68
         // Landscape: bottom-left, never over the position arrow (screen centre).

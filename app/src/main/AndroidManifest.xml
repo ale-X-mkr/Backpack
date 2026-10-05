@@ -23,6 +23,13 @@
 
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
+    <!-- 1.1.1: find the phone's speech recognizer (voice search), Android 11+. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <application
         android:name=".BackpackApp"
         android:allowBackup="false"

@@ -232,6 +232,10 @@ object SettingsPopup {
         p.text("In Weekend mode, an alternative passing clearly more well-known places is taken if it is at most this much slower.", 11f)
         p.section("Saved places")
         p.text("Places are fetched per square of about 5 km and kept on this phone (everyday places 3 days, sights 2 weeks), so an area already seen needs no server.", 11f)
+        p.bodyButton("Clear recent searches") {
+            prefs.edit().remove(Settings.KEY_RECENT_SEARCHES).apply()
+            android.widget.Toast.makeText(c, "Recent searches cleared", android.widget.Toast.LENGTH_SHORT).show()
+        }
         p.bodyButton("Clear saved places") {
             TileCache.clearAll(c)
             com.backpack.app.tourist.SiteInfoStore.forget()

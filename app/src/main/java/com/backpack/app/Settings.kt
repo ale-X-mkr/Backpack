@@ -34,6 +34,9 @@ object Settings {
     const val KEY_SIGHTS_WORK = "sights_work_on"
     const val KEY_SIGHT_GROUPS = "sight_groups"
     const val KEY_SIGHT_HEADSUP = "sight_headsup"
+    /** 1.1.1: last destinations searched (JSON, phone only) and the voice-input notice. */
+    const val KEY_RECENT_SEARCHES = "recent_searches"
+    const val KEY_VOICE_INFO_SHOWN = "voice_info_shown"
     /** 1.0.7: Sights around "me" (true) or the map centre (false). */
     const val KEY_SIGHTS_AROUND_ME = "sights_around_me"
     /** Navigation view tilt: -1 = automatic (45° driving, 25° otherwise), else degrees 0..60. */
