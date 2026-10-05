@@ -49,8 +49,16 @@ class TouristFinder(context: Context) {
 
     private val app = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
-    // 1.1.0: new kinds of places -> a new cache (the old squares lack them).
-    private val cache = TileCache.of(app, "sights2", 14L * DAY_MS)
+    // 1.1.1: the squares saved before are used again ("sights"); the new
+    // kinds come in their own small cache on top ("sights_x").
+    private val cache = TileCache.of(app, "sights", 14L * DAY_MS)
+    private val cacheX = TileCache.of(app, "sights_x", 14L * DAY_MS)
+
+    /** A square to fetch: everything, or only the new kinds. */
+    private data class Need(val tile: Tile, val extras: Boolean)
+
+    private fun read(c: TileCache, t: Tile): List<TouristPoi>? =
+        c.get(t)?.let { try { Tourist.fromJson(it) } catch (e: Exception) { null } }
     @Volatile private var generation = 0
 
     fun cancel() { generation++ }
@@ -141,20 +149,24 @@ class TouristFinder(context: Context) {
             main.post { if (gen == generation) callback.onResult(pois, error, coveredM) }
         }
         val found = ArrayList<TouristPoi>()
-        val missing = ArrayList<Tile>()
+        // 1.1.1: squares already on the phone are used as they are; only the
+        // new kinds are fetched "on top" of them (a small query).
+        val missing = ArrayList<Need>()
         for (t in tiles) {
-            val text = cache.get(t)
-            val list = text?.let { try { Tourist.fromJson(it) } catch (e: Exception) { null } }
-            if (list == null) missing.add(t) else found.addAll(list)
+            val base = read(cache, t)
+            if (base == null) { missing.add(Need(t, false)); continue }
+            found.addAll(base)
+            val extra = read(cacheX, t)
+            if (extra == null) missing.add(Need(t, true)) else found.addAll(extra)
         }
         var error: String? = null
         // Squares another search is already fetching: wait for those instead
         // of asking the server twice.
-        val waitFor = missing.mapNotNull { t -> inFlight[t]?.let { t to it } }
+        val waitFor = missing.mapNotNull { n -> inFlight[n]?.let { n to it } }
         val toFetch = missing.filter { !inFlight.containsKey(it) }
-        // One request at a time (public servers allow 2 at once per user):
-        // every square is marked first so other searches wait for it.
-        val chunks = toFetch.chunked(TILES_PER_REQUEST).map { chunk ->
+        // Every square is marked first so other searches wait for it.
+        val chunks = (toFetch.filter { !it.extras }.chunked(TILES_PER_REQUEST) +
+            toFetch.filter { it.extras }.chunked(TILES_PER_REQUEST)).map { chunk ->
             val latch = CountDownLatch(1)
             chunk.forEach { inFlight[it] = latch }
             chunk to latch
@@ -174,11 +186,11 @@ class TouristFinder(context: Context) {
             if (!await(gen, latch)) { release(k + 1); return }
             val failure = outcome.get()
             if (failure != null) { error = failure; continue }
-            for (t in chunk) cache.get(t)?.let { text -> try { found.addAll(Tourist.fromJson(text)) } catch (e: Exception) { } }
+            for (n in chunk) read(if (n.extras) cacheX else cache, n.tile)?.let { found.addAll(it) }
         }
-        for ((t, latch) in waitFor) {
+        for ((n, latch) in waitFor) {
             if (!await(gen, latch)) return
-            val list = cache.get(t)?.let { try { Tourist.fromJson(it) } catch (e: Exception) { null } }
+            val list = read(if (n.extras) cacheX else cache, n.tile)
             if (list != null) found.addAll(list) else if (error == null) error = "Places search failed"
         }
         if (gen != generation) return
@@ -268,16 +280,25 @@ class TouristFinder(context: Context) {
      * (even if the search that asked was replaced meanwhile: nothing wasted),
      * then [latch] opens. The returned holder gets the error text, if any.
      */
-    private fun fetch(chunk: List<Tile>, latch: CountDownLatch, onSwitch: () -> Unit): java.util.concurrent.atomic.AtomicReference<String?> {
+    private fun fetch(chunk: List<Need>, latch: CountDownLatch, onSwitch: () -> Unit): java.util.concurrent.atomic.AtomicReference<String?> {
         val outcome = java.util.concurrent.atomic.AtomicReference<String?>(null)
+        val extras = chunk.first().extras
+        val tiles = chunk.map { it.tile }
         main.post {
-            OverpassClient.query(app, Tourist.tileQuery(chunk), onSwitch = onSwitch) { body, failure ->
+            OverpassClient.query(app, Tourist.tileQuery(tiles, extrasOnly = extras), onSwitch = onSwitch) { body, failure ->
                 store.execute {
                     val parsed = body?.let { try { Tourist.parseOverpass(it) } catch (e: Exception) { null } }
                     if (parsed == null) {
                         outcome.set(if (body == null) failure?.message ?: "Places search failed" else OverpassClient.Failure.BAD_ANSWER.message)
                     } else {
-                        for ((t, list) in Tourist.byTile(parsed, chunk)) cache.put(t, Tourist.toJson(list))
+                        for ((t, list) in Tourist.byTile(parsed, tiles)) {
+                            if (extras) cacheX.put(t, Tourist.toJson(list))
+                            else {
+                                // A full fetch has the new kinds too: nothing "on top" needed.
+                                cache.put(t, Tourist.toJson(list))
+                                cacheX.put(t, "[]")
+                            }
+                        }
                     }
                     chunk.forEach { inFlight.remove(it, latch) }
                     latch.countDown()
@@ -294,9 +315,11 @@ class TouristFinder(context: Context) {
      */
     private fun wikiNearby(gen: Int, probes: List<LatLon>): List<TouristPoi> {
         if (probes.isEmpty()) return emptyList()
+        // 1.1.1: never more than ~10 s in all (short timeouts, then give up).
+        val deadline = System.currentTimeMillis() + 10_000L
         val lang = when (val l = java.util.Locale.getDefault().language) { "in" -> "id"; "iw" -> "he"; "nb" -> "no"; else -> l }.ifBlank { "en" }
-        fun get(url: String): String? = try {
-            RoutePlanner.http.newCall(Request.Builder().url(url).addHeader("User-Agent", OverpassClient.USER_AGENT)
+        fun get(url: String): String? = if (System.currentTimeMillis() > deadline) null else try {
+            quickHttp.newCall(Request.Builder().url(url).addHeader("User-Agent", OverpassClient.USER_AGENT)
                 .addHeader("Accept", "application/json").build()).execute().use { if (it.isSuccessful) it.body?.string() else null }
         } catch (e: Exception) { null }
         val hits = LinkedHashMap<String, Pair<Tourist.WikiHit, String>>()
@@ -333,7 +356,11 @@ class TouristFinder(context: Context) {
         private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
         /** Parses and stores answers (never blocked by a waiting search). */
         private val store = java.util.concurrent.Executors.newSingleThreadExecutor()
-        private val inFlight = java.util.concurrent.ConcurrentHashMap<Tile, CountDownLatch>()
+        private val inFlight = java.util.concurrent.ConcurrentHashMap<Any, CountDownLatch>()
+        /** Wikipedia fallback requests: 4 s each at most. */
+        private val quickHttp = RoutePlanner.http.newBuilder()
+            .connectTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(4, java.util.concurrent.TimeUnit.SECONDS).build()
         /** Big reach areas and their Wikipedia fallback (may wait on the network). */
         private val slow = java.util.concurrent.Executors.newSingleThreadExecutor()
         /** Last big reach area and its places (before popularity). */

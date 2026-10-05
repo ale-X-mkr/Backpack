@@ -13,9 +13,10 @@ class PlacesSourcesTest {
     private fun el(id: Int, tags: JSONObject) = JSONObject().put("type", "node").put("id", id)
         .put("lat", 45.0).put("lon", 6.0).put("tags", tags)
 
-    @Test fun newKindsAndNamedSpotsWithoutWikidata() {
+    @Test fun newKindsNeedWikidata() {
         val body = JSONObject().put("elements", JSONArray()
-            .put(el(1, JSONObject().put("waterway", "waterfall").put("name", "Cascade A")))
+            .put(el(1, JSONObject().put("waterway", "waterfall").put("name", "Cascade A").put("wikidata", "Q1")))
+            .put(el(6, JSONObject().put("waterway", "waterfall").put("name", "No wikidata")))
             .put(el(2, JSONObject().put("boundary", "national_park").put("name", "Parc B").put("wikidata", "Q2")))
             .put(el(3, JSONObject().put("heritage:operator", "whc").put("historic", "castle").put("name", "C").put("wikidata", "Q3")))
             .put(el(4, JSONObject().put("natural", "hot_spring").put("name", "Spring D").put("wikidata", "Q4")))
@@ -23,14 +24,15 @@ class PlacesSourcesTest {
         val list = Tourist.parseOverpass(body)
         assertEquals(4, list.size)
         assertEquals(TouristCategory.WATER, list[0].category)
-        assertEquals("", list[0].wikidata)
-        assertEquals("n1", list[0].identity)
-        assertNull(list[0].readMoreUrl)
+        assertEquals("Q1", list[0].identity)
         assertEquals(TouristCategory.PARK, list[1].category)
         assertEquals(TouristCategory.HERITAGE, list[2].category)
         assertEquals(TouristCategory.WATER, list[3].category)
         assertEquals(list, Tourist.fromJson(Tourist.toJson(list)))
-        assertTrue(Tourist.tileQuery(listOf(Tile(120, 900))).contains("[\"waterway\"=\"waterfall\"][\"name\"][!\"wikidata\"]"))
+        val extras = Tourist.tileQuery(listOf(Tile(120, 900)), extrasOnly = true)
+        assertTrue(extras.contains("nwr(45.0000,6.0000,45.0500,6.0500)[\"waterway\"=\"waterfall\"][\"wikidata\"];"))
+        assertTrue(extras.contains(" nw(45.0000,6.0000,45.0500,6.0500)[\"boundary\"=\"national_park\"]"))
+        assertTrue(!extras.contains("castle"))
     }
 
     @Test fun wikivoyageFromSitelinks() {

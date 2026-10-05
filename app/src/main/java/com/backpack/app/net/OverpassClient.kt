@@ -34,8 +34,6 @@ object OverpassClient {
 
     const val MAIN = "https://overpass-api.de/api/interpreter"
     const val PRIVATE_COFFEE = "https://overpass.private.coffee/api/interpreter"
-    /** 1.1.0: listed on the OSM wiki, no limits; opt-in (Settings > Servers). */
-    const val VK_MAPS = "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
     const val USER_AGENT = "Backpack/1.1 (private Android navigation app, non-commercial; OpenStreetMap / Wikimedia data)"
 
     private val main = Handler(Looper.getMainLooper())
@@ -61,8 +59,7 @@ object OverpassClient {
     fun servers(c: Context): List<String> {
         val prefs = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
         val own = prefs.getString(Settings.KEY_OVERPASS_URL, "")?.trim().orEmpty()
-        val vk = if (prefs.getBoolean(Settings.KEY_OVERPASS_VK, false)) listOf(VK_MAPS) else emptyList()
-        return (listOf(own) + listOf(MAIN, PRIVATE_COFFEE) + vk).filter { it.startsWith("https://") || it.startsWith("http://") }.distinct()
+        return (listOf(own) + listOf(MAIN, PRIVATE_COFFEE)).filter { it.startsWith("https://") || it.startsWith("http://") }.distinct()
     }
 
     /**
@@ -100,18 +97,19 @@ object OverpassClient {
     private class HeavyJob(val isStale: (() -> Boolean)?, val skip: () -> Unit, val run: (finished: () -> Unit) -> Unit)
 
     private val heavyQueue = ArrayDeque<HeavyJob>()
-    private var heavyBusy = false
+    /** Heavy queries running now (ids); 1.1.1: two at a time, the public limit. */
+    private val heavyRunning = HashSet<Int>()
     private var heavyRun = 0
+    private const val HEAVY_SLOTS = 2
 
-    /** Main thread only. One heavy query at a time; a watchdog frees the
-     *  queue if one never reports back (3 min). */
+    /** Main thread only. A watchdog frees a slot if its query never reports back (3 min). */
     private fun runNextHeavy() {
-        while (!heavyBusy) {
+        while (heavyRunning.size < HEAVY_SLOTS) {
             val job = heavyQueue.removeFirstOrNull() ?: return
             if (job.isStale?.invoke() == true) { job.skip(); continue }
-            heavyBusy = true
             val run = ++heavyRun
-            val release = { if (heavyBusy && heavyRun == run) { heavyBusy = false; runNextHeavy() } }
+            heavyRunning.add(run)
+            val release = { if (heavyRunning.remove(run)) runNextHeavy() }
             main.postDelayed({ release() }, 180_000L)
             job.run { main.post { release() } }
         }

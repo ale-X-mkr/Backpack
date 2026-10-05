@@ -550,8 +550,8 @@ class MainActivity : AppCompatActivity() {
             .accuracyAlpha(0.12f)
             .enableStaleState(false)
             // Position arrow 170 % (Alex, 0.7.0 test), same size at every zoom.
-            .minZoomIconScale(2.4f) // 1.1.0: 40 % bigger
-            .maxZoomIconScale(2.4f)
+            .minZoomIconScale(2.0f) // 1.1.1: between 1.0.9 (1.7) and 1.1.0 (2.4)
+            .maxZoomIconScale(2.0f)
             .build()
         // useDefaultLocationEngine(false): MapLibre gets positions only from
         // LocationHub (GPS chip), never from its own location engine.

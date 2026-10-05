@@ -67,21 +67,32 @@ data class TouristPoi(
  */
 object Tourist {
 
-    // 1.1.0: more kinds (water, parks, UNESCO, lighthouses, city walls...),
-    // and named natural spots without a Wikipedia article (ranked lower).
-    private const val FILTERS = """
- ["tourism"~"^(attraction|museum|gallery|viewpoint|theme_park|zoo|aquarium)$"]["wikidata"];
- ["historic"~"^(castle|monument|ruins|archaeological_site|fort|manor|city_gate|palace|tower|monastery|citywalls|aqueduct|battlefield|church|tomb)$"]["wikidata"];
- ["natural"~"^(peak|waterfall|cave_entrance|volcano|glacier|arch|beach|gorge|spring|hot_spring|geyser|cliff)$"]["wikidata"];
- ["waterway"="waterfall"]["wikidata"];
- ["man_made"="lighthouse"]["wikidata"];
- ["boundary"~"^(national_park|protected_area)$"]["wikidata"];
- ["leisure"="nature_reserve"]["wikidata"];
- ["heritage:operator"="whc"]["name"];
- ["amenity"="place_of_worship"]["building"~"^(cathedral|basilica)$"]["wikidata"];
- ["natural"~"^(waterfall|hot_spring|geyser|cave_entrance|arch|gorge)$"]["name"][!"wikidata"];
- ["waterway"="waterfall"]["name"][!"wikidata"];
- ["tourism"="viewpoint"]["name"][!"wikidata"];"""
+    // 1.0.x kinds (kept light: only places with a Wikidata entry).
+    private val BASE = listOf(
+        "[\"tourism\"~\"^(attraction|museum|gallery|viewpoint|theme_park|zoo|aquarium)$\"][\"wikidata\"]",
+        "[\"historic\"~\"^(castle|monument|ruins|archaeological_site|fort|manor|city_gate|palace|tower|monastery)$\"][\"wikidata\"]",
+        "[\"natural\"~\"^(peak|waterfall|cave_entrance|volcano|glacier|arch|beach|gorge)$\"][\"wikidata\"]",
+        "[\"amenity\"=\"place_of_worship\"][\"building\"~\"^(cathedral|basilica)$\"][\"wikidata\"]"
+    )
+
+    /** 1.1.1: the new kinds, fetched "on top" of squares already on the phone.
+     *  Parks only as points / ways ("nw:"): their big boundary relations are
+     *  what made the servers slow. */
+    private val EXTRA = listOf(
+        "[\"historic\"~\"^(citywalls|aqueduct)$\"][\"wikidata\"]",
+        "[\"natural\"~\"^(spring|hot_spring|geyser)$\"][\"wikidata\"]",
+        "[\"waterway\"=\"waterfall\"][\"wikidata\"]",
+        "[\"man_made\"=\"lighthouse\"][\"wikidata\"]",
+        "[\"heritage:operator\"=\"whc\"][\"wikidata\"]",
+        "nw:[\"boundary\"=\"national_park\"][\"wikidata\"]",
+        "nw:[\"leisure\"=\"nature_reserve\"][\"wikidata\"]"
+    )
+
+    /** Overpass statements for [selector] = "(bbox)" / "(around:...)" / "(poly:...)". */
+    private fun statements(selector: String, extrasOnly: Boolean = false): List<String> =
+        (if (extrasOnly) EXTRA else BASE + EXTRA).map { l ->
+            if (l.startsWith("nw:")) " nw$selector${l.removePrefix("nw:")};" else " nwr$selector$l;"
+        }
 
     /** Corridor half-width around the route, by travel mode. */
     fun corridorRadius(mode: TravelMode): Int = when (mode) {
@@ -95,23 +106,23 @@ object Tourist {
      *  than that, and the exact start / end of the trip is not sent. */
     fun corridorQuery(line: List<LatLon>, radius: Int): String {
         val coords = line.joinToString(",") { "%.3f,%.3f".format(java.util.Locale.ROOT, it.lat, it.lon) }
-        return query("nwr(around:$radius,$coords)")
+        return query("(around:$radius,$coords)")
     }
 
     /** Same, around several route lines at once (one request for all
      *  alternatives, used by the Weekend sights preference). */
     fun corridorQueryMulti(lines: List<List<LatLon>>, radius: Int): String {
         val selectors = lines.filter { it.isNotEmpty() }.map { line ->
-            "nwr(around:$radius," + line.joinToString(",") { "%.3f,%.3f".format(java.util.Locale.ROOT, it.lat, it.lon) } + ")"
+            "(around:$radius," + line.joinToString(",") { "%.3f,%.3f".format(java.util.Locale.ROOT, it.lat, it.lon) } + ")"
         }
-        val parts = selectors.flatMap { sel -> FILTERS.trim().lines().map { " $sel${it.trim()}" } }.joinToString("\n")
+        val parts = selectors.flatMap { sel -> statements(sel) }.joinToString("\n")
         return "[out:json][timeout:25];\n(\n$parts\n);\nout center tags;"
     }
 
     /** One request for several map squares (cheaper for the server than a
      *  query around a route line, and cached per square on the phone). */
-    fun tileQuery(tiles: List<Tile>): String {
-        val parts = tiles.flatMap { t -> FILTERS.trim().lines().map { " nwr${t.bbox}${it.trim()}" } }.joinToString("\n")
+    fun tileQuery(tiles: List<Tile>, extrasOnly: Boolean = false): String {
+        val parts = tiles.flatMap { t -> statements(t.bbox, extrasOnly) }.joinToString("\n")
         return "[out:json][timeout:25];\n(\n$parts\n);\nout center tags;"
     }
 
@@ -161,18 +172,17 @@ object Tourist {
 
     /** Overpass query for places inside a box. */
     fun boxQuery(south: Double, west: Double, north: Double, east: Double): String =
-        query("nwr(%.5f,%.5f,%.5f,%.5f)".format(java.util.Locale.ROOT, south, west, north, east))
+        query("(%.5f,%.5f,%.5f,%.5f)".format(java.util.Locale.ROOT, south, west, north, east))
 
     /** Overpass query for places inside the reach polygon (one request, for
      *  areas too big for the cached squares, e.g. 1 h by car). */
     fun reachQuery(ring: List<LatLon>): String {
-        val sel = "nwr(poly:\"${Reach.polyFilter(ring)}\")"
-        val parts = FILTERS.trim().lines().joinToString("\n") { " $sel${it.trim()}" }
+        val parts = statements("(poly:\"${Reach.polyFilter(ring)}\")").joinToString("\n")
         return "[out:json][timeout:25];\n(\n$parts\n);\nout center tags;"
     }
 
     private fun query(selector: String): String {
-        val parts = FILTERS.trim().lines().joinToString("\n") { " $selector${it.trim()}" }
+        val parts = statements(selector).joinToString("\n")
         // No result cap: Overpass returns in id order (points before areas), so a
         // cap would cut castles and cathedrals mapped as areas before ranking.
         return "[out:json][timeout:25];\n(\n$parts\n);\nout center tags;"
@@ -244,8 +254,8 @@ object Tourist {
             // Without Wikidata only for the named natural spots / viewpoints / UNESCO lines.
             val wikidata = tags.optString("wikidata", "").takeIf { it.matches(Regex("Q[0-9]+")) } ?: ""
             val category = classify(tags) ?: continue
-            // Without Wikidata: only natural spots, viewpoints and UNESCO sites (1.1.0).
-            if (wikidata.isEmpty() && category !in setOf(TouristCategory.WATER, TouristCategory.NATURE, TouristCategory.VIEWPOINT, TouristCategory.HERITAGE)) continue
+            // 1.1.1: only places with a Wikidata entry (as in 1.0.x).
+            if (wikidata.isEmpty()) continue
             val center = e.optJSONObject("center")
             val lat = center?.optDouble("lat", Double.NaN) ?: e.optDouble("lat", Double.NaN)
             val lon = center?.optDouble("lon", Double.NaN) ?: e.optDouble("lon", Double.NaN)

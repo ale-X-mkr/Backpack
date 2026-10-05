@@ -123,7 +123,7 @@ class MapLayers(private val context: Context) {
         // 1.1.0: the stretch already driven, darker and half transparent.
         add(LineLayer(LAYER_DONE, SRC_DONE).withProperties(
             PropertyFactory.lineColor(ContextCompat.getColor(context, R.color.route_done)), PropertyFactory.lineWidth(width(5f)),
-            PropertyFactory.lineOpacity(0.5f),
+            PropertyFactory.lineOpacity(0.3f),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
         add(SymbolLayer(LAYER_LABELS, SRC_LABELS).withProperties(
