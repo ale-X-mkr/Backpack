@@ -712,8 +712,16 @@ class MainActivity : AppCompatActivity() {
 
     /** Routine messages: always in the message band (between the arrow and
      *  the bottom buttons), under any error. */
-    private fun showMessage(text: String) {
+    private fun showMessage(text: String, onTap: (() -> Unit)? = null, showMs: Long = 3000L) {
         bubbleFadeOutRunnable?.let { handler.removeCallbacks(it) }
+        // 1.1.1: some messages can be tapped (e.g. "add this sight as a stop").
+        if (onTap != null) {
+            messageBubble.isClickable = true
+            messageBubble.setOnClickListener { messageBubble.visibility = View.GONE; onTap() }
+        } else {
+            messageBubble.setOnClickListener(null)
+            messageBubble.isClickable = false
+        }
         messageBubble.text = text
         messageBubble.visibility = View.VISIBLE
         messageBubble.animate().cancel()
@@ -725,7 +733,7 @@ class MainActivity : AppCompatActivity() {
             }.start()
         }
         bubbleFadeOutRunnable = fadeOut
-        handler.postDelayed(fadeOut, 3000L)
+        handler.postDelayed(fadeOut, showMs)
     }
 
     private var errorFadeOutRunnable: Runnable? = null
@@ -1260,6 +1268,41 @@ class MainActivity : AppCompatActivity() {
         refreshTourist(extend = true)
     }
 
+    // ---------- 1.1.1 Weekend voice heads-up ----------
+
+    private val headsUpSaid = HashSet<String>()
+    private var lastInstructionAtMs = 0L
+
+    /**
+     * Weekend, navigating: a well-known sight within your Weekend detour is
+     * coming up (2 km ahead by car, 1 km by bike, 300 m on foot): said once,
+     * never close to a turn or over an instruction; the message can be
+     * tapped to add it as a stop.
+     */
+    private fun maybeSightHeadsUp(p: Progress) {
+        if (urgencyMode != UrgencyMode.WEEKEND || !touristOn || p.offRoute || p.arrived) return
+        if (!sightsPrefs().getBoolean(Settings.KEY_SIGHT_HEADSUP, true)) return
+        if (p.distanceToNextM < 400.0 || System.currentTimeMillis() - lastInstructionAtMs < 8000L) return
+        val mode = currentMode.mode
+        val lead = when (mode) {
+            com.backpack.app.core.TravelMode.DRIVING -> 2000.0
+            com.backpack.app.core.TravelMode.CYCLING -> 1000.0
+            com.backpack.app.core.TravelMode.WALKING -> 300.0
+        }
+        val maxDetour = detourMinutes() * 60.0
+        val poi = touristResults.asSequence()
+            .filter { it.key !in touristDimOwner && it.key !in headsUpSaid && it.sitelinks >= 1 }
+            .filter { (it.alongM - p.alongM) in 0.0..lead }
+            .filter { Tourist.estimateDetourSeconds(it.offsetM, mode) <= maxDetour }
+            .maxByOrNull { it.sitelinks } ?: return
+        headsUpSaid.add(poi.key)
+        val ahead = (poi.alongM - p.alongM).coerceAtLeast(0.0)
+        val mins = Tourist.minutesLabel(Tourist.estimateDetourSeconds(poi.offsetM, mode))
+        NavigationEngine.speak("In ${Speech.distance(ahead, useMetric)}, ${poi.name}, ${poi.category.label.lowercase()}, about $mins off your route")
+        showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to add a stop",
+            onTap = { addStopFlow(poi.point, poi.name) }, showMs = 8000L)
+    }
+
     private fun touistClearPending() {
         touristPendingRoute = null
         touristPendingCenter = null
@@ -1636,6 +1679,7 @@ class MainActivity : AppCompatActivity() {
     /** Switches the screen into navigation look; safe to call again. */
     private fun startNavigationUi() {
         val first = !navUiActive
+        if (first) headsUpSaid.clear()
         navUiActive = true
         map?.uiSettings?.isTiltGesturesEnabled = true
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1779,6 +1823,8 @@ class MainActivity : AppCompatActivity() {
         }
         if (overviewOn && p.anticipation) leaveOverview() // back to the drive view before a turn
         extendTouristIfNeeded(p, route)
+        if (p.speech != null) lastInstructionAtMs = System.currentTimeMillis()
+        maybeSightHeadsUp(p)
         layers.setProgress(p.alongM, route) // driven part darker
         queryPois() // the stretch ahead, every 40 % of it
         // Live remaining distance and arrival time.

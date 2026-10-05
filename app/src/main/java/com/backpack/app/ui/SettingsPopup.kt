@@ -222,6 +222,11 @@ object SettingsPopup {
         intField(p, prefs, "Weekend (min, there and back)", Settings.KEY_DETOUR_WEEKEND_MIN, Settings.DEFAULT_DETOUR_WEEKEND_MIN, 1, 60)
         intField(p, prefs, "Work (min, there and back)", Settings.KEY_DETOUR_WORK_MIN, Settings.DEFAULT_DETOUR_WORK_MIN, 1, 30)
         p.text("With a destination: Weekend shows well-known places (plus your POI category) along the route within this detour; Work only your POI category, with the shorter detour; Emergency adds hospitals, police and fire stations (15 min) and hides sights. Without a destination: within reach (above) of you or the map centre.", 11f)
+        p.section("Weekend: sights on the way")
+        p.toggle("Tell me when I pass near a sight (voice + message)", { prefs.getBoolean(Settings.KEY_SIGHT_HEADSUP, true) }) {
+            prefs.edit().putBoolean(Settings.KEY_SIGHT_HEADSUP, it).apply()
+        }
+        p.text("While navigating in Weekend mode: a well-known place within your Weekend detour, said once, ~2 km before (1 km by bike, 300 m on foot), never near a turn. Tap the message to add it as a stop.", 11f)
         p.section("Weekend sights route")
         intField(p, prefs, "Max extra time (%), 0 = off", Settings.KEY_SIGHTS_MAX_PCT, Settings.DEFAULT_SIGHTS_MAX_PCT, 0, 100)
         p.text("In Weekend mode, an alternative passing clearly more well-known places is taken if it is at most this much slower.", 11f)
