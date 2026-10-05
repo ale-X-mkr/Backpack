@@ -103,6 +103,7 @@ object Prefs {
     }
 
     fun useMetric(c: Context) = settings(c).getBoolean(Settings.KEY_UNIT_METRIC, true)
+    fun voiceShort(c: Context) = settings(c).getBoolean(Settings.KEY_VOICE_SHORT, false)
 
     /** Navigation tilt in degrees for [driving]; Auto = 45° driving, 25° otherwise. */
     fun navTilt(c: Context, driving: Boolean): Double {

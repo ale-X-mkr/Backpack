@@ -41,7 +41,10 @@ data class Progress(
 class NavigationTracker(
     val route: RouteResult,
     private val mode: TravelMode,
-    private val metric: Boolean
+    private val metric: Boolean,
+    /** 1.1.0 "Short" voice: only the maneuver ("Turn right", "Take the 3rd
+     *  exit"), no street names, no "Continue for...". */
+    private val short: Boolean = false
 ) {
     private val line = route.line
     private val stepStart: DoubleArray = DoubleArray(route.steps.size) { line.alongAt(route.steps[it].wayStart) }
@@ -57,7 +60,10 @@ class NavigationTracker(
         private set
 
     /** Departure sentence, e.g. "Head north on Rue X". */
-    fun departureSpeech(): String? = route.steps.firstOrNull()?.instruction
+    fun departureSpeech(): String? = if (short) null else route.steps.firstOrNull()?.instruction
+
+    /** What is said for [step]: ORS's full sentence, or the short form. */
+    private fun say(step: NavStep): String = if (short) shortPhrase(step) else step.instruction
 
     /** How many intermediate stops have been passed (ORS ends every leg
      *  with a "goal" step; the last one is the destination). Used so a
@@ -118,21 +124,21 @@ class NavigationTracker(
             val flags = announced[next] ?: 0
             val step = route.steps[next]
 
-            if (stepAdvanced && distToNext > max(1000.0, earlyDist * 3) && flags and 1 == 0) {
+            if (!short && stepAdvanced && distToNext > max(1000.0, earlyDist * 3) && flags and 1 == 0) {
                 announced[next] = flags or 1
                 speech = "Continue for ${spokenDistance(distToNext)}"
             } else if (distToNext <= nowDist && flags and 4 == 0) {
                 announced[next] = flags or 6
-                speech = step.instruction
+                speech = say(step)
                 // A second maneuver right after this one: say both now.
                 val after = next + 1
                 if (after < route.steps.size && stepStart[after] - stepStart[next] < nowDist * 2) {
-                    speech += ", then " + lowerFirst(route.steps[after].instruction)
+                    speech += ", then " + lowerFirst(say(route.steps[after]))
                     announced[after] = (announced[after] ?: 0) or 2
                 }
             } else if (distToNext <= earlyDist && distToNext > nowDist * 1.5 && flags and 2 == 0) {
                 announced[next] = flags or 2
-                speech = "In ${spokenDistance(distToNext)}, ${lowerFirst(step.instruction)}"
+                speech = "In ${spokenDistance(distToNext)}, ${lowerFirst(say(step))}"
                 anticipation = true
             }
         }
@@ -215,4 +221,31 @@ object Speech {
         val feet = m * 3.28084
         return if (feet < 1000) "${(feet / 10).roundToInt() * 10} ft" else "%.1f mi".format(m / 1609.344)
     }
+}
+
+/** 1.1.0 short voice form of a maneuver (no street names). */
+fun shortPhrase(step: NavStep): String = when (step.maneuver) {
+    Maneuver.LEFT -> "Turn left"
+    Maneuver.RIGHT -> "Turn right"
+    Maneuver.SHARP_LEFT -> "Turn sharp left"
+    Maneuver.SHARP_RIGHT -> "Turn sharp right"
+    Maneuver.SLIGHT_LEFT -> "Bear left"
+    Maneuver.SLIGHT_RIGHT -> "Bear right"
+    Maneuver.STRAIGHT -> "Go straight"
+    Maneuver.ROUNDABOUT_ENTER -> if (step.exitNumber > 0) "Take the ${ordinal(step.exitNumber)} exit" else "Enter the roundabout"
+    Maneuver.ROUNDABOUT_EXIT -> "Exit the roundabout"
+    Maneuver.UTURN -> "Make a U-turn"
+    Maneuver.GOAL -> "Destination"
+    Maneuver.DEPART -> "Start"
+    Maneuver.KEEP_LEFT -> "Keep left"
+    Maneuver.KEEP_RIGHT -> "Keep right"
+    Maneuver.UNKNOWN -> "Continue"
+}
+
+fun ordinal(n: Int): String = n.toString() + when {
+    n % 100 in 11..13 -> "th"
+    n % 10 == 1 -> "st"
+    n % 10 == 2 -> "nd"
+    n % 10 == 3 -> "rd"
+    else -> "th"
 }

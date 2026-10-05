@@ -190,6 +190,11 @@ object SettingsPopup {
         p.toggle("Spoken instructions", { prefs.getBoolean(Settings.KEY_VOICE, true) }) {
             prefs.edit().putBoolean(Settings.KEY_VOICE, it).apply()
         }
+        val detail = listOf(false to "Full", true to "Short")
+        p.choices(detail, { it.second }, { detail.first { d -> d.first == prefs.getBoolean(Settings.KEY_VOICE_SHORT, false) } }) {
+            prefs.edit().putBoolean(Settings.KEY_VOICE_SHORT, it.first).apply()
+        }
+        p.text("Short: only the maneuver -- \"In 100 m, turn right\", \"Turn right\", \"Take the 3rd exit\" -- no street names, no \"Continue for...\". Applies from the next route.", 11f)
     }
 
     private fun speedPage(p: Popup, prefs: android.content.SharedPreferences) {

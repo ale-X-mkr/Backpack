@@ -166,6 +166,21 @@ class CoreTest {
         assertEquals(120.0 * 950.0 / 1000.0, after.remainingS, 2.0)
     }
 
+    @Test fun shortVoiceSaysOnlyTheManeuver() {
+        val t = NavigationTracker(route(), TravelMode.DRIVING, metric = true, short = true)
+        assertNull(t.departureSpeech())
+        val spoken = mutableListOf<String>()
+        var d = 0.0
+        while (d < 1000.0) {
+            t.update(fixAt(Geo.project(origin, 0.0, d))).speech?.let { spoken.add(it) }
+            d += 20.0
+        }
+        assertEquals(listOf("In 300 meters, turn right", "Turn right"), spoken)
+        assertEquals("Take the 3rd exit", shortPhrase(NavStep("Enter the roundabout and take the 3rd exit onto X", Maneuver.ROUNDABOUT_ENTER, 0.0, 0.0, 0, 1, exitNumber = 3)))
+        assertEquals("11th", ordinal(11))
+        assertEquals("22nd", ordinal(22))
+    }
+
     @Test fun trackerOffRouteNeedsTwoReadingsAndArrives() {
         val t = NavigationTracker(route(), TravelMode.WALKING, metric = true)
         t.update(fixAt(Geo.project(origin, 0.0, 100.0), 1.4f))

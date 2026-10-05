@@ -36,6 +36,8 @@ object Settings {
     /** Navigation zoom offset in zoom levels: +1 closer, 0 normal, -1 farther. */
     const val KEY_NAV_ZOOM = "nav_zoom"
     const val KEY_VOICE = "voice_on"
+    /** 1.1.0: spoken instructions "full" (ORS sentences) or "short" (maneuver only). */
+    const val KEY_VOICE_SHORT = "voice_short"
     const val KEY_ALARM_SOUND = "speed_alarm_sound"
 
     const val DEFAULT_SIGHTS_MAX_PCT = 20

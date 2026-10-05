@@ -144,7 +144,7 @@ object NavigationEngine {
         route = r
         arrived = false
         val c = app ?: return
-        tracker = NavigationTracker(r, request?.mode ?: com.backpack.app.core.TravelMode.DRIVING, Prefs.useMetric(c))
+        tracker = NavigationTracker(r, request?.mode ?: com.backpack.app.core.TravelMode.DRIVING, Prefs.useMetric(c), Prefs.voiceShort(c))
         lastProgress = null
     }
 
