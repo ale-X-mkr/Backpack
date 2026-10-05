@@ -14,7 +14,11 @@ data class PoiPlace(
     val website: String? = null,
     val wikipedia: String? = null,
     val wikidata: String? = null,
-    val openingHours: String? = null
+    val openingHours: String? = null,
+    /** 1.1.1: which services it is (names of [Places.SERVICES]), e.g. "FOOD", "WIFI". */
+    val services: Set<String> = emptySet(),
+    /** Distance off the route line when searched along a route (else 0). */
+    val offsetM: Double = 0.0
 ) {
     /** Link to read about the place: Wikipedia first, then Wikidata, then its website. */
     val readMoreUrl: String? get() =
@@ -34,6 +38,52 @@ object Places {
 
     /** Places per square at most (busy city centres have hundreds). */
     const val PER_TILE = 60
+
+    /** 1.1.1: all services of a square in one request (filtered on the phone). */
+    const val SERVICES_PER_TILE = 400
+
+    /** One service (Services panel): its Overpass filter, how to recognise it
+     *  in the tags, and openrouteservice ids for the second source. */
+    class ServiceDef(val name: String, val filter: String, val orsIds: Map<Int, String>, val matches: (JSONObject) -> Boolean)
+
+    private fun JSONObject.v(k: String) = optString(k, "")
+
+    val SERVICES: List<ServiceDef> = listOf(
+        ServiceDef("FOOD", "[\"amenity\"~\"^(restaurant|cafe|fast_food)$\"]", mapOf(570 to "restaurant", 564 to "cafe", 566 to "fast_food")) {
+            it.v("amenity") in setOf("restaurant", "cafe", "fast_food") },
+        ServiceDef("LODGING", "[\"tourism\"~\"^(hotel|guest_house|motel)$\"]", mapOf(108 to "hotel", 106 to "guest_house", 109 to "motel")) {
+            it.v("tourism") in setOf("hotel", "guest_house", "motel") },
+        ServiceDef("PARKING", "[\"amenity\"=\"parking\"]", mapOf(601 to "parking")) { it.v("amenity") == "parking" },
+        ServiceDef("FUEL", "[\"amenity\"~\"^(fuel|charging_station)$\"]", mapOf(596 to "fuel", 593 to "charging_station")) {
+            it.v("amenity") in setOf("fuel", "charging_station") },
+        ServiceDef("TOILETS", "[\"amenity\"=\"toilets\"]", mapOf(179 to "toilets")) { it.v("amenity") == "toilets" },
+        ServiceDef("EMERGENCY", "[\"amenity\"~\"^(hospital|police|fire_station)$\"]", mapOf(206 to "hospital", 369 to "police", 367 to "fire_station")) {
+            it.v("amenity") in setOf("hospital", "police", "fire_station") },
+        ServiceDef("WATER", "[\"amenity\"=\"drinking_water\"]", emptyMap()) { it.v("amenity") == "drinking_water" },
+        ServiceDef("SLEEP", "[\"tourism\"~\"^(hostel|camp_site|alpine_hut|wilderness_hut|caravan_site)$\"]", emptyMap()) {
+            it.v("tourism") in setOf("hostel", "camp_site", "alpine_hut", "wilderness_hut", "caravan_site") },
+        ServiceDef("LAUNDRY", "[\"shop\"~\"^(laundry|dry_cleaning)$\"]", emptyMap()) { it.v("shop") in setOf("laundry", "dry_cleaning") },
+        ServiceDef("PHARMACY", "[\"amenity\"=\"pharmacy\"]", emptyMap()) { it.v("amenity") == "pharmacy" },
+        ServiceDef("MONEY", "[\"amenity\"~\"^(atm|bureau_de_change|bank)$\"]", emptyMap()) {
+            it.v("amenity") in setOf("atm", "bureau_de_change", "bank") },
+        ServiceDef("WIFI", "[\"internet_access\"~\"^(wlan|yes|wifi)$\"][\"internet_access:fee\"!=\"yes\"]", emptyMap()) {
+            it.v("internet_access") in setOf("wlan", "yes", "wifi") && it.v("internet_access:fee") != "yes" },
+        ServiceDef("BIKE", "[\"shop\"=\"bicycle\"]", emptyMap()) { it.v("shop") == "bicycle" }
+    )
+
+    /** Services a place with these tags belongs to (a café with Wi-Fi: both). */
+    fun servicesOf(tags: JSONObject): Set<String> = SERVICES.filter { it.matches(tags) }.mapTo(LinkedHashSet()) { it.name }
+
+    /** Service of an openrouteservice kind (second source). */
+    fun serviceOfKind(kind: String): Set<String> = SERVICES.filter { kind in it.orsIds.values }.mapTo(LinkedHashSet()) { it.name }
+
+    /** 1.1.1: every service of each square in one statement group per square. */
+    fun servicesQuery(tiles: List<Tile>, perTile: Int = SERVICES_PER_TILE): String {
+        val parts = tiles.joinToString("\n") { t ->
+            "(" + SERVICES.joinToString("") { "nwr${t.bbox}${it.filter};" } + ");out center tags $perTile;"
+        }
+        return "[out:json][timeout:25];\n$parts"
+    }
 
     /** One request for several squares; each square gets its own cap. */
     fun tileQuery(filter: String, tiles: List<Tile>, perTile: Int = PER_TILE): String {
@@ -59,7 +109,8 @@ object Places {
                 website = tags.optString("website", "").ifBlank { tags.optString("contact:website", "") }.ifBlank { null },
                 wikipedia = tags.optString("wikipedia", "").ifBlank { null },
                 wikidata = tags.optString("wikidata", "").takeIf { it.matches(Regex("Q[0-9]+")) },
-                openingHours = tags.optString("opening_hours", "").ifBlank { null }
+                openingHours = tags.optString("opening_hours", "").ifBlank { null },
+                services = servicesOf(tags)
             ))
         }
         return out.distinctBy { it.key }
@@ -158,7 +209,8 @@ object Places {
                 point = LatLon(lat, lon),
                 kind = kind,
                 website = tags.optString("website", "").ifBlank { null },
-                openingHours = tags.optString("opening_hours", "").ifBlank { null }
+                openingHours = tags.optString("opening_hours", "").ifBlank { null },
+                services = serviceOfKind(kind)
             ))
         }
         return out.distinctBy { it.key }
@@ -174,6 +226,7 @@ object Places {
             p.wikipedia?.let { o.put("wp", it) }
             p.wikidata?.let { o.put("wd", it) }
             p.openingHours?.let { o.put("h", it) }
+            if (p.services.isNotEmpty()) o.put("s", p.services.joinToString(","))
             a.put(o)
         }
         return a.toString()
@@ -187,7 +240,8 @@ object Places {
             out.add(PoiPlace(
                 o.optString("k", ""), o.optString("n", ""), LatLon(o.optDouble("a"), o.optDouble("o")), o.optString("t", ""),
                 o.optString("w", "").ifBlank { null }, o.optString("wp", "").ifBlank { null },
-                o.optString("wd", "").ifBlank { null }, o.optString("h", "").ifBlank { null }
+                o.optString("wd", "").ifBlank { null }, o.optString("h", "").ifBlank { null },
+                o.optString("s", "").split(',').filter { it.isNotBlank() }.toSet()
             ))
         }
         return out

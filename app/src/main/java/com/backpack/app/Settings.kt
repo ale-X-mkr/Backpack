@@ -29,6 +29,11 @@ object Settings {
     const val DEFAULT_DETOUR_WORK_MIN = 5
     /** Emergency places: fixed. */
     const val EMERGENCY_DETOUR_MIN = 15
+    /** 1.1.1 Sights button: on in Weekend (default true) / Work (default false); kinds; voice heads-up. */
+    const val KEY_SIGHTS_WEEKEND = "sights_weekend_on"
+    const val KEY_SIGHTS_WORK = "sights_work_on"
+    const val KEY_SIGHT_GROUPS = "sight_groups"
+    const val KEY_SIGHT_HEADSUP = "sight_headsup"
     /** 1.0.7: Sights around "me" (true) or the map centre (false). */
     const val KEY_SIGHTS_AROUND_ME = "sights_around_me"
     /** Navigation view tilt: -1 = automatic (45° driving, 25° otherwise), else degrees 0..60. */

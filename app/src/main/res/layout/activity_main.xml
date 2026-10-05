@@ -208,8 +208,7 @@
             android:elevation="0dp"
             android:stateListAnimator="@null" />
 
-        <!-- POI categories; with Sights, the small "around me / map centre"
-             button to its right (1.0.7). -->
+        <!-- 1.1.1 Services (multi-select); a small count when several are on. -->
         <FrameLayout
             android:id="@+id/poi_row"
             android:layout_width="72dp"
@@ -226,7 +225,45 @@
                 android:src="@drawable/ic_poi_toggle"
                 android:background="@drawable/icon_backdrop"
                 android:padding="4dp"
-                android:contentDescription="Points of interest"
+                android:contentDescription="Services"
+                android:elevation="0dp"
+                android:stateListAnimator="@null" />
+
+            <TextView
+                android:id="@+id/poi_count"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_gravity="start|top"
+                android:layout_marginStart="27dp"
+                android:layout_marginTop="-3dp"
+                android:background="@drawable/count_badge"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:textColor="#FFFFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
+        <!-- 1.1.1 Sights (own button, camera); "around me / map centre" to its right. -->
+        <FrameLayout
+            android:id="@+id/sights_row"
+            android:layout_width="72dp"
+            android:layout_height="38dp"
+            android:layout_marginTop="15dp"
+            android:clipChildren="false">
+
+            <ImageButton
+                android:id="@+id/sights_button"
+                android:scaleType="fitCenter"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_gravity="start"
+                android:src="@drawable/ic_tourist"
+                android:background="@drawable/icon_backdrop"
+                android:padding="4dp"
+                android:contentDescription="Sights"
                 android:elevation="0dp"
                 android:stateListAnimator="@null" />
 
@@ -240,7 +277,7 @@
                 android:src="@drawable/ic_location_marker"
                 android:background="@drawable/icon_backdrop"
                 android:padding="4dp"
-                android:contentDescription="Sights around me or the map centre"
+                android:contentDescription="Places around me or the map centre"
                 android:elevation="0dp"
                 android:stateListAnimator="@null"
                 android:visibility="gone" />

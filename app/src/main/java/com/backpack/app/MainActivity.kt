@@ -112,36 +112,27 @@ class MainActivity : AppCompatActivity() {
         EMERGENCY(R.drawable.ic_urgency_emergency)
     }
 
-    /** [orsIds]: openrouteservice place categories (second source when Overpass is busy).
-     *  [color]: the category's colour (1.0.5) on the button and in the dropdown;
-     *  the map icons carry the same colour in their drawables. */
+    /** 1.1.1 Services panel. Names match [com.backpack.app.core.Places.SERVICES]
+     *  (filters and tag rules live there). [essential]: the first group
+     *  (the standard set, in its usual order); the others are the extras.
+     *  [color]: on the button, in the panel and on the map icons. */
     private enum class PoiCategory(
-        val overpassFilter: String, val iconRes: Int, val iconName: String, val label: String,
-        val orsIds: Map<Int, String> = emptyMap(), val color: Int? = null
+        val iconRes: Int, val iconName: String, val label: String, val color: Int? = null, val essential: Boolean = false
     ) {
-        NONE("", R.drawable.ic_poi_toggle, "", "Off"),
-        /** Well-known places (same as Weekend mode), from Wikidata-ranked OSM data. */
-        SIGHTS("", R.drawable.ic_tourist, "", "Sights", color = 0xFF4B1F6F.toInt()),
-        FOOD("[\"amenity\"~\"^(restaurant|cafe|fast_food)$\"]", R.drawable.ic_poi_food, "poi_food", "Food",
-            mapOf(570 to "restaurant", 564 to "cafe", 566 to "fast_food"), 0xFF800000.toInt()),
-        LODGING("[\"tourism\"~\"^(hotel|guest_house|motel)$\"]", R.drawable.ic_poi_lodging, "poi_lodging", "Lodging",
-            mapOf(108 to "hotel", 106 to "guest_house", 109 to "motel"), 0xFF3E5468.toInt()),
-        PARKING("[\"amenity\"=\"parking\"]", R.drawable.ic_poi_parking, "poi_parking", "Parking", mapOf(601 to "parking"), 0xFF0D3B8C.toInt()),
-        FUEL("[\"amenity\"~\"^(fuel|charging_station)$\"]", R.drawable.ic_poi_fuel, "poi_fuel", "Fuel/Charging",
-            mapOf(596 to "fuel", 593 to "charging_station"), 0xFF1E6B2E.toInt()),
-        TOILETS("[\"amenity\"=\"toilets\"]", R.drawable.ic_poi_toilets, "poi_toilets", "Toilets", mapOf(179 to "toilets"), 0xFF1F78B4.toInt()),
-        EMERGENCY("[\"amenity\"~\"^(hospital|police|fire_station)$\"]", R.drawable.ic_poi_emergency, "poi_emergency", "Emergency",
-            mapOf(206 to "hospital", 369 to "police", 367 to "fire_station"), 0xFFE51401.toInt()),
-        // 1.1.0: backpacker essentials (OpenStreetMap only).
-        WATER("[\"amenity\"=\"drinking_water\"]", R.drawable.ic_poi_water, "poi_water", "Drinking water", emptyMap(), 0xFF0097A7.toInt()),
-        SLEEP("[\"tourism\"~\"^(hostel|camp_site|alpine_hut|wilderness_hut|caravan_site)$\"]", R.drawable.ic_poi_sleep, "poi_sleep", "Hostel / camping", emptyMap(), 0xFF6D4C41.toInt()),
-        LAUNDRY("[\"shop\"~\"^(laundry|dry_cleaning)$\"]", R.drawable.ic_poi_laundry, "poi_laundry", "Laundry", emptyMap(), 0xFF5E35B1.toInt()),
-        PHARMACY("[\"amenity\"=\"pharmacy\"]", R.drawable.ic_poi_pharmacy, "poi_pharmacy", "Pharmacy", emptyMap(), 0xFF00897B.toInt()),
-        MONEY("[\"amenity\"~\"^(atm|bureau_de_change|bank)$\"]", R.drawable.ic_poi_money, "poi_money", "ATM / exchange", emptyMap(), 0xFF827717.toInt()),
-        WIFI("[\"internet_access\"~\"^(wlan|yes|wifi)$\"][\"internet_access:fee\"!=\"yes\"]", R.drawable.ic_poi_wifi, "poi_wifi", "Free Wi-Fi", emptyMap(), 0xFF3949AB.toInt()),
-        BIKE("[\"shop\"=\"bicycle\"]", R.drawable.ic_poi_bike, "poi_bike", "Bike repair", emptyMap(), 0xFFEF6C00.toInt());
-
-        fun finderCategory() = PlacesFinder.Category(name, overpassFilter, orsIds)
+        NONE(R.drawable.ic_poi_toggle, "", "Off"),
+        FOOD(R.drawable.ic_poi_food, "poi_food", "Food", 0xFF800000.toInt(), true),
+        LODGING(R.drawable.ic_poi_lodging, "poi_lodging", "Lodging", 0xFF3E5468.toInt(), true),
+        PARKING(R.drawable.ic_poi_parking, "poi_parking", "Parking", 0xFF0D3B8C.toInt(), true),
+        FUEL(R.drawable.ic_poi_fuel, "poi_fuel", "Fuel/Charging", 0xFF1E6B2E.toInt(), true),
+        TOILETS(R.drawable.ic_poi_toilets, "poi_toilets", "Toilets", 0xFF1F78B4.toInt(), true),
+        EMERGENCY(R.drawable.ic_poi_emergency, "poi_emergency", "Emergency", 0xFFE51401.toInt(), true),
+        WATER(R.drawable.ic_poi_water, "poi_water", "Water", 0xFF0097A7.toInt()),
+        SLEEP(R.drawable.ic_poi_sleep, "poi_sleep", "Hostel/Camping", 0xFF6D4C41.toInt()),
+        LAUNDRY(R.drawable.ic_poi_laundry, "poi_laundry", "Laundry", 0xFF5E35B1.toInt()),
+        PHARMACY(R.drawable.ic_poi_pharmacy, "poi_pharmacy", "Pharmacy", 0xFF00897B.toInt()),
+        MONEY(R.drawable.ic_poi_money, "poi_money", "ATM/Exchange", 0xFF827717.toInt()),
+        WIFI(R.drawable.ic_poi_wifi, "poi_wifi", "Wi-Fi", 0xFF3949AB.toInt()),
+        BIKE(R.drawable.ic_poi_bike, "poi_bike", "Bike repair", 0xFFEF6C00.toInt())
     }
 
     private lateinit var mapView: MapView
@@ -174,7 +165,6 @@ class MainActivity : AppCompatActivity() {
     private var currentPreference = PreferenceUi.RECOMMENDED
     private var avoidTolls = false
     private var urgencyMode = UrgencyMode.WEEKEND
-    private var currentPoiCategory = PoiCategory.NONE
     private var routeOptions = RouteOptions()
 
     // From Settings.
@@ -303,6 +293,7 @@ class MainActivity : AppCompatActivity() {
         setupNavigationButton()
         setupPoiToggle()
         setupSightsOrigin()
+        setupSightsButton()
         setupModeButtons()
         setupPreferenceRow()
         setupTollToggle()
@@ -524,7 +515,7 @@ class MainActivity : AppCompatActivity() {
             layers.install(style)
             if (LocationHub.hasPermission(this)) activateLocationPuck(style)
             restoreTripOnMap()
-            if (currentPoiCategory != PoiCategory.NONE) queryPois(force = true)
+            if (activeServices().isNotEmpty()) queryPois(force = true)
         }
     }
 
@@ -675,11 +666,7 @@ class MainActivity : AppCompatActivity() {
         currentPreference = enumOr(prefs.getString("preference", null), currentPreference)
         urgencyMode = enumOr(prefs.getString("urgency", null), urgencyMode)
         avoidTolls = prefs.getBoolean("avoid_tolls", avoidTolls)
-        currentPoiCategory = enumOr(prefs.getString("poi_category", null), currentPoiCategory)
-        // A configured "default on launch" POI in Settings wins over session memory.
-        val defaultPoi = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
-            .getString(Settings.KEY_DEFAULT_POI, "NONE")
-        if (defaultPoi != "NONE") currentPoiCategory = enumOr(defaultPoi, currentPoiCategory)
+        loadServices()
         routeOptions = Prefs.routeOptions(this)
     }
 
@@ -692,7 +679,6 @@ class MainActivity : AppCompatActivity() {
             .putString("preference", currentPreference.name)
             .putString("urgency", urgencyMode.name)
             .putBoolean("avoid_tolls", avoidTolls)
-            .putString("poi_category", currentPoiCategory.name)
             .apply()
     }
 
@@ -1041,7 +1027,8 @@ class MainActivity : AppCompatActivity() {
     /** Well-known places are shown in Weekend mode or with the Sights POI category. */
     private val touristOn: Boolean
         // 1.0.9: Weekend's default layer, or the Sights category; never in Emergency (no distractions).
-        get() = urgencyMode != UrgencyMode.EMERGENCY && (urgencyMode == UrgencyMode.WEEKEND || currentPoiCategory == PoiCategory.SIGHTS)
+        // 1.1.1: the Sights button's switch for this mode (Weekend on by default, Work off, Emergency never), with at least one kind.
+        get() = sightsSwitchOn() && sightGroups().isNotEmpty()
     // Results live in TripState: a rotation or day/night switch keeps them.
     private var touristResults: List<TouristPoi>
         get() = TripState.touristResults
@@ -1066,9 +1053,7 @@ class MainActivity : AppCompatActivity() {
     private fun touristModeChanged() {
         val now = touristOn
         if (now == touristWasOn) {
-            if (now && currentPoiCategory == PoiCategory.SIGHTS) {
-                setPoiButtonStatus(findViewById(R.id.poi_toggle_button), touristResults.isNotEmpty())
-            }
+            refreshSightsButton()
             return
         }
         touristWasOn = now
@@ -1084,6 +1069,7 @@ class MainActivity : AppCompatActivity() {
             touristAreaCenter = null
             layers.setTourist(emptyList())
         }
+        refreshSightsButton()
     }
 
     private fun sightsMaxFraction(): Double =
@@ -1206,7 +1192,7 @@ class MainActivity : AppCompatActivity() {
     private fun refreshSightsOrigin() {
         val b = findViewById<ImageButton>(R.id.sights_origin_button)
         // 1.0.9: whenever places are searched around a point (no route).
-        val v = if (TripState.plan == null && (currentPoiCategory != PoiCategory.NONE || touristOn)) View.VISIBLE else View.GONE
+        val v = if (TripState.plan == null && (activeServices().isNotEmpty() || touristOn)) View.VISIBLE else View.GONE
         if (b.visibility != v) b.visibility = v
         val icon = if (sightsAroundMe()) R.drawable.ic_location_marker else R.drawable.ic_map_center
         if (b.tag != icon) { b.tag = icon; b.setImageResource(icon); setIconActive(b, true) }
@@ -1226,7 +1212,7 @@ class MainActivity : AppCompatActivity() {
             touristRouteKey = plan
             touristAreaCenter = center
             layers.setTourist(emptyList())
-            if (currentPoiCategory == PoiCategory.SIGHTS) setPoiButtonStatus(findViewById(R.id.poi_toggle_button), false)
+            refreshSightsButton()
             showError(error ?: "Places search failed", retry = { refreshTourist(force = true) })
             return
         }
@@ -1288,7 +1274,9 @@ class MainActivity : AppCompatActivity() {
      * are shown too, dimmed (1.0.7). Returns the selected route's places.
      */
     private fun showTouristFor(route: RouteResult?): List<TouristPoi> {
-        val all = TripState.touristCandidates
+        // 1.1.1: only the kinds ticked in the Sights panel (no new search).
+        val kinds = sightKinds()
+        val all = TripState.touristCandidates.filter { it.category in kinds }
         val radius = corridorM()
         fun along(r: RouteResult) = Tourist.rank(Tourist.placeOnRoute(all, r.line).filter { it.offsetM <= radius * 1.05 }, TouristFinder.ROUTE_LIMIT)
         val owner = HashMap<String, Int>()
@@ -1307,7 +1295,7 @@ class MainActivity : AppCompatActivity() {
         touristDimOwner = owner
         touristResults = shown + extra
         layers.setTourist(shown + extra, owner.keys)
-        if (currentPoiCategory == PoiCategory.SIGHTS) setPoiButtonStatus(findViewById(R.id.poi_toggle_button), shown.isNotEmpty())
+        refreshSightsButton()
         return shown
     }
 
@@ -2112,8 +2100,9 @@ class MainActivity : AppCompatActivity() {
         setMargins(R.id.mode_row, top = top0)
         setMargins(R.id.urgency_button, top = gap)
         setMargins(R.id.poi_row, top = gap)
-        setMargins(R.id.route_options_button, top = top0 + 3 * step)
-        var leftRows = if (navUiActive) 0 else 4
+        setMargins(R.id.sights_row, top = gap) // 1.1.1: Sights under Services
+        setMargins(R.id.route_options_button, top = top0 + 4 * step)
+        var leftRows = if (navUiActive) 0 else 5
 
         // Right column.
         setMargins(R.id.locate_button, top = top0)
@@ -2136,8 +2125,8 @@ class MainActivity : AppCompatActivity() {
             setMargins(R.id.search_button, top = top0 + 3 * step)
             rightRows = 4
             moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.START)
-            setMargins(R.id.resume_button, top = top0 + 4 * step, start = 8)
-            if (resumeShown) leftRows = 5
+            setMargins(R.id.resume_button, top = top0 + 5 * step, start = 8)
+            if (resumeShown) leftRows = 6
         }
 
         // Route chips (1.0.8): stacked, left-aligned (letters in a line),
@@ -2300,106 +2289,244 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---------- POI layer ----------
+    // ---------- 1.1.1 Services (multi-select) ----------
 
-    /** Category icons are multi-colour (never tinted): status is a red ring
-     *  on the usual grey backdrop (found), no ring otherwise. Off = grey pin. */
-    private fun setPoiButtonStatus(button: ImageButton, found: Boolean?) {
-        setStatusRing(button, found == true)
-        // The selected category's own colour (clearing the tint would also
-        // clear the icon's colour); Off = grey.
-        val c = currentPoiCategory.color
-        if (found == null || c == null) setIconActive(button, false) else button.imageTintList = ColorStateList.valueOf(c)
+    /** Services you ticked, in panel order. Emergency is added by itself in Emergency mode. */
+    private val selectedServices = LinkedHashSet<PoiCategory>()
+
+    private fun loadServices() {
+        val prefs = getSharedPreferences("backpack_toggle_state", MODE_PRIVATE)
+        selectedServices.clear()
+        val saved = prefs.getString("services", null)
+        if (saved != null) {
+            saved.split(',').mapNotNull { n -> PoiCategory.values().firstOrNull { it.name == n } }
+                .filter { it != PoiCategory.NONE }.forEach { selectedServices.add(it) }
+        } else {
+            // Before 1.1.1: one category (Sights / Off ignored).
+            PoiCategory.values().firstOrNull { it.name == prefs.getString("poi_category", null) }
+                ?.takeIf { it != PoiCategory.NONE }?.let { selectedServices.add(it) }
+        }
+    }
+
+    private fun saveServices() {
+        getSharedPreferences("backpack_toggle_state", MODE_PRIVATE).edit()
+            .putString("services", PoiCategory.values().filter { it in selectedServices }.joinToString(",") { it.name })
+            .apply()
+    }
+
+    /** What is shown: your ticks, plus Emergency in Emergency mode. */
+    private fun activeServices(): List<PoiCategory> = PoiCategory.values().filter {
+        it != PoiCategory.NONE && (it in selectedServices || (it == PoiCategory.EMERGENCY && urgencyMode == UrgencyMode.EMERGENCY))
+    }
+
+    /** Services button: icon of the first ticked service in its colour, and
+     *  a small count when more than one is on; red ring when some are shown. */
+    private fun refreshServicesButton(found: Boolean = poiResults.isNotEmpty()) {
+        val button = findViewById<ImageButton>(R.id.poi_toggle_button)
+        val active = activeServices()
+        val first = active.firstOrNull()
+        button.setImageResource(first?.iconRes ?: PoiCategory.NONE.iconRes)
+        if (first?.color != null) button.imageTintList = ColorStateList.valueOf(first.color) else setIconActive(button, false)
+        setStatusRing(button, active.isNotEmpty() && found)
+        findViewById<TextView>(R.id.poi_count).apply {
+            visibility = if (active.size > 1) View.VISIBLE else View.GONE
+            text = active.size.toString()
+        }
     }
 
     private fun setupPoiToggle() {
         val button = findViewById<ImageButton>(R.id.poi_toggle_button)
-        button.setImageResource(currentPoiCategory.iconRes)
-        setPoiButtonStatus(button, if (currentPoiCategory == PoiCategory.NONE) null else false)
-        button.setOnClickListener { showPoiDropdown(button) }
-        button.setOnLongClickListener {
-            if (currentPoiCategory == PoiCategory.SIGHTS && touristResults.isNotEmpty()) showTouristList()
-            true
-        }
+        refreshServicesButton(false)
+        button.setOnClickListener { showServicesPanel(button) }
     }
 
-    /** Dropdown under the POI button: icon + name, the current one in red. One tap chooses. */
-    private fun showPoiDropdown(anchor: View) {
-        val list = LinearLayout(this).apply {
+    /** Two groups, two columns, ticks: several services at once. Ticking
+     *  only filters what is already on the phone (no new search). */
+    private fun showServicesPanel(anchor: View) {
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = ContextCompat.getDrawable(this@MainActivity, R.drawable.popup_background)
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setPadding(dp(8), dp(6), dp(8), dp(6))
         }
-        val window = android.widget.PopupWindow(list, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, true)
-        for (cat in PoiCategory.values()) {
-            val selected = cat == currentPoiCategory
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                setPadding(dp(8), dp(5), dp(14), dp(5))
-                setOnClickListener {
-                    window.dismiss()
-                    selectPoiCategory(cat)
+        val window = android.widget.PopupWindow(root, LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT, true)
+        val textColor = ContextCompat.getColor(this, R.color.rg_text)
+        val cells = HashMap<PoiCategory, TextView>()
+        fun paint(cat: PoiCategory) {
+            val on = cat in selectedServices
+            cells[cat]?.apply {
+                setTypeface(null, if (on) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
+                setTextColor(if (on) (cat.color ?: activeColor) else textColor)
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(if (on) Color.argb(40, Color.red(cat.color ?: activeColor), Color.green(cat.color ?: activeColor), Color.blue(cat.color ?: activeColor)) else Color.TRANSPARENT)
+                    setStroke(Math.max(1, dp(1)), if (on) (cat.color ?: activeColor) else Color.TRANSPARENT)
                 }
             }
-            row.addView(ImageView(this).apply {
-                setImageResource(cat.iconRes)
-                imageTintList = ColorStateList.valueOf(cat.color ?: inactiveColor)
-            }, LinearLayout.LayoutParams(dp(26), dp(26)))
-            row.addView(TextView(this).apply {
-                text = cat.label
-                textSize = 15f
-                setTextColor(if (selected) activeColor else ContextCompat.getColor(this@MainActivity, R.color.rg_text))
-                setTypeface(typeface, if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
-                setPadding(dp(10), 0, 0, 0)
-            })
-            list.addView(row)
         }
+        fun header(t: String) = root.addView(TextView(this).apply {
+            text = t
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.rg_text_secondary))
+            setPadding(dp(6), dp(6), dp(6), dp(2))
+        })
+        fun group(cats: List<PoiCategory>) {
+            for (pair in cats.chunked(2)) {
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                for (cat in pair) {
+                    val cell = TextView(this).apply {
+                        text = cat.label
+                        textSize = 14f
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+                        compoundDrawablePadding = dp(6)
+                        setPadding(dp(6), dp(5), dp(8), dp(5))
+                        val icon = ContextCompat.getDrawable(this@MainActivity, cat.iconRes)?.mutate()
+                        icon?.setBounds(0, 0, dp(22), dp(22))
+                        icon?.setTint(cat.color ?: inactiveColor)
+                        setCompoundDrawables(icon, null, null, null)
+                        setOnClickListener {
+                            if (cat in selectedServices) selectedServices.remove(cat) else selectedServices.add(cat)
+                            saveServices()
+                            paint(cat)
+                            servicesChanged()
+                        }
+                    }
+                    cells[cat] = cell
+                    row.addView(cell, LinearLayout.LayoutParams(dp(150), LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) })
+                    paint(cat)
+                }
+                root.addView(row)
+            }
+        }
+        header("Essentials")
+        group(PoiCategory.values().filter { it.essential })
+        header("Backpacker extras")
+        group(PoiCategory.values().filter { it != PoiCategory.NONE && !it.essential })
+        if (urgencyMode == UrgencyMode.EMERGENCY) header("Emergency mode: hospitals, police, fire stations always shown")
+        val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.END }
+        fun action(label: String, onClick: () -> Unit) = buttons.addView(TextView(this).apply {
+            text = label
+            textSize = 14f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(activeColor)
+            setPadding(dp(12), dp(8), dp(12), dp(4))
+            setOnClickListener { onClick() }
+        })
+        action("All off") {
+            selectedServices.clear()
+            saveServices()
+            PoiCategory.values().forEach { paint(it) }
+            servicesChanged()
+        }
+        action("Done") { window.dismiss() }
+        root.addView(buttons)
         window.elevation = dp(6).toFloat()
         window.isOutsideTouchable = true
         window.showAsDropDown(anchor, 0, dp(4))
     }
 
-    private fun selectPoiCategory(cat: PoiCategory) {
-        if (cat == currentPoiCategory && cat != PoiCategory.NONE) {
-            // Same category again: search again (e.g. after a busy server).
-            if (cat == PoiCategory.SIGHTS) refreshTourist(force = true) else queryPois(force = true)
+    /** A tick changed: filter what is on the phone; search only if never searched here. */
+    private fun servicesChanged() {
+        refreshSightsOrigin()
+        if (activeServices().isEmpty()) {
+            svcSlot.reset()
+            refreshPoiPins()
+            showMessage("Services off")
             return
         }
-        val button = findViewById<ImageButton>(R.id.poi_toggle_button)
-        currentPoiCategory = cat
-        button.setImageResource(cat.iconRes)
-        saveToggleState()
-        refreshSightsOrigin()
-        selSlot.reset()
         refreshPoiPins()
-        when (cat) {
-            PoiCategory.NONE -> {
-                setPoiButtonStatus(button, null)
-                touristModeChanged()
-                showMessage("POI layer off")
-            }
-            PoiCategory.SIGHTS -> {
-                setPoiButtonStatus(button, false)
-                showMessage("Looking for well-known places...")
-                touristModeChanged()
-            }
-            else -> {
-                touristModeChanged() // leaving Sights clears them unless Weekend
-                setPoiButtonStatus(button, false)
-                showMessage("Checking for ${cat.label}...")
-                queryPois(force = true)
-            }
+        if (svcSlot.key == null) queryPois(force = true) else queryPois()
+    }
+
+    // ---------- 1.1.1 Sights (own button, kinds, Weekend default) ----------
+
+    /** Kinds of sights in the Sights panel. */
+    private enum class SightGroup(val label: String, val kinds: Set<com.backpack.app.core.TouristCategory>) {
+        HISTORIC("Historic (castles, ruins, monuments, UNESCO)", setOf(com.backpack.app.core.TouristCategory.HISTORIC, com.backpack.app.core.TouristCategory.HERITAGE)),
+        NATURE("Nature (waterfalls, springs, caves, peaks, viewpoints)", setOf(com.backpack.app.core.TouristCategory.NATURE, com.backpack.app.core.TouristCategory.WATER, com.backpack.app.core.TouristCategory.VIEWPOINT)),
+        PARKS("Parks (national parks, reserves)", setOf(com.backpack.app.core.TouristCategory.PARK)),
+        CULTURE("Culture (museums, galleries, zoos, attractions)", setOf(com.backpack.app.core.TouristCategory.MUSEUM, com.backpack.app.core.TouristCategory.SIGHT))
+    }
+
+    private fun sightsPrefs() = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
+
+    /** Sights on in this urgency mode: Weekend yes by default, Work no by default, Emergency never. */
+    private fun sightsSwitchOn(): Boolean = when (urgencyMode) {
+        UrgencyMode.WEEKEND -> sightsPrefs().getBoolean(Settings.KEY_SIGHTS_WEEKEND, true)
+        UrgencyMode.WORK -> sightsPrefs().getBoolean(Settings.KEY_SIGHTS_WORK, false)
+        UrgencyMode.EMERGENCY -> false
+    }
+
+    private fun sightGroups(): Set<SightGroup> {
+        val saved = sightsPrefs().getString(Settings.KEY_SIGHT_GROUPS, null) ?: return SightGroup.values().toSet()
+        return saved.split(',').mapNotNull { n -> SightGroup.values().firstOrNull { it.name == n } }.toSet()
+    }
+
+    private fun sightKinds(): Set<com.backpack.app.core.TouristCategory> = sightGroups().flatMap { it.kinds }.toSet()
+
+    private fun refreshSightsButton() {
+        val b = findViewById<ImageButton>(R.id.sights_button)
+        if (touristOn) {
+            b.imageTintList = ColorStateList.valueOf(0xFF4B1F6F.toInt())
+            setStatusRing(b, touristResults.isNotEmpty())
+        } else {
+            setIconActive(b, false)
+            setStatusRing(b, false)
         }
     }
 
-    // ---------- POI categories (1.0.9: adaptive) ----------
+    private fun setupSightsButton() {
+        val b = findViewById<ImageButton>(R.id.sights_button)
+        b.setOnClickListener { showSightsPanel(b) }
+        b.setOnLongClickListener {
+            if (touristOn && touristResults.isNotEmpty()) showTouristList() else showMessage("No well-known places shown yet")
+            true
+        }
+        refreshSightsButton()
+    }
 
-    /** One category search: its finder, results and retry state. */
+    /** On / off for this urgency mode, and which kinds. */
+    private fun showSightsPanel(anchor: View) {
+        val p = Popup(this, "Sights")
+        if (urgencyMode == UrgencyMode.EMERGENCY) {
+            p.text("Emergency mode: no sights (no distractions).")
+            p.button("Close", primary = true) { p.dismiss() }
+            p.show()
+            return
+        }
+        val key = if (urgencyMode == UrgencyMode.WEEKEND) Settings.KEY_SIGHTS_WEEKEND else Settings.KEY_SIGHTS_WORK
+        p.toggle("Show sights in ${if (urgencyMode == UrgencyMode.WEEKEND) "Weekend" else "Work"} mode", { sightsSwitchOn() }) {
+            sightsPrefs().edit().putBoolean(key, it).apply()
+            sightsChanged()
+        }
+        p.section("Kinds")
+        for (g in SightGroup.values()) {
+            p.toggle(g.label, { g in sightGroups() }) { on ->
+                val now = sightGroups().toMutableSet().apply { if (on) add(g) else remove(g) }
+                sightsPrefs().edit().putString(Settings.KEY_SIGHT_GROUPS, now.joinToString(",") { it.name }).apply()
+                sightsChanged()
+            }
+        }
+        p.text("Along the proposed routes when there is one, otherwise around you or the map centre (small button next to this one). Hold this button for the list.", 11f)
+        p.button("Done", primary = true) { p.dismiss() }
+        p.show()
+    }
+
+    /** On/off or kinds changed: kinds only re-filter what is on the phone. */
+    private fun sightsChanged() {
+        val wasOn = touristWasOn
+        touristModeChanged()
+        if (wasOn && touristOn) showTouristFor(if (TripState.plan != null) selectedRoute() else null)
+        refreshSightsButton()
+        refreshSightsOrigin()
+    }
+
+    // ---------- Services search (1.0.9 adaptive, 1.1.1 one search for all) ----------
+
+    /** The services search: results, key and retry state. */
     private inner class PoiSlot {
         val finder = PlacesFinder(this@MainActivity)
+        /** Every service found (filtered by your ticks when drawn). */
         var results: List<PoiPlace> = emptyList()
-        var category: PoiCategory? = null
         var key: String? = null
         var origin: LatLon? = null
         var sayKey: String? = null
@@ -2411,15 +2538,20 @@ class MainActivity : AppCompatActivity() {
             gen++
             finder.cancel()
             results = emptyList()
-            category = null
             key = null
             origin = null
         }
     }
 
-    /** The category you picked, and Emergency's own (automatic) layer. */
-    private val selSlot by lazy { PoiSlot() }
-    private val emgSlot by lazy { PoiSlot() }
+    private val svcSlot by lazy { PoiSlot() }
+
+    /** All services of a square in one request, kept on the phone 3 days. */
+    private val servicesCategory by lazy {
+        PlacesFinder.Category("services1", "", com.backpack.app.core.Places.SERVICES.flatMap { it.orsIds.entries }.associate { it.key to it.value }).apply {
+            query = { tiles -> com.backpack.app.core.Places.servicesQuery(tiles) }
+            maxShown = 600
+        }
+    }
 
     /** Longest there-and-back detour for places along a route (minutes). */
     private fun detourMinutes(emergencyLayer: Boolean = false): Int {
@@ -2435,66 +2567,75 @@ class MainActivity : AppCompatActivity() {
     private fun corridorM(emergencyLayer: Boolean = false): Double =
         Tourist.offsetForDetour(detourMinutes(emergencyLayer) * 60.0, currentMode.mode)
 
-    /** Both layers on the map; taps look places up in both. */
+    /** Ticked services on the map (each within its own detour along a
+     *  route), at most 30 per service; taps look places up here. */
     private fun refreshPoiPins() {
-        poiResults = (selSlot.results + emgSlot.results).distinctBy { it.key }
-        val pins = selSlot.results.map { MapLayers.Pin(it.key, it.point, (selSlot.category ?: PoiCategory.NONE).iconName) } +
-            emgSlot.results.filter { p -> selSlot.results.none { it.key == p.key } }
-                .map { MapLayers.Pin(it.key, it.point, PoiCategory.EMERGENCY.iconName) }
-        layers.setPois(pins)
+        val active = activeServices()
+        val alongRoute = svcSlot.key?.startsWith("R/") == true
+        val shown = ArrayList<Pair<PoiPlace, PoiCategory>>()
+        val taken = HashSet<String>()
+        for (cat in active) {
+            val radius = if (alongRoute) corridorM(cat == PoiCategory.EMERGENCY) else Double.MAX_VALUE
+            svcSlot.results.asSequence()
+                .filter { cat.name in it.services && it.offsetM <= radius && it.key !in taken }
+                .take(30)
+                .forEach { taken.add(it.key); shown.add(it to cat) }
+        }
+        poiResults = shown.map { it.first }
+        layers.setPois(shown.map { (p, cat) -> MapLayers.Pin(p.key, p.point, cat.iconName) })
+        refreshServicesButton()
+    }
+
+    /** Short summary for the message: "5 Fuel/Charging, 3 Food". */
+    private fun servicesSummary(): String {
+        val counts = activeServices().mapNotNull { cat ->
+            val n = poiResults.count { cat.name in it.services }
+            if (n == 0) null else "$n ${cat.label}"
+        }
+        return counts.joinToString(", ")
     }
 
     /**
-     * 1.0.9 adaptive POIs:
-     * - your category (not Off / Sights), any urgency mode;
-     * - Emergency mode adds hospitals, police and fire stations by itself.
-     * With a route: along it (the route ahead while navigating), within the
-     * detour allowed (Weekend / Work in Settings > Places, emergency 15 min).
-     * Without: within reach of you or the map centre (Emergency: of you).
+     * 1.1.1: one search for every service (filtered on the phone by your
+     * ticks). With a route: along it (the route ahead while navigating),
+     * as far as the longest detour wanted (Weekend / Work in Settings >
+     * Places, emergency 15 min). Without: within reach of you or the map
+     * centre (Emergency mode: of you).
      */
     private fun queryPois(force: Boolean = false) {
-        val sel = currentPoiCategory.takeIf { it != PoiCategory.NONE && it != PoiCategory.SIGHTS }
-        val emg = if (urgencyMode == UrgencyMode.EMERGENCY && sel != PoiCategory.EMERGENCY) PoiCategory.EMERGENCY else null
-        if (sel == null) { if (selSlot.category != null) { selSlot.reset(); refreshPoiPins() } } else runPoiSlot(selSlot, sel, sel == PoiCategory.EMERGENCY, force)
-        if (emg == null) { if (emgSlot.category != null) { emgSlot.reset(); refreshPoiPins() } } else runPoiSlot(emgSlot, emg, true, force)
-    }
-
-    private fun runPoiSlot(slot: PoiSlot, cat: PoiCategory, emergencyLayer: Boolean, force: Boolean) {
+        val active = activeServices()
+        if (active.isEmpty()) { if (svcSlot.key != null || svcSlot.results.isNotEmpty()) { svcSlot.reset(); refreshPoiPins() }; return }
+        val slot = svcSlot
         val now = System.currentTimeMillis()
-        if (slot.category != cat) { slot.reset(); slot.category = cat }
-        val plan = TripState.plan
         val route = if (navUiActive) NavigationEngine.route ?: selectedRoute() else selectedRoute()
         val announce: Boolean
-        if (plan != null && route != null && route.points.size >= 2) {
-            // Along the route ahead: searched again every 40 % of the stretch.
-            val radius = corridorM(emergencyLayer)
+        if (TripState.plan != null && route != null && route.points.size >= 2) {
+            // As far as the widest detour of the services on (emergency: 15 min).
+            val radius = active.maxOf { corridorM(it == PoiCategory.EMERGENCY) }
             val ahead = minOf(Tourist.searchAheadM(currentMode.mode), 60_000.0)
             val from = if (navUiActive) NavigationEngine.lastProgress?.alongM ?: 0.0 else 0.0
-            val key = "R/${System.identityHashCode(route)}/${cat.name}/${radius.toInt()}/${(from / (ahead * 0.4)).toInt()}"
+            val key = "R/${System.identityHashCode(route)}/${radius.toInt()}/${(from / (ahead * 0.4)).toInt()}"
             if (!force && key == slot.key) return
             if (!force && now < slot.retryAtMs) return
-            // Said once per destination / category / detour (not on every reroute).
-            val sayKey = "${TripState.destination}/${cat.name}/${radius.toInt()}"
+            val sayKey = "${TripState.destination}/${active.joinToString { it.name }}/${radius.toInt()}"
             announce = force || sayKey != slot.sayKey
             slot.sayKey = sayKey
             slot.key = key
             slot.origin = null
             val gen = ++slot.gen
             val stretch = com.backpack.app.core.SpeedLimits.section(route.line, from, ahead)
-            val minutes = detourMinutes(emergencyLayer)
-            slot.finder.alongRoutes(cat.finderCategory(), listOf(stretch), radius,
+            slot.finder.alongRoutes(servicesCategory, listOf(stretch), radius,
                 onSwitch = { if (gen == slot.gen && force) onPlacesServerSwitch() }
             ) { results, error, note, serverFailed ->
-                onPoiResults(slot, gen, cat, results, error, note, serverFailed, announce, "within $minutes min of your route")
+                onPoiResults(slot, gen, results, error, note, serverFailed, announce, "along your route")
             }
             return
         }
         // No route: within reach of you or the map centre.
-        // The automatic emergency layer is always around you; a category you picked follows the toggle.
-        val aroundMe = slot === emgSlot || sightsAroundMe()
+        val aroundMe = (urgencyMode == UrgencyMode.EMERGENCY && selectedServices.isEmpty()) || sightsAroundMe()
         val origin = (if (aroundMe) currentPosition() else null) ?: cameraCenter() ?: return
         val minutes = sightsReachMinutes()
-        val key = "A/${cat.name}/${currentMode.name}/$minutes/$aroundMe"
+        val key = "A/${currentMode.name}/$minutes/$aroundMe"
         val step = maxOf(if (aroundMe) 2000.0 else 3000.0, 0.25 * minOf(Reach.radiusM(currentMode.mode, minutes), Reach.MAX_SEARCH_M))
         val moved = slot.origin?.let { Geo.distance(it, origin) >= step } ?: true
         if (!force && key == slot.key && !moved) return
@@ -2512,29 +2653,26 @@ class MainActivity : AppCompatActivity() {
         ReachArea.get(this, origin, currentMode.mode, minutes) { ring, exact ->
             if (isDestroyed || gen != slot.gen) return@get
             val where = "within ${if (exact) "" else "about "}$time $how of ${if (aroundMe) "you" else "the map centre"}"
-            slot.finder.inReach(cat.finderCategory(), ring, origin,
+            slot.finder.inReach(servicesCategory, ring, origin,
                 onSwitch = { if (gen == slot.gen && force) onPlacesServerSwitch() }
             ) { results, error, note, serverFailed ->
-                onPoiResults(slot, gen, cat, results, error, note, serverFailed, announce, where)
+                onPoiResults(slot, gen, results, error, note, serverFailed, announce, where)
             }
         }
     }
 
     private fun onPoiResults(
-        slot: PoiSlot, gen: Int, cat: PoiCategory, results: List<PoiPlace>?, error: String?, note: String?,
+        slot: PoiSlot, gen: Int, results: List<PoiPlace>?, error: String?, note: String?,
         serverFailed: Boolean, announce: Boolean, where: String
     ) {
         if (gen != slot.gen || isDestroyed) return
-        val mine = slot === selSlot
-        val button = findViewById<ImageButton>(R.id.poi_toggle_button)
         if (results == null) {
             // Allowed again when asked, or after a pause (1, 2, then 5 min).
             slot.key = null
             slot.failures++
             slot.retryAtMs = System.currentTimeMillis() + when (slot.failures) { 1 -> 60_000L; 2 -> 120_000L; else -> 300_000L }
-            if (mine) setPoiButtonStatus(button, false)
-            // One error per refresh: the emergency layer speaks only if yours did not fail.
-            if (mine || selSlot.category == null || selSlot.key != null) showError(error ?: "Places search failed", retry = { queryPois(force = true) })
+            refreshServicesButton(false)
+            showError(error ?: "Places search failed", retry = { queryPois(force = true) })
             return
         }
         if (serverFailed) {
@@ -2546,12 +2684,12 @@ class MainActivity : AppCompatActivity() {
         }
         slot.results = results
         refreshPoiPins()
-        if (mine) setPoiButtonStatus(button, results.isNotEmpty())
+        val summary = servicesSummary()
         when {
             note != null -> showMessage(note)
             !announce -> {}
-            results.isEmpty() -> showMessage("No ${cat.label} $where")
-            else -> showMessage("${results.size} ${cat.label} $where \u00b7 tap one for details")
+            summary.isEmpty() -> showMessage("No ${activeServices().joinToString(", ") { it.label }} $where")
+            else -> showMessage("$summary $where \u00b7 tap one for details")
         }
     }
 
@@ -2644,8 +2782,8 @@ class MainActivity : AppCompatActivity() {
             urgencyButton.setImageResource(urgencyMode.iconRes)
             showMessage(
                 when (urgencyMode) {
-                    UrgencyMode.WEEKEND -> "Weekend mode \u00b7 well-known places shown"
-                    UrgencyMode.WORK -> "Work mode \u00b7 only your POI category, short detours"
+                    UrgencyMode.WEEKEND -> "Weekend mode \u00b7 sights ${if (sightsSwitchOn()) "shown" else "off (Sights button)"}"
+                    UrgencyMode.WORK -> "Work mode \u00b7 your services only, short detours"
                     UrgencyMode.EMERGENCY -> "Emergency mode \u00b7 hospitals, police, fire stations shown"
                 }
             )
@@ -2654,6 +2792,7 @@ class MainActivity : AppCompatActivity() {
             // 1.0.9: Emergency adds the emergency places on its own (your
             // category stays); Weekend / Work change the detour allowed.
             refreshSightsOrigin()
+            refreshServicesButton()
 
             val start = resolveStartPoint()
             val end = TripState.destination
@@ -2685,7 +2824,6 @@ class MainActivity : AppCompatActivity() {
 
     private val settingsHost = object : SettingsPopup.Host {
         override val travelMode get() = currentMode.mode
-        override val poiChoices get() = PoiCategory.values().map { it.name to it.label }
         override fun onSettingsOpened() { settingsOpen = true }
         override fun onRouteOptionsChanged(options: RouteOptions) {
             if (isDestroyed) return

@@ -34,7 +34,11 @@ import java.io.IOException
 class PlacesFinder(context: Context) {
 
     /** Category as the finder needs it. */
-    class Category(val layer: String, val overpassFilter: String, val orsIds: Map<Int, String>)
+    class Category(val layer: String, val overpassFilter: String, val orsIds: Map<Int, String>) {
+        /** 1.1.1: one request for all services of the squares (or one filter). */
+        var query: (List<Tile>) -> String = { tiles -> Places.tileQuery(overpassFilter, tiles) }
+        var maxShown: Int = MAX_SHOWN
+    }
 
     fun interface ResultCallback {
         /** [note]: shown to the user (fallback used, part missing...).
@@ -52,7 +56,7 @@ class PlacesFinder(context: Context) {
         val center = LatLon((south + north) / 2, (west + east) / 2)
         val tiles = Tiles.inBox(south, west, north, east, max = 16)
         search(category, tiles, center, onSwitch, callback) { p ->
-            if (p.point.lat in south..north && p.point.lon in west..east) Geo.distance(p.point, center) else null
+            if (p.point.lat in south..north && p.point.lon in west..east) p to Geo.distance(p.point, center) else null
         }
     }
 
@@ -71,7 +75,7 @@ class PlacesFinder(context: Context) {
         val center = com.backpack.app.core.SpeedLimits.pointAt(first, minOf(2000.0, first.length))
         search(category, tiles, center, onSwitch, callback) { p ->
             val best = polylines.mapNotNull { it.snap(p.point) }.minByOrNull { it.offsetM }
-            if (best == null || best.offsetM > radiusM) null else best.alongM
+            if (best == null || best.offsetM > radiusM) null else p.copy(offsetM = best.offsetM) to best.alongM
         }
     }
 
@@ -84,12 +88,12 @@ class PlacesFinder(context: Context) {
             .sortedBy { Geo.distance(LatLon(it.south + Tiles.SIZE / 2, it.west + Tiles.SIZE / 2), origin) }
             .take(MAX_AREA_TILES)
         search(category, tiles, origin, onSwitch, callback) { p ->
-            if (com.backpack.app.core.Reach.contains(area, p.point)) Geo.distance(p.point, origin) else null
+            if (com.backpack.app.core.Reach.contains(area, p.point)) p to Geo.distance(p.point, origin) else null
         }
     }
 
-    /** [rank]: null = left out, else the sort key (smaller first). */
-    private fun search(category: Category, tiles: List<Tile>, center: LatLon, onSwitch: () -> Unit, callback: ResultCallback, rank: (PoiPlace) -> Double?) {
+    /** [rank]: null = left out, else the place (maybe with its offset) and the sort key (smaller first). */
+    private fun search(category: Category, tiles: List<Tile>, center: LatLon, onSwitch: () -> Unit, callback: ResultCallback, rank: (PoiPlace) -> Pair<PoiPlace, Double>?) {
         val gen = ++generation
         val cache = TileCache.of(app, category.layer, 3L * 24 * 3600_000L)
         // Cache files are read and written off the screen's thread.
@@ -107,17 +111,17 @@ class PlacesFinder(context: Context) {
     private fun fetchMissing(
         gen: Int, category: Category, cache: TileCache, center: LatLon,
         found: List<PoiPlace>, missing: List<Tile>, onSwitch: () -> Unit, callback: ResultCallback,
-        rank: (PoiPlace) -> Double?
+        rank: (PoiPlace) -> Pair<PoiPlace, Double>?
     ) {
         fun finish(extra: List<PoiPlace>, error: String?, note: String?, serverFailed: Boolean) {
             if (gen != generation) return
             // Matching against the route / area off the screen's thread (1.0.9).
             io.execute {
                 val all = (found + extra).distinctBy { it.key }
-                    .mapNotNull { p -> rank(p)?.let { p to it } }
+                    .mapNotNull { p -> rank(p) }
                     .sortedBy { it.second }
                     .map { it.first }
-                    .take(MAX_SHOWN)
+                    .take(category.maxShown)
                 main.post {
                     if (gen != generation) return@post
                     if (all.isEmpty() && error != null) callback.onResult(null, error, null, true)
@@ -126,7 +130,7 @@ class PlacesFinder(context: Context) {
             }
         }
         if (missing.isEmpty()) { finish(emptyList(), null, null, false); return }
-        val query = Places.tileQuery(category.overpassFilter, missing)
+        val query = category.query(missing)
         OverpassClient.query(app, query, onSwitch = { if (gen == generation) onSwitch() }, isStale = { gen != generation }) { body, failure ->
             if (body != null) {
                 io.execute {

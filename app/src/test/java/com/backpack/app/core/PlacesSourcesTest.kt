@@ -68,4 +68,19 @@ class PlacesSourcesTest {
         val noTag = JSONObject().put("name", "").put("address", JSONObject().put("village", "Vif")).toString()
         assertEquals("Vif" to null, Tourist.parseReverseTown(noTag))
     }
+
+    @Test fun servicesOneQueryAndTags() {
+        val q = Places.servicesQuery(listOf(Tile(120, 900)))
+        assertEquals(1, Regex("out center tags 400;").findAll(q).count())
+        assertEquals(Places.SERVICES.size, Regex("nwr\\(45.0000").findAll(q).count())
+        val cafeWifi = JSONObject().put("amenity", "cafe").put("internet_access", "wlan")
+        assertEquals(setOf("FOOD", "WIFI"), Places.servicesOf(cafeWifi))
+        assertEquals(emptySet<String>(), Places.servicesOf(JSONObject().put("internet_access", "wlan").put("internet_access:fee", "yes")))
+        assertEquals(setOf("FUEL"), Places.serviceOfKind("charging_station"))
+        val body = JSONObject().put("elements", JSONArray().put(JSONObject().put("type", "node").put("id", 9)
+            .put("lat", 45.01).put("lon", 6.01).put("tags", cafeWifi.put("name", "Bar")))).toString()
+        val list = Places.parseOverpass(body)
+        assertEquals(setOf("FOOD", "WIFI"), list[0].services)
+        assertEquals(list, Places.fromJson(Places.toJson(list)))
+    }
 }

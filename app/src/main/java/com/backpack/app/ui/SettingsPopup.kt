@@ -28,8 +28,6 @@ object SettingsPopup {
 
     interface Host {
         val travelMode: TravelMode
-        /** (name, label) of the POI categories, for "default on launch". */
-        val poiChoices: List<Pair<String, String>>
         /** The popup opens (e.g. hold the automatic day/night switch meanwhile). */
         fun onSettingsOpened()
         /** Called on close, only when the route options of a mode changed. */
@@ -213,12 +211,6 @@ object SettingsPopup {
     }
 
     private fun placesPage(c: Context, p: Popup, prefs: android.content.SharedPreferences, host: Host) {
-        p.section("POI category when the app starts")
-        val choices = listOf("NONE" to "Off") + host.poiChoices.filter { it.first != "NONE" }
-        p.choices(choices, { it.second }, {
-            val cur = prefs.getString(Settings.KEY_DEFAULT_POI, "NONE")
-            choices.firstOrNull { it.first == cur } ?: choices[0]
-        }) { prefs.edit().putString(Settings.KEY_DEFAULT_POI, it.first).apply() }
         p.section("Sights category: reach")
         val reach = com.backpack.app.core.Reach.MINUTES.map { it to (if (it < 60) "$it min" else "${it / 60} h") }
         p.choices(reach, { it.second }, {
