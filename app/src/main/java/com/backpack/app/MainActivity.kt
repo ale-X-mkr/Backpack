@@ -93,7 +93,10 @@ class MainActivity : AppCompatActivity() {
     private enum class ModeUi(val mode: TravelMode, val iconRes: Int, val label: String) {
         WALKING(TravelMode.WALKING, R.drawable.ic_mode_walking, "Walking"),
         CYCLING(TravelMode.CYCLING, R.drawable.ic_mode_cycling, "Cycling"),
-        DRIVING(TravelMode.DRIVING, R.drawable.ic_mode_driving, "Driving")
+        DRIVING(TravelMode.DRIVING, R.drawable.ic_mode_driving, "Driving"),
+        /** 1.1.0: bus / train. No route: the stop and a wake-up alarm
+         *  (distances and reach as by road). */
+        TRANSIT(TravelMode.DRIVING, R.drawable.ic_mode_transit, "Transit")
     }
 
     private enum class PreferenceUi(val pref: RoutePreference, val iconRes: Int, val label: String) {
@@ -347,6 +350,8 @@ class MainActivity : AppCompatActivity() {
         mapView.onStart()
         LocationHub.addListener(uiFixListener)
         NavigationEngine.addListener(navListener)
+        com.backpack.app.transit.TransitSession.addListener(transitListener)
+        transitListener.onTransitUpdate()
         if (LocationHub.hasPermission(this)) LocationHub.acquire(this, LocationHub.LEASE_UI)
         if (navUiActive) {
             handler.removeCallbacks(deadReckoningRunnable)
@@ -395,6 +400,7 @@ class MainActivity : AppCompatActivity() {
         super.onStop()
         LocationHub.removeListener(uiFixListener)
         NavigationEngine.removeListener(navListener)
+        com.backpack.app.transit.TransitSession.removeListener(transitListener)
         // GPS keeps running only if navigation holds its own lease.
         LocationHub.release(this, LocationHub.LEASE_UI)
         handler.removeCallbacks(deadReckoningRunnable)
@@ -1586,6 +1592,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupNavigationButton() {
         findViewById<ImageButton>(R.id.nav_go_button).setOnClickListener {
+            if (com.backpack.app.transit.TransitSession.active) { stopTransit(); return@setOnClickListener }
             if (NavigationEngine.isActive) {
                 NavigationEngine.stop() // stop + clear together, not two separate steps
                 clearRoute()
@@ -1602,6 +1609,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startNavigation() {
+        if (currentMode == ModeUi.TRANSIT) { showTransitSetup(); return }
         val plan = TripState.plan
         val end = TripState.destination
         // Fix: navigate the route the user SELECTED (Step 38 always took the first).
@@ -2561,6 +2569,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun selectMode(mode: ModeUi) {
         if (currentMode == mode) return
+        // Leaving Transit ends its wake-up alarm.
+        if (currentMode == ModeUi.TRANSIT && com.backpack.app.transit.TransitSession.active) stopTransit()
         currentMode = mode
         refreshModeButtonHighlight()
         syncDrivingModeUI()
@@ -2863,6 +2873,94 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- Map taps ----------
 
+    // ---------- 1.1.0 Transit: wake-up alarm ----------
+
+    /** Transit: the stop as destination, a straight line to it (no routing). */
+    private fun transitDestination(from: LatLon, to: LatLon) {
+        val straight = Geo.distance(from, to)
+        val track = com.backpack.app.core.TransitAlarm.trackDistance(straight)
+        // Rough time at 40 km/h until the alarm measures your real speed.
+        val r = RouteResult(listOf(from, to), track, track / (40 / 3.6))
+        val plan = RoutePlan(listOf(r), 0, null)
+        TripState.plan = plan
+        TripState.selectedIndex = 0
+        TripState.committed = TripState.copy()
+        drawPlan(plan, 0, fit = true, note = "Transit: your stop is set \u00b7 Go = wake-up alarm", tourist = true)
+    }
+
+    private val transitListener = com.backpack.app.transit.TransitSession.Listener {
+        val t = com.backpack.app.transit.TransitSession
+        val go = findViewById<ImageButton>(R.id.nav_go_button)
+        go.setImageResource(if (t.active) R.drawable.ic_navigation_stop else R.drawable.ic_navigation_go)
+        if (!t.active) return@Listener
+        val track = t.trackM ?: return@Listener
+        routeInfoDist.text = distanceLabel(track)
+        routeInfoEta.text = t.etaS?.let { etaLabel(it) } ?: "ETA: --"
+        routeInfoCost.text = if (t.ringing) "Wake up!" else "Alarm ${t.lead.label}${if (t.estimated) " (no GPS)" else ""}"
+    }
+
+    /** Go in Transit mode: when to be woken, optional backup time, start. */
+    private fun showTransitSetup() {
+        val dest = TripState.destination ?: run { showError("Set your stop first (tap the map or search)"); return }
+        val t = com.backpack.app.transit.TransitSession
+        val p = Popup(this, "Wake-up alarm")
+        p.text("Rings at alarm volume with vibration, also in silent mode and with the screen off. No timetable: your stop, your GPS and your real speed.")
+        p.section("Wake me")
+        var lead = t.lead
+        p.choices(com.backpack.app.core.TransitAlarm.LEADS, { it.label }, { lead }) { lead = it }
+        p.section("Backup")
+        val c = java.util.Calendar.getInstance()
+        var backup = 0L
+        val backupText = p.text("No backup time (optional: rings at that time anyway, e.g. without GPS underground).", 11f)
+        p.bodyButton("Wake at a time...") {
+            android.app.TimePickerDialog(this, { _, h, m ->
+                val at = java.util.Calendar.getInstance().apply {
+                    set(java.util.Calendar.HOUR_OF_DAY, h); set(java.util.Calendar.MINUTE, m); set(java.util.Calendar.SECOND, 0)
+                    if (timeInMillis <= System.currentTimeMillis()) add(java.util.Calendar.DAY_OF_MONTH, 1)
+                }
+                backup = at.timeInMillis
+                backupText.text = "Backup: rings at %02d:%02d anyway.".format(h, m)
+            }, c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE), true).show()
+        }
+        p.button("Cancel") { p.dismiss() }
+        p.button("Start", primary = true) {
+            p.dismiss()
+            if (!LocationHub.hasPermission(this)) { requestLocationPermission(); return@button }
+            if (Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            t.destination = dest
+            t.lead = lead
+            t.backupAtMs = backup
+            t.ringing = false
+            t.trackM = null
+            t.etaS = null
+            t.active = true
+            try {
+                ContextCompat.startForegroundService(this, Intent(this, com.backpack.app.transit.TransitAlarmService::class.java))
+            } catch (e: Exception) {
+                t.active = false
+                showError("Android refused to start the alarm -- try again with the app open")
+                return@button
+            }
+            t.changed()
+            showMessage("Wake-up alarm on \u00b7 ${lead.label}. You can lock the phone.")
+        }
+        p.show()
+    }
+
+    private fun stopTransit() {
+        try {
+            startService(Intent(this, com.backpack.app.transit.TransitAlarmService::class.java)
+                .setAction(com.backpack.app.transit.TransitAlarmService.ACTION_STOP))
+        } catch (e: Exception) {
+            com.backpack.app.transit.TransitSession.active = false
+            com.backpack.app.transit.TransitSession.changed()
+        }
+        showMessage("Wake-up alarm off")
+        selectedRoute()?.let { setRouteInfoText(it) }
+    }
+
     private fun handleDestinationTap(point: LatLon) {
         if (NavigationEngine.isActive) {
             showMessage("Stop navigation before changing your route (or open a place: Go here)")
@@ -2917,6 +3015,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clearRoute() {
+        if (com.backpack.app.transit.TransitSession.active) stopTransit()
         planner.cancel()
         TripState.pendingLink = null
         TripState.pendingLinkMode = null
@@ -2957,6 +3056,8 @@ class MainActivity : AppCompatActivity() {
     )
 
     private fun requestBestRoute(from: LatLon, to: LatLon, stops: List<LatLon>? = null, onFailure: (() -> Unit)? = null) {
+        // Transit: no routing, only the stop (wake-up alarm).
+        if (currentMode == ModeUi.TRANSIT && !NavigationEngine.isActive) { transitDestination(from, to); return }
         val navigating = NavigationEngine.isActive
         // Mid-trip changes (preference, urgency) start from where you are now.
         val request = buildRequest(if (navigating) currentPosition() ?: from else from, to, stops)
