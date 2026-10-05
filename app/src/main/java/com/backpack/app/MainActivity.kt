@@ -526,8 +526,8 @@ class MainActivity : AppCompatActivity() {
             .accuracyAlpha(0.12f)
             .enableStaleState(false)
             // Position arrow 170 % (Alex, 0.7.0 test), same size at every zoom.
-            .minZoomIconScale(1.7f)
-            .maxZoomIconScale(1.7f)
+            .minZoomIconScale(2.4f) // 1.1.0: 40 % bigger
+            .maxZoomIconScale(2.4f)
             .build()
         // useDefaultLocationEngine(false): MapLibre gets positions only from
         // LocationHub (GPS chip), never from its own location engine.
@@ -576,7 +576,7 @@ class MainActivity : AppCompatActivity() {
             if (currentMode == ModeUi.DRIVING) {
                 updateSpeedLimit(location)
                 updateSpeedSignDisplay(location)
-            }
+            } else if (navUiActive) updateSpeedOnly(location)
             if (navUiActive) adaptTrackingZoom(location)
             queryPois()
             // Sights around you: searched again once you moved ~2 km.
@@ -1670,6 +1670,8 @@ class MainActivity : AppCompatActivity() {
         navInstructionIcon.visibility = View.GONE
         navInstructionBar.visibility = View.GONE
         updateNavBarProximityColor(Double.MAX_VALUE) // planning: plain blue frame
+        layers.setProgress(null)
+        if (currentMode != ModeUi.DRIVING) speedWidget.visibility = View.GONE
         handler.post { queryPois() } // back to the whole planned route / the area
         // Back to the planned route's figures (not the last live ones).
         selectedRoute()?.let { setRouteInfoText(it) }
@@ -1744,6 +1746,7 @@ class MainActivity : AppCompatActivity() {
         }
         if (overviewOn && p.anticipation) leaveOverview() // back to the drive view before a turn
         extendTouristIfNeeded(p, route)
+        layers.setProgress(p.alongM, route) // driven part darker
         queryPois() // the stretch ahead, every 40 % of it
         // Live remaining distance and arrival time.
         routeInfoDist.text = navInfo("Dist:", navDistance(p.remainingM), " \u00b7")
@@ -2033,7 +2036,7 @@ class MainActivity : AppCompatActivity() {
         val boxW = if (navUiActive) ((screenW - dp(16)) * (if (land) 0.8f else 1f)).toInt() else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         if (boxLp.width != boxW) { boxLp.width = boxW; navBox.layoutParams = boxLp }
         // Room for the speed circle at the box's right end (driving, navigating).
-        val circleInBox = navUiActive && driving
+        val circleInBox = navUiActive // 1.1.0: speed shown in every mode while navigating
         navBox.setPadding(dp(14), dp(5), if (circleInBox) dp(80) else dp(14), dp(5))
         // Planning while driving: box and chips centred left of the speed
         // circle (top right), never under it.
@@ -2517,7 +2520,7 @@ class MainActivity : AppCompatActivity() {
     private fun syncDrivingModeUI() {
         val driving = currentMode == ModeUi.DRIVING
         tollToggle.visibility = if (driving && !navUiActive) View.VISIBLE else View.GONE
-        if (!driving) {
+        if (!driving && !navUiActive) {
             speedWidget.visibility = View.GONE
             stopBlinking()
         }
@@ -2715,12 +2718,25 @@ class MainActivity : AppCompatActivity() {
                 lastSpeedLimitOkAtMs = System.currentTimeMillis()
             }
             if (currentMode == ModeUi.DRIVING) updateSpeedSignDisplay(fix)
+            else if (navUiActive) updateSpeedOnly(fix)
         }
     }
 
     /** Green 5+ under, yellow within 5 under, red up to 5 over, blinking
      *  red + high alarm beyond; blue + low alarm when 15+ under on a 100+
      *  road; red + low alarm when stopped on a 100+ road. */
+    /** 1.1.0: walking / cycling while navigating: your speed only (no
+     *  limit sign, no alarms; those stay for driving). */
+    private fun updateSpeedOnly(location: Location) {
+        speedWidget.visibility = View.VISIBLE
+        val shown = if (useMetric) (location.speed * 3.6).toInt() else (location.speed * 2.23694).toInt()
+        speedSignText.text = if (location.hasSpeed()) shown.toString() else "--"
+        speedUnitText.text = if (useMetric) "km/h" else "mph"
+        speedLimitSign.visibility = View.GONE
+        (speedSign.background?.mutate() as? GradientDrawable)?.setStroke(dp(4), Color.parseColor("#9E9E9E"))
+        stopBlinking()
+    }
+
     private fun updateSpeedSignDisplay(location: Location) {
         val limit = lastKnownSpeedLimit
         val speedKmh = (location.speed * 3.6).toInt()

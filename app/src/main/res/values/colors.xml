@@ -14,7 +14,9 @@
     <color name="rg_chip_off">#FFC8C8C8</color>
     <color name="rg_divider">#22000000</color>
     <color name="rg_window_bg">#FFE6E6E6</color>
-    <color name="route_primary">#FF8A0000</color>
+    <color name="route_primary">#FF0A6AA1</color>
+    <!-- 1.1.0: part of the route already driven (shown at 50 %). -->
+    <color name="route_done">#FF06405F</color>
     <color name="route_casing">#FFFFFFFF</color>
     <color name="route_alt">#FF8E8E8E</color>
     <color name="credit_bg">#B3FFFFFF</color>

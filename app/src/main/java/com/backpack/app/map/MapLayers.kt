@@ -77,6 +77,7 @@ class MapLayers(private val context: Context) {
 
         style.addSource(GeoJsonSource(SRC_ALT))
         style.addSource(GeoJsonSource(SRC_ROUTE))
+        style.addSource(GeoJsonSource(SRC_DONE))
         style.addSource(GeoJsonSource(SRC_POI))
         style.addSource(GeoJsonSource(SRC_PINS))
         style.addSource(GeoJsonSource(SRC_WARN))
@@ -96,20 +97,26 @@ class MapLayers(private val context: Context) {
             Expression.stop(8, base * 0.5f), Expression.stop(14, base), Expression.stop(18, base * 2.2f)
         )
         add(LineLayer(LAYER_ALT_CASING, SRC_ALT).withProperties(
-            PropertyFactory.lineColor(casing), PropertyFactory.lineWidth(width(9f)),
+            PropertyFactory.lineColor(casing), PropertyFactory.lineWidth(width(6f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             PropertyFactory.lineOpacity(0.8f)
         ))
         add(LineLayer(LAYER_ALT, SRC_ALT).withProperties(
-            PropertyFactory.lineColor(alt), PropertyFactory.lineWidth(width(6f)),
+            PropertyFactory.lineColor(alt), PropertyFactory.lineWidth(width(4f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
         add(LineLayer(LAYER_ROUTE_CASING, SRC_ROUTE).withProperties(
-            PropertyFactory.lineColor(casing), PropertyFactory.lineWidth(width(11f)),
+            PropertyFactory.lineColor(casing), PropertyFactory.lineWidth(width(8f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
         add(LineLayer(LAYER_ROUTE, SRC_ROUTE).withProperties(
-            PropertyFactory.lineColor(primary), PropertyFactory.lineWidth(width(7f)),
+            PropertyFactory.lineColor(primary), PropertyFactory.lineWidth(width(5f)),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
+        ))
+        // 1.1.0: the stretch already driven, darker and half transparent.
+        add(LineLayer(LAYER_DONE, SRC_DONE).withProperties(
+            PropertyFactory.lineColor(ContextCompat.getColor(context, R.color.route_done)), PropertyFactory.lineWidth(width(5f)),
+            PropertyFactory.lineOpacity(0.5f),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
         add(SymbolLayer(LAYER_LABELS, SRC_LABELS).withProperties(
@@ -178,7 +185,23 @@ class MapLayers(private val context: Context) {
         pushAll()
     }
 
+    /** Metres of the selected route already driven (navigation), or null. */
+    private var doneM: Double? = null
+
+    /** 1.1.0: navigation progress; the line splits into driven / ahead.
+     *  Redrawn only every 15 m (the line has thousands of points). */
+    fun setProgress(alongM: Double?, onRoute: RouteResult? = null) {
+        // Only for the line drawn (a progress on another route is ignored).
+        if (alongM != null && onRoute !== routes.getOrNull(selected)) return
+        val old = doneM
+        if (alongM == null && old == null) return
+        if (alongM != null && old != null && Math.abs(alongM - old) < 15.0) return
+        doneM = alongM
+        pushRoutes()
+    }
+
     fun setRoutes(routes: List<RouteResult>, selectedIndex: Int, letters: Boolean = routes.size > 1) {
+        if (routes.getOrNull(selectedIndex) !== this.routes.getOrNull(selected)) doneM = null
         this.routes = routes
         selected = selectedIndex
         this.letters = letters && routes.size > 1
@@ -269,8 +292,22 @@ class MapLayers(private val context: Context) {
         }
         s.getSourceAs<GeoJsonSource>(SRC_ALT)?.setGeoJson(FeatureCollection.fromFeatures(altFeatures))
         val primary = routes.getOrNull(selected)
+        val done = doneM
+        val ahead: List<LatLon>?
+        val behind: List<LatLon>?
+        if (primary != null && done != null && done > 1.0 && primary.points.size >= 2) {
+            behind = com.backpack.app.core.SpeedLimits.section(primary.line, 0.0, done)
+            ahead = com.backpack.app.core.SpeedLimits.section(primary.line, done, primary.line.length)
+        } else {
+            behind = null
+            ahead = primary?.points
+        }
+        fun ls(p: List<LatLon>) = LineString.fromLngLats(p.map { Point.fromLngLat(it.lon, it.lat) })
         s.getSourceAs<GeoJsonSource>(SRC_ROUTE)?.setGeoJson(
-            FeatureCollection.fromFeatures(if (primary == null) emptyList() else listOf(Feature.fromGeometry(line(primary))))
+            FeatureCollection.fromFeatures(if (ahead == null || ahead.size < 2) emptyList() else listOf(Feature.fromGeometry(ls(ahead))))
+        )
+        s.getSourceAs<GeoJsonSource>(SRC_DONE)?.setGeoJson(
+            FeatureCollection.fromFeatures(if (behind == null || behind.size < 2) emptyList() else listOf(Feature.fromGeometry(ls(behind))))
         )
         val labels = if (!letters) emptyList() else {
             RouteLabels.points(routes.map { it.line }).mapIndexedNotNull { i, p ->
@@ -331,6 +368,8 @@ class MapLayers(private val context: Context) {
 
         private const val SRC_ALT = "bp-alt-routes"
         private const val SRC_ROUTE = "bp-route"
+        private const val SRC_DONE = "bp-route-done"
+        private const val LAYER_DONE = "bp-route-done-layer"
         private const val SRC_POI = "bp-poi"
         private const val SRC_PINS = "bp-pins"
         private const val SRC_WARN = "bp-warn"
