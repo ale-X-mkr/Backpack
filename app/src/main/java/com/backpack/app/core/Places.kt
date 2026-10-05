@@ -39,8 +39,6 @@ object Places {
     /** Places per square at most (busy city centres have hundreds). */
     const val PER_TILE = 60
 
-    /** 1.1.1: all services of a square in one request (filtered on the phone). */
-    const val SERVICES_PER_TILE = 400
 
     /** One service (Services panel): its Overpass filter, how to recognise it
      *  in the tags, and openrouteservice ids for the second source. */
@@ -77,13 +75,17 @@ object Places {
     /** Service of an openrouteservice kind (second source). */
     fun serviceOfKind(kind: String): Set<String> = SERVICES.filter { kind in it.orsIds.values }.mapTo(LinkedHashSet()) { it.name }
 
-    /** 1.1.1: every service of each square in one statement group per square. */
-    fun servicesQuery(tiles: List<Tile>, perTile: Int = SERVICES_PER_TILE): String {
+    /** 1.1.1: every service of each square in one request, each with its own
+     *  cap (so restaurants can't crowd out toilets or pharmacies). */
+    fun servicesQuery(tiles: List<Tile>, perService: Int = PER_SERVICE): String {
         val parts = tiles.joinToString("\n") { t ->
-            "(" + SERVICES.joinToString("") { "nwr${t.bbox}${it.filter};" } + ");out center tags $perTile;"
+            SERVICES.joinToString("\n") { "nwr${t.bbox}${it.filter};out center tags $perService;" }
         }
         return "[out:json][timeout:25];\n$parts"
     }
+
+    /** Places per service and square at most. */
+    const val PER_SERVICE = 40
 
     /** One request for several squares; each square gets its own cap. */
     fun tileQuery(filter: String, tiles: List<Tile>, perTile: Int = PER_TILE): String {

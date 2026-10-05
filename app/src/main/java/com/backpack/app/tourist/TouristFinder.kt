@@ -67,11 +67,15 @@ class TouristFinder(context: Context) {
      * Around one or more route lines, from [fromM] metres along them (your
      * position while navigating) up to the mode's search distance ahead.
      */
-    fun alongRoutes(lines: List<List<LatLon>>, mode: TravelMode, fromM: Double, radiusM: Double, onSwitch: () -> Unit, callback: ResultCallback) {
+    fun alongRoutes(
+        lines: List<List<LatLon>>, mode: TravelMode, fromM: Double, radiusM: Double, onSwitch: () -> Unit,
+        aheadM: Double? = null, onPartial: ((List<TouristPoi>) -> Unit)? = null, callback: ResultCallback
+    ) {
         val gen = ++generation
         // 1.0.9: corridor = the longest detour allowed (Settings > Places).
         val radius = radiusM
-        val ahead = Tourist.searchAheadM(mode)
+        // 1.1.1: before Go a shorter stretch (faster); the rest follows while driving.
+        val ahead = aheadM ?: Tourist.searchAheadM(mode)
         worker.execute {
             val full = lines.filter { it.size >= 2 }.map { Polyline(it) }
             val parts = full.map { SpeedLimits.section(it, fromM, ahead) }
@@ -83,7 +87,7 @@ class TouristFinder(context: Context) {
             // Matching on thinned lines (≤ 400 points): accurate enough for a
             // corridor several hundred metres wide, and fast.
             val match = parts.map { Polyline(Tourist.sampleLine(it, maxPoints = 400, minStepM = 50.0)) }
-            load(gen, tiles, match, radius, coveredM, onSwitch, callback)
+            load(gen, tiles, match, radius, coveredM, onSwitch, callback, onPartial = onPartial)
         }
     }
 
@@ -143,8 +147,20 @@ class TouristFinder(context: Context) {
     /** Worker thread: cached squares, then the missing ones from Overpass. */
     private fun load(
         gen: Int, tiles: List<Tile>, lines: List<Polyline>, radius: Double, coveredM: Double,
-        onSwitch: () -> Unit, callback: ResultCallback, box: DoubleArray? = null, ring: List<LatLon>? = null
+        onSwitch: () -> Unit, callback: ResultCallback, box: DoubleArray? = null, ring: List<LatLon>? = null,
+        onPartial: ((List<TouristPoi>) -> Unit)? = null
     ) {
+        /** Inside the corridor (or box / area); distance to the NEAREST line,
+         *  so places along an alternative count as much as along the first route. */
+        fun select(list: List<TouristPoi>): List<TouristPoi> = list.distinctBy { it.identity }.mapNotNull { p ->
+            if (lines.isEmpty()) {
+                if (ring != null) { if (Reach.contains(ring, p.point)) p else null }
+                else if (box != null && (p.point.lat < box[0] || p.point.lat > box[2] || p.point.lon < box[1] || p.point.lon > box[3])) null else p
+            } else {
+                val best = lines.mapNotNull { it.snap(p.point) }.minByOrNull { it.offsetM }
+                if (best == null || best.offsetM > radius * 1.05) null else p.copy(offsetM = best.offsetM, alongM = best.alongM)
+            }
+        }
         val deliver = { pois: List<TouristPoi>?, error: String? ->
             main.post { if (gen == generation) callback.onResult(pois, error, coveredM) }
         }
@@ -171,27 +187,43 @@ class TouristFinder(context: Context) {
             chunk.forEach { inFlight[it] = latch }
             chunk to latch
         }
-        fun release(from: Int) {
-            for (k in from until chunks.size) {
-                val (chunk, latch) = chunks[k]
-                chunk.forEach { inFlight.remove(it, latch) }
-                latch.countDown()
-            }
+        // 1.1.1: all chunks queued at once (the client runs two at a time);
+        // a replaced search or a failed chunk lets the rest be skipped.
+        val abort = java.util.concurrent.atomic.AtomicBoolean(false)
+        val outcomes = chunks.map { (chunk, latch) ->
+            fetch(chunk, latch, { gen != generation || abort.get() }) { main.post { if (gen == generation) onSwitch() } }
         }
         for ((k, pair) in chunks.withIndex()) {
             val (chunk, latch) = pair
-            // Replaced, or the servers already failed: don't ask again now.
-            if (gen != generation || error != null) { release(k); break }
-            val outcome = fetch(chunk, latch) { main.post { if (gen == generation) onSwitch() } }
-            if (!await(gen, latch)) { release(k + 1); return }
-            val failure = outcome.get()
-            if (failure != null) { error = failure; continue }
+            if (!await(gen, latch)) { abort.set(true); return }
+            val failure = outcomes[k].get()
+            if (failure != null) { if (error == null) error = failure; abort.set(true); continue }
             for (n in chunk) read(if (n.extras) cacheX else cache, n.tile)?.let { found.addAll(it) }
+            // First answer (the nearest squares): shown at once, ranked with what the phone knows.
+            if (k == 0 && chunks.size > 1 && onPartial != null) {
+                val known = SiteInfoStore.load(app)
+                val part = select(found).map { p -> known[p.wikidata]?.let { p.copy(sitelinks = it.sitelinks, articleUrl = it.articleUrl, voyageUrl = it.voyageUrl) } ?: p }
+                main.post { if (gen == generation) onPartial(part) }
+            }
         }
+        // Squares another (maybe replaced) search had reserved: if it gave up
+        // on them without fetching, this search fetches them itself.
+        val again = ArrayList<Need>()
         for ((n, latch) in waitFor) {
             if (!await(gen, latch)) return
             val list = read(if (n.extras) cacheX else cache, n.tile)
-            if (list != null) found.addAll(list) else if (error == null) error = "Places search failed"
+            if (list != null) found.addAll(list) else again.add(n)
+        }
+        if (again.isNotEmpty() && error == null && gen == generation) {
+            for (chunk in again.filter { !inFlight.containsKey(it) }.groupBy { it.extras }.values.flatMap { it.chunked(TILES_PER_REQUEST) }) {
+                val latch = CountDownLatch(1)
+                chunk.forEach { inFlight[it] = latch }
+                val outcome = fetch(chunk, latch, { gen != generation }) { main.post { if (gen == generation) onSwitch() } }
+                if (!await(gen, latch)) return
+                val failure = outcome.get()
+                if (failure != null) { error = failure; break }
+                for (n in chunk) read(if (n.extras) cacheX else cache, n.tile)?.let { found.addAll(it) }
+            }
         }
         if (gen != generation) return
         // 1.1.0: Overpass failed (part): Wikipedia's nearby articles fill in.
@@ -213,16 +245,7 @@ class TouristFinder(context: Context) {
 
         // Inside the corridor (or the box) only; distance to the NEAREST line,
         // so places along an alternative count as much as along the first route.
-        val inside = found.distinctBy { it.identity }.mapNotNull { p ->
-            if (lines.isEmpty()) {
-                if (ring != null) { if (Reach.contains(ring, p.point)) p else null }
-                else if (box != null && (p.point.lat < box[0] || p.point.lat > box[2] || p.point.lon < box[1] || p.point.lon > box[3])) null else p
-            } else {
-                val best = lines.mapNotNull { it.snap(p.point) }.minByOrNull { it.offsetM }
-                if (best == null || best.offsetM > radius * 1.05) null else p.copy(offsetM = best.offsetM, alongM = best.alongM)
-            }
-        }
-        withPopularity(gen, inside) { scored -> deliver(scored, error) }
+        withPopularity(gen, select(found)) { scored -> deliver(scored, error) }
     }
 
     /** Sitelink counts + article links, from the phone first, Wikidata for the rest. */
@@ -280,12 +303,12 @@ class TouristFinder(context: Context) {
      * (even if the search that asked was replaced meanwhile: nothing wasted),
      * then [latch] opens. The returned holder gets the error text, if any.
      */
-    private fun fetch(chunk: List<Need>, latch: CountDownLatch, onSwitch: () -> Unit): java.util.concurrent.atomic.AtomicReference<String?> {
+    private fun fetch(chunk: List<Need>, latch: CountDownLatch, isStale: () -> Boolean, onSwitch: () -> Unit): java.util.concurrent.atomic.AtomicReference<String?> {
         val outcome = java.util.concurrent.atomic.AtomicReference<String?>(null)
         val extras = chunk.first().extras
         val tiles = chunk.map { it.tile }
         main.post {
-            OverpassClient.query(app, Tourist.tileQuery(tiles, extrasOnly = extras), onSwitch = onSwitch) { body, failure ->
+            OverpassClient.query(app, Tourist.tileQuery(tiles, extrasOnly = extras), onSwitch = onSwitch, isStale = isStale) { body, failure ->
                 store.execute {
                     val parsed = body?.let { try { Tourist.parseOverpass(it) } catch (e: Exception) { null } }
                     if (parsed == null) {

@@ -71,7 +71,7 @@ class PlacesSourcesTest {
 
     @Test fun servicesOneQueryAndTags() {
         val q = Places.servicesQuery(listOf(Tile(120, 900)))
-        assertEquals(1, Regex("out center tags 400;").findAll(q).count())
+        assertEquals(Places.SERVICES.size, Regex("out center tags 40;").findAll(q).count()) // own cap per service
         assertEquals(Places.SERVICES.size, Regex("nwr\\(45.0000").findAll(q).count())
         val cafeWifi = JSONObject().put("amenity", "cafe").put("internet_access", "wlan")
         assertEquals(setOf("FOOD", "WIFI"), Places.servicesOf(cafeWifi))

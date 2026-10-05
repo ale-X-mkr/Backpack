@@ -1198,7 +1198,17 @@ class MainActivity : AppCompatActivity() {
             val startIndex = TripState.selectedIndex
             // While navigating: from where you are (the squares behind you are not needed).
             val fromM = if (navUiActive) (NavigationEngine.lastProgress?.alongM ?: 0.0) else 0.0
-            touristFinder.alongRoutes(lines, currentMode.mode, fromM, corridorM(), { onPlacesServerSwitch() }) { all, error, coveredM ->
+            touristFinder.alongRoutes(lines, currentMode.mode, fromM, corridorM(), { onPlacesServerSwitch() },
+                // Before Go: the first 40 km (faster); while driving the rest follows.
+                aheadM = if (navUiActive) null else minOf(Tourist.searchAheadM(currentMode.mode), 40_000.0),
+                onPartial = { part ->
+                    // The nearest squares answered: show them now (the rest follows).
+                    if (TripState.plan === plan && touristOn) {
+                        TripState.touristCandidates = part
+                        showTouristFor(selectedRoute())
+                    }
+                }
+            ) { all, error, coveredM ->
                 // Only a search that answered counts as covering the stretch;
                 // a failed one is tried again 2 min later, not on every fix.
                 if (all != null && error == null) TripState.touristCoveredM = coveredM
@@ -1321,7 +1331,8 @@ class MainActivity : AppCompatActivity() {
             TripState.selectedIndex == startIndex && TripState.scenicCheckedPlan !== plan
         ) {
             TripState.scenicCheckedPlan = plan
-            val choice = Tourist.scenicChoice(plan.routes, TripState.selectedIndex, all,
+            val kinds = sightKinds()
+            val choice = Tourist.scenicChoice(plan.routes, TripState.selectedIndex, all.filter { it.category in kinds },
                 corridorM().toInt(), sightsMaxFraction())
             if (choice != null) {
                 drawPlan(plan, choice.index, fit = false, note = null, tourist = false)
@@ -1856,6 +1867,8 @@ class MainActivity : AppCompatActivity() {
             if (altChoiceOpen) closeAltChoice(restore = false)
             TripState.plan = plan
             TripState.selectedIndex = plan.primaryIndex
+            // Sights measured again on the new route (voice heads-up, list).
+            if (touristOn) handler.post { if (TripState.plan === plan) showTouristFor(selectedRoute()) }
             // No full places search on a reroute: places are measured on the
             // current route anyway (see aheadOnRoute); the stretch ahead of
             // the new route is searched by extendTouristIfNeeded (mostly from
@@ -2257,9 +2270,16 @@ class MainActivity : AppCompatActivity() {
             setMargins(R.id.preference_toggle_button, top = top0 + 2 * step)
             setMargins(R.id.search_button, top = top0 + 3 * step)
             rightRows = 4
-            moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.START)
-            setMargins(R.id.resume_button, top = top0 + 5 * step, start = 8)
-            if (resumeShown) leftRows = 6
+            if (land) {
+                // Landscape: no room for a 6th row on the left -> 5th on the right.
+                moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.END)
+                setMargins(R.id.resume_button, top = top0 + 4 * step, end = 8)
+                if (resumeShown) rightRows = 5
+            } else {
+                moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.START)
+                setMargins(R.id.resume_button, top = top0 + 5 * step, start = 8)
+                if (resumeShown) leftRows = 6
+            }
         }
 
         // Route chips (1.0.8): stacked, left-aligned (letters in a line),
@@ -2553,6 +2573,16 @@ class MainActivity : AppCompatActivity() {
         }
         action("Done") { window.dismiss() }
         root.addView(buttons)
+        // Scrolls when the screen is low (landscape): never cut off.
+        val scroll = android.widget.ScrollView(this).apply { addView(root) }
+        window.contentView = scroll
+        root.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val loc = IntArray(2)
+        anchor.getLocationOnScreen(loc)
+        val screenH = findViewById<View>(android.R.id.content).height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+        val below = screenH - (loc[1] + anchor.height) - dp(12)
+        val above = loc[1] - dp(12)
+        window.height = minOf(root.measuredHeight, maxOf(below, above, dp(160)))
         window.elevation = dp(6).toFloat()
         window.isOutsideTouchable = true
         window.showAsDropDown(anchor, 0, dp(4))
@@ -2681,7 +2711,7 @@ class MainActivity : AppCompatActivity() {
 
     /** All services of a square in one request, kept on the phone 3 days. */
     private val servicesCategory by lazy {
-        PlacesFinder.Category("services1", "", com.backpack.app.core.Places.SERVICES.flatMap { it.orsIds.entries }.associate { it.key to it.value }).apply {
+        PlacesFinder.Category("services2", "", com.backpack.app.core.Places.SERVICES.flatMap { it.orsIds.entries }.associate { it.key to it.value }).apply {
             query = { tiles -> com.backpack.app.core.Places.servicesQuery(tiles) }
             maxShown = 600
         }
@@ -2716,14 +2746,21 @@ class MainActivity : AppCompatActivity() {
                 .forEach { taken.add(it.key); shown.add(it to cat) }
         }
         poiResults = shown.map { it.first }
+        // Counts for the message: a café with Wi-Fi counts for both.
+        serviceCounts = active.associateWith { cat ->
+            val radius = if (alongRoute) corridorM(cat == PoiCategory.EMERGENCY) else Double.MAX_VALUE
+            minOf(30, svcSlot.results.count { cat.name in it.services && it.offsetM <= radius })
+        }
         layers.setPois(shown.map { (p, cat) -> MapLayers.Pin(p.key, p.point, cat.iconName) })
         refreshServicesButton()
     }
 
+    private var serviceCounts: Map<PoiCategory, Int> = emptyMap()
+
     /** Short summary for the message: "5 Fuel/Charging, 3 Food". */
     private fun servicesSummary(): String {
         val counts = activeServices().mapNotNull { cat ->
-            val n = poiResults.count { cat.name in it.services }
+            val n = serviceCounts[cat] ?: 0
             if (n == 0) null else "$n ${cat.label}"
         }
         return counts.joinToString(", ")
@@ -2766,7 +2803,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         // No route: within reach of you or the map centre.
-        val aroundMe = (urgencyMode == UrgencyMode.EMERGENCY && selectedServices.isEmpty()) || sightsAroundMe()
+        // Emergency mode: always around you (hospitals near you, not near the map centre).
+        val aroundMe = urgencyMode == UrgencyMode.EMERGENCY || sightsAroundMe()
         val origin = (if (aroundMe) currentPosition() else null) ?: cameraCenter() ?: return
         val minutes = sightsReachMinutes()
         val key = "A/${currentMode.name}/$minutes/$aroundMe"
