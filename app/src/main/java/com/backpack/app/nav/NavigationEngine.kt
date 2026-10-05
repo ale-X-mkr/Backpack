@@ -148,7 +148,25 @@ object NavigationEngine {
         lastProgress = null
     }
 
+    /** Since when you stand still (speed < 0.5 m/s), for the GPS pace. */
+    private var stillSinceMs = 0L
+
+    /** 1.1.0 battery: GPS pace by travel mode, slower after 1 min standing still. */
+    private fun adaptPace(c: Context, location: Location) {
+        val now = System.currentTimeMillis()
+        val moving = location.hasSpeed() && location.speed >= 0.5f
+        if (moving) stillSinceMs = 0L else if (stillSinceMs == 0L) stillSinceMs = now
+        val pace = when {
+            stillSinceMs != 0L && now - stillSinceMs > 60_000L -> 5000L
+            request?.mode == com.backpack.app.core.TravelMode.WALKING -> 3000L
+            request?.mode == com.backpack.app.core.TravelMode.CYCLING -> 2000L
+            else -> 1000L
+        }
+        LocationHub.setNavPace(c, pace)
+    }
+
     private fun onFix(location: Location) {
+        app?.let { adaptPace(it, location) }
         if (!isActive || arrived) return
         val t = tracker ?: return
         val r = route ?: return

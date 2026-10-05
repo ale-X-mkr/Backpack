@@ -2237,7 +2237,9 @@ class MainActivity : AppCompatActivity() {
             if (!navUiActive) return
             val gapMs = System.currentTimeMillis() - lastRealLocationAtMs
             val fix = LocationHub.lastGoodFix
-            if (gapMs in 3000..15000 && fix != null && fix.hasSpeed() && fix.hasBearing() && fix.speed > 0.5f) {
+            // A gap = clearly longer than the GPS pace asked (1.1.0: 1-5 s by mode).
+            val pace = LocationHub.currentIntervalMs.coerceAtLeast(1000L)
+            if (gapMs in (pace + 2000L)..15000L && fix != null && fix.hasSpeed() && fix.hasBearing() && fix.speed > 0.5f) {
                 deadReckoningActive = true
                 val projected = Geo.project(LatLon(fix.latitude, fix.longitude), fix.bearing.toDouble(), fix.speed * gapMs / 1000.0)
                 val loc = Location(fix).apply {

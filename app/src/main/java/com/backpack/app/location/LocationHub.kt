@@ -34,11 +34,39 @@ object LocationHub {
 
     const val LEASE_UI = "ui"
     const val LEASE_NAV = "nav"
+    /** 1.1.0: transit wake-up alarm (slow, adaptive). */
+    const val LEASE_TRANSIT = "transit"
+
+    /**
+     * 1.1.0 battery: how often the GPS chip is asked. Navigation sets its
+     * pace by mode and movement (driving 1 s, cycling 2 s, walking 3 s,
+     * stopped 5 s); the transit alarm by distance to the stop (10 s .. 5 min);
+     * the map alone 5 s / 5 m. The fastest wanted pace wins.
+     */
+    private var navPace = 1000L
+    private var transitPace = 30_000L
+    private const val UI_PACE = 5000L
+
+    /** Interval currently asked of the GPS (ms); 0 when off. */
+    var currentIntervalMs = 0L
+        private set
+
+    fun setNavPace(c: Context, ms: Long) {
+        if (navPace == ms) return
+        navPace = ms
+        refresh(c.applicationContext)
+    }
+
+    fun setTransitPace(c: Context, ms: Long) {
+        if (transitPace == ms) return
+        transitPace = ms
+        refresh(c.applicationContext)
+    }
 
     private val leases = mutableSetOf<String>()
     private val listeners = mutableListOf<Listener>()
     private var manager: LocationManager? = null
-    private var registeredFast: Boolean? = null
+    private var registered: Pair<Long, Float>? = null
     private var lastDeliveredTime = 0L
 
     var lastFix: Location? = null
@@ -110,28 +138,30 @@ object LocationHub {
             stop(lm)
             return
         }
-        val fast = LEASE_NAV in leases
-        if (registeredFast == fast) return
+        val wanted = listOfNotNull(
+            if (LEASE_NAV in leases) navPace to 0f else null,
+            if (LEASE_TRANSIT in leases) transitPace to 0f else null,
+            if (LEASE_UI in leases) UI_PACE to 5f else null
+        ).minByOrNull { it.first } ?: return
+        if (registered == wanted) return
         stop(lm)
         try {
-            if (fast) {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, gpsListener, Looper.getMainLooper())
-            } else {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 3f, gpsListener, Looper.getMainLooper())
-            }
+            lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, wanted.first, wanted.second, gpsListener, Looper.getMainLooper())
         } catch (e: Exception) {
             // No GPS hardware or provider disabled: nothing else to fall back on, by design.
         }
         try {
             lm.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, 1000L, 0f, passiveListener, Looper.getMainLooper())
         } catch (e: Exception) { }
-        registeredFast = fast
+        registered = wanted
+        currentIntervalMs = wanted.first
     }
 
     private fun stop(lm: LocationManager) {
         try { lm.removeUpdates(gpsListener) } catch (e: Exception) { }
         try { lm.removeUpdates(passiveListener) } catch (e: Exception) { }
-        registeredFast = null
+        registered = null
+        currentIntervalMs = 0L
     }
 
     private fun deliver(location: Location) {
