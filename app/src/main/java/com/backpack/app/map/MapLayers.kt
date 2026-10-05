@@ -202,9 +202,9 @@ class MapLayers(private val context: Context) {
         if (alongM != null && onRoute !== routes.getOrNull(selected)) return
         val old = doneM
         if (alongM == null && old == null) return
-        if (alongM != null && old != null && Math.abs(alongM - old) < 15.0) return
+        if (alongM != null && old != null && Math.abs(alongM - old) < 60.0) return
         doneM = alongM
-        pushRoutes()
+        pushRouteLine()
     }
 
     fun setRoutes(routes: List<RouteResult>, selectedIndex: Int, letters: Boolean = routes.size > 1) {
@@ -298,13 +298,11 @@ class MapLayers(private val context: Context) {
         pushTourist()
     }
 
-    private fun pushRoutes() {
+    /** Selected route: the part ahead (blue) and, while navigating, the part
+     *  already driven (darker, 50 %). Only these two sources are redrawn. */
+    private fun pushRouteLine() {
         val s = style ?: return
         if (!s.isFullyLoaded) return
-        val altFeatures = routes.withIndex().filter { it.index != selected }.map { (i, r) ->
-            Feature.fromGeometry(line(r)).also { it.addNumberProperty("idx", i) }
-        }
-        s.getSourceAs<GeoJsonSource>(SRC_ALT)?.setGeoJson(FeatureCollection.fromFeatures(altFeatures))
         val primary = routes.getOrNull(selected)
         val done = doneM
         val ahead: List<LatLon>?
@@ -323,6 +321,16 @@ class MapLayers(private val context: Context) {
         s.getSourceAs<GeoJsonSource>(SRC_DONE)?.setGeoJson(
             FeatureCollection.fromFeatures(if (behind == null || behind.size < 2) emptyList() else listOf(Feature.fromGeometry(ls(behind))))
         )
+    }
+
+    private fun pushRoutes() {
+        val s = style ?: return
+        if (!s.isFullyLoaded) return
+        val altFeatures = routes.withIndex().filter { it.index != selected }.map { (i, r) ->
+            Feature.fromGeometry(line(r)).also { it.addNumberProperty("idx", i) }
+        }
+        s.getSourceAs<GeoJsonSource>(SRC_ALT)?.setGeoJson(FeatureCollection.fromFeatures(altFeatures))
+        pushRouteLine()
         val labels = if (!letters) emptyList() else {
             RouteLabels.points(routes.map { it.line }).mapIndexedNotNull { i, p ->
                 if (p == null || i > 3) null else Feature.fromGeometry(Point.fromLngLat(p.lon, p.lat)).also {

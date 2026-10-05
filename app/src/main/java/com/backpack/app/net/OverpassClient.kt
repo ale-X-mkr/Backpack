@@ -36,7 +36,7 @@ object OverpassClient {
     const val PRIVATE_COFFEE = "https://overpass.private.coffee/api/interpreter"
     /** 1.1.0: listed on the OSM wiki, no limits; opt-in (Settings > Servers). */
     const val VK_MAPS = "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
-    const val USER_AGENT = "Backpack/1.0 (private Android navigation app; OpenStreetMap data)"
+    const val USER_AGENT = "Backpack/1.1 (private Android navigation app, non-commercial; OpenStreetMap / Wikimedia data)"
 
     private val main = Handler(Looper.getMainLooper())
 

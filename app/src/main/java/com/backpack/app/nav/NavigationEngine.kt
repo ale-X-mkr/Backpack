@@ -78,6 +78,13 @@ object NavigationEngine {
         initTts(c)
         request = req
         this.plan = plan
+        // New trip: the GPS pace starts from the travel mode, not a past stop.
+        stillSinceMs = 0L
+        LocationHub.setNavPace(c, when (req.mode) {
+            com.backpack.app.core.TravelMode.WALKING -> 3000L
+            com.backpack.app.core.TravelMode.CYCLING -> 2000L
+            com.backpack.app.core.TravelMode.DRIVING -> 1000L
+        })
         planSelected = selectedIndex.coerceIn(0, plan.routes.size - 1)
         setRoute(plan.routes[planSelected])
         isActive = true

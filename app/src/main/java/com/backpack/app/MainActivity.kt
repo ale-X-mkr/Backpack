@@ -351,6 +351,14 @@ class MainActivity : AppCompatActivity() {
         LocationHub.addListener(uiFixListener)
         NavigationEngine.addListener(navListener)
         com.backpack.app.transit.TransitSession.addListener(transitListener)
+        // Android closed the app while the alarm was on: pick it up again
+        // (tracking, backup time, Stop) instead of leaving a hidden alarm.
+        if (!com.backpack.app.transit.TransitSession.active && com.backpack.app.transit.TransitSession.restore(this)) {
+            try {
+                ContextCompat.startForegroundService(this, Intent(this, com.backpack.app.transit.TransitAlarmService::class.java))
+                showMessage("Wake-up alarm still on \u00b7 ${com.backpack.app.transit.TransitSession.lead.label}")
+            } catch (e: Exception) { }
+        }
         transitListener.onTransitUpdate()
         if (LocationHub.hasPermission(this)) LocationHub.acquire(this, LocationHub.LEASE_UI)
         if (navUiActive) {
@@ -2891,13 +2899,17 @@ class MainActivity : AppCompatActivity() {
     private val transitListener = com.backpack.app.transit.TransitSession.Listener {
         val t = com.backpack.app.transit.TransitSession
         val go = findViewById<ImageButton>(R.id.nav_go_button)
-        go.setImageResource(if (t.active) R.drawable.ic_navigation_stop else R.drawable.ic_navigation_go)
+        // Only the transit alarm's own icon: navigation keeps its Stop icon.
+        if (t.active) { transitShown = true; go.setImageResource(R.drawable.ic_navigation_stop) }
+        else if (transitShown) { transitShown = false; if (!NavigationEngine.isActive) go.setImageResource(R.drawable.ic_navigation_go) }
         if (!t.active) return@Listener
         val track = t.trackM ?: return@Listener
         routeInfoDist.text = distanceLabel(track)
         routeInfoEta.text = t.etaS?.let { etaLabel(it) } ?: "ETA: --"
         routeInfoCost.text = if (t.ringing) "Wake up!" else "Alarm ${t.lead.label}${if (t.estimated) " (no GPS)" else ""}"
     }
+
+    private var transitShown = false
 
     /** Go in Transit mode: when to be woken, optional backup time, start. */
     private fun showTransitSetup() {
@@ -2936,6 +2948,7 @@ class MainActivity : AppCompatActivity() {
             t.trackM = null
             t.etaS = null
             t.active = true
+            t.save(this)
             try {
                 ContextCompat.startForegroundService(this, Intent(this, com.backpack.app.transit.TransitAlarmService::class.java))
             } catch (e: Exception) {

@@ -45,8 +45,12 @@ object TransitAlarm {
         val v = speedMps?.takeIf { it >= 2.0 } ?: 20.0
         val ringAtM = maxOf(SAFETY_M, if (lead.km > 0) lead.km * 1000.0 else lead.minutes * 60.0 * v)
         val secondsLeft = (trackM - ringAtM) / v
-        return (secondsLeft / 4 * 1000).toLong().coerceIn(10_000L, 300_000L)
+        val ms = (secondsLeft / 4 * 1000).toLong().coerceIn(10_000L, 300_000L)
+        // In steps, so the GPS request is not re-registered on every fix.
+        return PACE_STEPS.last { it <= ms }
     }
+
+    val PACE_STEPS = listOf(10_000L, 20_000L, 30_000L, 60_000L, 120_000L, 300_000L)
 
     /** Smoothed travel speed from GPS fixes (stops at stations pull it down only slowly). */
     class Speed {

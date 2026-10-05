@@ -110,7 +110,9 @@ class TouristFinder(context: Context) {
             main.post {
                 if (gen != generation) return@post
                 OverpassClient.query(app, Tourist.reachQuery(ring), onSwitch = { if (gen == generation) onSwitch() }, singleRound = true) { body, failure ->
-                    store.execute {
+                    // Own thread: the Wikipedia fallback may wait on the network, and
+                    // "store" must stay free to release other searches' squares.
+                    slow.execute {
                         val parsed = body?.let { try { Tourist.parseOverpass(it) } catch (e: Exception) { null } }
                         val list = parsed ?: run {
                             // 1.1.0: Overpass failed: Wikipedia's nearby articles around the centre.
@@ -332,6 +334,8 @@ class TouristFinder(context: Context) {
         /** Parses and stores answers (never blocked by a waiting search). */
         private val store = java.util.concurrent.Executors.newSingleThreadExecutor()
         private val inFlight = java.util.concurrent.ConcurrentHashMap<Tile, CountDownLatch>()
+        /** Big reach areas and their Wikipedia fallback (may wait on the network). */
+        private val slow = java.util.concurrent.Executors.newSingleThreadExecutor()
         /** Last big reach area and its places (before popularity). */
         private var reachMemory: Pair<String?, List<TouristPoi>> = null to emptyList()
         private const val DAY_MS = 24L * 3600_000L
@@ -350,7 +354,8 @@ class TouristFinder(context: Context) {
 
 /** Wikidata answers kept on the phone for a month (id -> sitelinks, article). */
 internal object SiteInfoStore {
-    private const val FILE = "sights_wikidata.json"
+    // 1.1.0: entries now also carry the Wikivoyage page -> fresh file.
+    private const val FILE = "sights_wikidata2.json"
     private const val MAX_AGE_MS = 30L * 24 * 3600_000L
     private var memory: HashMap<String, Pair<Long, Tourist.SiteInfo>>? = null
 

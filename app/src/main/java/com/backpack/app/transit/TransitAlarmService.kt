@@ -41,6 +41,33 @@ object TransitSession {
     /** No GPS for a while: distance estimated from the last speed. */
     var estimated = false
 
+    /** Kept on the phone while the alarm is on: Android may close the app,
+     *  and the backup time must still ring. */
+    fun save(c: Context) {
+        val d = destination
+        c.getSharedPreferences("transit", Context.MODE_PRIVATE).edit().apply {
+            if (!active || d == null) clear() else {
+                putString("dest", "${d.lat},${d.lon}")
+                putInt("leadMin", lead.minutes)
+                putInt("leadKm", lead.km)
+                putLong("backup", backupAtMs)
+            }
+        }.apply()
+    }
+
+    /** After Android closed the app: the alarm that was on, if any. */
+    fun restore(c: Context): Boolean {
+        if (active) return true
+        val p = c.getSharedPreferences("transit", Context.MODE_PRIVATE)
+        val d = p.getString("dest", null)?.split(',')?.mapNotNull { it.toDoubleOrNull() } ?: return false
+        if (d.size != 2) return false
+        destination = LatLon(d[0], d[1])
+        lead = TransitAlarm.Lead(p.getInt("leadMin", 5), p.getInt("leadKm", 0))
+        backupAtMs = p.getLong("backup", 0L)
+        active = true
+        return true
+    }
+
     fun interface Listener { fun onTransitUpdate() }
     private val listeners = mutableListOf<Listener>()
     fun addListener(l: Listener) { if (l !in listeners) listeners.add(l) }
@@ -89,18 +116,40 @@ class TransitAlarmService : Service() {
         }
     }
 
+    private var foreground = false
+
     override fun onCreate() {
         super.onCreate()
         createChannels()
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, build("Wake-up alarm", "Starting…", false), type)
+    }
+
+    /** Foreground at once (Android requires it): location while tracking;
+     *  for the backup ring (maybe with the app closed, where location is
+     *  not allowed) as media playback -- it only plays the alarm. */
+    private fun goForeground(ringOnly: Boolean) {
+        if (foreground) return
+        foreground = true
+        val type = when {
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> 0
+            ringOnly -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            else -> ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
+        try {
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, build("Wake-up alarm", "Starting…", false), type)
+        } catch (e: Exception) { }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_STOP -> { stopAll(); return START_NOT_STICKY }
-            ACTION_RING -> { ring("Wake-up time"); return START_NOT_STICKY }
+            ACTION_STOP -> { goForeground(true); stopAll(); return START_NOT_STICKY }
+            ACTION_RING -> {
+                goForeground(!tracking)
+                if (!TransitSession.restore(this)) { stopAll(); return START_NOT_STICKY }
+                ring("Wake-up time")
+                return START_NOT_STICKY
+            }
         }
+        goForeground(false)
         if (!TransitSession.active || TransitSession.destination == null) { stopAll(); return START_NOT_STICKY }
         if (!tracking) {
             tracking = true
@@ -125,6 +174,7 @@ class TransitAlarmService : Service() {
             LocationHub.release(this, LocationHub.LEASE_TRANSIT)
         }
         main.removeCallbacks(tick)
+        main.removeCallbacks(silence)
         super.onDestroy()
     }
 
@@ -148,8 +198,12 @@ class TransitAlarmService : Service() {
         post()
     }
 
+    /** Never ring forever: silence after 5 min (the notification stays). */
+    private val silence = Runnable { stopSound() }
+
     private fun ring(why: String) {
-        if (TransitSession.ringing || !TransitSession.active) return
+        if (TransitSession.ringing) return
+        TransitSession.active = true
         TransitSession.ringing = true
         TransitSession.changed()
         // GPS no longer needed.
@@ -176,11 +230,12 @@ class TransitAlarmService : Service() {
             vib.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 800, 400, 800, 400), 0))
         } catch (e: Exception) { }
         getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, build("Wake up! $why", "Tap Stop to silence", true))
-        // Never ring forever: silence after 5 min (the notification stays).
-        main.postDelayed({ stopSound() }, 5 * 60_000L)
+        main.removeCallbacks(silence)
+        main.postDelayed(silence, 5 * 60_000L)
     }
 
     private fun stopSound() {
+        main.removeCallbacks(silence)
         try { player?.stop() } catch (e: Exception) { }
         try { player?.release() } catch (e: Exception) { }
         player = null
@@ -197,6 +252,7 @@ class TransitAlarmService : Service() {
         TransitSession.ringing = false
         TransitSession.trackM = null
         TransitSession.etaS = null
+        TransitSession.save(this)
         TransitSession.changed()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()

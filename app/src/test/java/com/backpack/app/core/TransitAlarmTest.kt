@@ -27,7 +27,7 @@ class TransitAlarmTest {
         assertEquals(10_000L, TransitAlarm.nextPaceMs(6500.0, 20.0, five))    // near: 10 s
         val mid = TransitAlarm.nextPaceMs(30_000.0, 20.0, five)               // 24 km to go before ringing at 20 m/s
         assertEquals(300_000L, mid)
-        assertEquals(37_500L, TransitAlarm.nextPaceMs(9000.0, 20.0, five))
+        assertEquals(30_000L, TransitAlarm.nextPaceMs(9000.0, 20.0, five)) // 37.5 s -> step 30 s
     }
 
     @Test fun speedSmoothing() {

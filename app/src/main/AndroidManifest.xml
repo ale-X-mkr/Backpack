@@ -16,6 +16,8 @@
     <!-- 1.1.0 transit wake-up alarm: vibration, and Android's alarm clock
          for the backup "wake at" time. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- The backup ring may start with the app closed: it only plays the alarm. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
@@ -145,7 +147,7 @@
         <service
             android:name=".transit.TransitAlarmService"
             android:exported="false"
-            android:foregroundServiceType="location" />
+            android:foregroundServiceType="location|mediaPlayback" />
 
     </application>
 
