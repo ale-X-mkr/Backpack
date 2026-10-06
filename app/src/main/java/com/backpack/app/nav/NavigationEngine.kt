@@ -273,6 +273,13 @@ object NavigationEngine {
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "nav")
     }
 
+    /** 1.2.0: stops whatever is being said (e.g. a sight read aloud). */
+    fun stopSpeaking() {
+        pendingSpeech = null
+        tts?.stop()
+        abandonFocus()
+    }
+
     /** Music and podcasts duck (get quieter) while an instruction plays. */
     private fun requestFocus() {
         val c = app ?: return

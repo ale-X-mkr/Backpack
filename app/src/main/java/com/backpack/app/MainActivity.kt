@@ -1360,7 +1360,33 @@ class MainActivity : AppCompatActivity() {
         val inMin = Math.round((ahead / lead) * minutes).toInt().coerceAtLeast(1)
         NavigationEngine.speak("In about $inMin minute${if (inMin == 1) "" else "s"}, ${poi.name}, ${poi.category.label.lowercase()}, about $mins off your route")
         showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to add a stop",
-            onTap = { addStopFlow(poi.point, poi.name) }, showMs = 8000L)
+            onTap = { showSightGuide(poi) }, showMs = 8000L)
+    }
+
+    /**
+     * 1.2.0 tourist guide: the heads-up message tapped. Reads the place's
+     * Wikipedia summary aloud (a new instruction interrupts it: the road
+     * first) and shows it, with Add stop. Close leaves the voice reading.
+     */
+    private fun showSightGuide(poi: TouristPoi) {
+        val p = Popup(this, poi.name)
+        val body = p.text("Looking it up on Wikipedia...")
+        p.button("Stop reading") { NavigationEngine.stopSpeaking() }
+        p.button("Add stop") { NavigationEngine.stopSpeaking(); p.dismiss(); addStopFlow(poi.point, poi.name) }
+        // Close keeps the voice going (eyes back on the road); Stop reading ends it.
+        p.button("Close", primary = true) { p.dismiss() }
+        p.show()
+        com.backpack.app.tourist.WikiSummary.forPoi(poi) { text ->
+            if (isDestroyed) return@forPoi
+            if (text == null) {
+                body.text = "No English Wikipedia article for this place (or no connection)."
+                return@forPoi
+            }
+            body.text = text + "\n\nWikipedia, CC BY-SA"
+            p.fit()
+            if (!Prefs.voiceOn(this)) showMessage("Voice is off (Settings > Navigation)")
+            else NavigationEngine.speak("${poi.name}. $text")
+        }
     }
 
     private fun touistClearPending() {
