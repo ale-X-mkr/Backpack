@@ -13,13 +13,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- 1.1.0 transit wake-up alarm: vibration, and Android's alarm clock
-         for the backup "wake at" time. -->
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- The backup ring may start with the app closed: it only plays the alarm. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
@@ -150,11 +143,6 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
-        <!-- 1.1.0: wake-up alarm on public transport (GPS, screen off). -->
-        <service
-            android:name=".transit.TransitAlarmService"
-            android:exported="false"
-            android:foregroundServiceType="location|mediaPlayback" />
 
     </application>
 

@@ -34,17 +34,14 @@ object LocationHub {
 
     const val LEASE_UI = "ui"
     const val LEASE_NAV = "nav"
-    /** 1.1.0: transit wake-up alarm (slow, adaptive). */
-    const val LEASE_TRANSIT = "transit"
 
     /**
      * 1.1.0 battery: how often the GPS chip is asked. Navigation sets its
      * pace by mode and movement (driving 1 s, cycling 2 s, walking 3 s,
-     * stopped 5 s); the transit alarm by distance to the stop (10 s .. 5 min);
+     * stopped 5 s);
      * the map alone 5 s / 5 m. The fastest wanted pace wins.
      */
     private var navPace = 1000L
-    private var transitPace = 30_000L
     private const val UI_PACE = 5000L
 
     /** Interval currently asked of the GPS (ms); 0 when off. */
@@ -54,12 +51,6 @@ object LocationHub {
     fun setNavPace(c: Context, ms: Long) {
         if (navPace == ms) return
         navPace = ms
-        refresh(c.applicationContext)
-    }
-
-    fun setTransitPace(c: Context, ms: Long) {
-        if (transitPace == ms) return
-        transitPace = ms
         refresh(c.applicationContext)
     }
 
@@ -140,7 +131,6 @@ object LocationHub {
         }
         val wanted = listOfNotNull(
             if (LEASE_NAV in leases) navPace to 0f else null,
-            if (LEASE_TRANSIT in leases) transitPace to 0f else null,
             if (LEASE_UI in leases) UI_PACE to 5f else null
         ).minByOrNull { it.first } ?: return
         if (registered == wanted) return
