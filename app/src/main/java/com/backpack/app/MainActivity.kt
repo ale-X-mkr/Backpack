@@ -528,8 +528,8 @@ class MainActivity : AppCompatActivity() {
             .accuracyAlpha(0.12f)
             .enableStaleState(false)
             // Position arrow 170 % (Alex, 0.7.0 test), same size at every zoom.
-            .minZoomIconScale(2.0f) // 1.1.1: between 1.0.9 (1.7) and 1.1.0 (2.4)
-            .maxZoomIconScale(2.0f)
+            .minZoomIconScale(1.8f) // 1.2.0: 1.8 (1.1.1 had 2.0)
+            .maxZoomIconScale(1.8f)
             .build()
         // useDefaultLocationEngine(false): MapLibre gets positions only from
         // LocationHub (GPS chip), never from its own location engine.
@@ -2462,12 +2462,14 @@ class MainActivity : AppCompatActivity() {
     private fun refreshServicesButton(found: Boolean = poiResults.isNotEmpty()) {
         val button = findViewById<ImageButton>(R.id.poi_toggle_button)
         val active = activeServices()
-        val first = active.firstOrNull()
-        button.setImageResource(first?.iconRes ?: PoiCategory.NONE.iconRes)
-        if (first?.color != null) button.imageTintList = ColorStateList.valueOf(first.color) else setIconActive(button, false)
+        // 1.2.0: always the red backpack in its own colours (no tint), faded
+        // while nothing is ticked; the badge says how many services are on.
+        if (button.tag != R.drawable.ic_backpack) { button.tag = R.drawable.ic_backpack; button.setImageResource(R.drawable.ic_backpack) }
+        button.imageTintList = null
+        button.imageAlpha = if (active.isEmpty()) 110 else 255
         setStatusRing(button, active.isNotEmpty() && found)
         findViewById<TextView>(R.id.poi_count).apply {
-            visibility = if (active.size > 1) View.VISIBLE else View.GONE
+            visibility = if (active.isNotEmpty()) View.VISIBLE else View.GONE
             text = active.size.toString()
         }
     }

@@ -234,7 +234,7 @@
 
         </FrameLayout>
 
-        <!-- 1.1.1 Services (multi-select); a small count when several are on. -->
+        <!-- 1.2.0 Backpack = services (multi-select); a small count of those on. -->
         <FrameLayout
             android:id="@+id/poi_row"
             android:layout_width="72dp"
@@ -248,10 +248,10 @@
                 android:layout_width="38dp"
                 android:layout_height="38dp"
                 android:layout_gravity="start"
-                android:src="@drawable/ic_poi_toggle"
+                android:src="@drawable/ic_backpack"
                 android:background="@drawable/icon_backdrop"
                 android:padding="4dp"
-                android:contentDescription="Services"
+                android:contentDescription="Backpack: services"
                 android:elevation="0dp"
                 android:stateListAnimator="@null" />
 

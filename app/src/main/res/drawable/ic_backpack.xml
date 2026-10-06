@@ -1,0 +1,16 @@
+<!-- 1.2.0: the app's red backpack (same shapes as the launcher icon),
+     cropped to a button icon: open it for food, water, fuel, the emergency kit... -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp" android:height="28dp"
+    android:viewportWidth="62" android:viewportHeight="62">
+    <group android:translateX="-23" android:translateY="-22">
+        <path android:strokeColor="#FF6E0000" android:strokeWidth="3.6" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" android:pathData="M47,32 L47,27.5 Q47,23.5 51,23.5 L57,23.5 Q61,23.5 61,27.5 L61,32" />
+        <path android:fillColor="#FF6E0000" android:pathData="M32.5,50 L36,50 L36,74 L32.5,74 Q31,74 31,72.5 L31,51.5 Q31,50 32.5,50 Z" />
+        <path android:fillColor="#FF6E0000" android:pathData="M72,50 L75.5,50 Q77,50 77,51.5 L77,72.5 Q77,74 75.5,74 L72,74 Z" />
+        <path android:fillColor="#FF8A0000" android:pathData="M36,41 Q36,31 46,31 L62,31 Q72,31 72,41 L72,78.5 Q72,82.5 68,82.5 L40,82.5 Q36,82.5 36,78.5 Z" />
+        <path android:fillColor="#FFB03A3A" android:pathData="M36,41 Q36,31 46,31 L62,31 Q72,31 72,41 L72,46 Q54,55 36,46 Z" />
+        <path android:fillColor="#FFF4F1EE" android:pathData="M51.8,48.5 L56.2,48.5 L56.2,55 L51.8,55 Z" />
+        <path android:fillColor="#FF6E0000" android:pathData="M45,60 L63,60 Q66.5,60 66.5,63.5 L66.5,74.5 Q66.5,77.5 63.5,77.5 L44.5,77.5 Q41.5,77.5 41.5,74.5 L41.5,63.5 Q41.5,60 45,60 Z" />
+        <path android:strokeColor="#FFD9A6A6" android:strokeWidth="1.6" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M44.5,64.5 L63.5,64.5" />
+    </group>
+</vector>
