@@ -23,7 +23,7 @@ import com.backpack.app.net.TileCache
 object SettingsPopup {
 
     enum class Page(val label: String) {
-        ROUTE("Route"), NAVIGATION("Navigation"), SPEED("Speed"), PLACES("Places"), MAP("Map"), SERVERS("Servers"), CREDITS("Credits")
+        ROUTE("Route"), NAVIGATION("Navigation"), SPEED("Speed"), SIGHTS("Sights"), PLACES("Places"), MAP("Map"), SERVERS("Servers"), CREDITS("Credits")
     }
 
     interface Host {
@@ -64,6 +64,7 @@ object SettingsPopup {
                 Page.ROUTE -> routePage(c, p, host.travelMode, { o }, { o = it; Prefs.saveRouteOptions(c, it) }, prefs)
                 Page.NAVIGATION -> navigationPage(p, prefs)
                 Page.SPEED -> speedPage(p, prefs)
+                Page.SIGHTS -> sightsPage(p, prefs)
                 Page.PLACES -> placesPage(c, p, prefs, host)
                 Page.MAP -> mapPage(p, prefs)
                 Page.SERVERS -> serversPage(p, prefs)
@@ -210,26 +211,45 @@ object SettingsPopup {
             "Limits come from OpenStreetMap, loaded for the road ahead of your route.", 11f)
     }
 
-    private fun placesPage(c: Context, p: Popup, prefs: android.content.SharedPreferences, host: Host) {
-        p.section("Sights category: reach")
+    /**
+     * 1.2.0: everything about sights in one page. All values are times: the
+     * travel mode turns them into distances.
+     */
+    private fun sightsPage(p: Popup, prefs: android.content.SharedPreferences) {
+        p.text("Sights are shown in Weekend mode: the small camera next to the Weekend button turns them on or off (hold it for the list).", 12f)
+        p.section("Kinds")
+        for (g in com.backpack.app.core.SightGroup.values()) {
+            p.toggle(g.label, { g in com.backpack.app.core.SightGroup.parse(prefs.getString(Settings.KEY_SIGHT_GROUPS, null)) }) { on ->
+                val now = com.backpack.app.core.SightGroup.parse(prefs.getString(Settings.KEY_SIGHT_GROUPS, null)).toMutableSet()
+                if (on) now.add(g) else now.remove(g)
+                prefs.edit().putString(Settings.KEY_SIGHT_GROUPS, com.backpack.app.core.SightGroup.save(now)).apply()
+            }
+        }
+        p.section("No destination: around the map centre")
         val reach = com.backpack.app.core.Reach.MINUTES.map { it to (if (it < 60) "$it min" else "${it / 60} h") }
         p.choices(reach, { it.second }, {
             val cur = prefs.getInt(Settings.KEY_SIGHTS_REACH_MIN, com.backpack.app.core.Reach.DEFAULT_MINUTES)
             reach.firstOrNull { it.first == cur } ?: reach[1]
         }) { prefs.edit().putInt(Settings.KEY_SIGHTS_REACH_MIN, it.first).apply() }
-        p.text("Well-known places you can reach in this time with the current travel mode, around you or the map centre (small button next to POI). By car the public route service answers up to 1 h; 2 h uses a distance estimate.", 11f)
-        p.section("Places along a route: longest detour")
-        intField(p, prefs, "Weekend (min, there and back)", Settings.KEY_DETOUR_WEEKEND_MIN, Settings.DEFAULT_DETOUR_WEEKEND_MIN, 1, 60)
-        intField(p, prefs, "Work (min, there and back)", Settings.KEY_DETOUR_WORK_MIN, Settings.DEFAULT_DETOUR_WORK_MIN, 1, 30)
-        p.text("With a destination: Weekend shows well-known places (plus your POI category) along the route within this detour; Work only your POI category, with the shorter detour; Emergency adds hospitals, police and fire stations (15 min) and hides sights. Without a destination: within reach (above) of you or the map centre.", 11f)
-        p.section("Weekend: sights on the way")
-        p.toggle("Tell me when I pass near a sight (voice + message)", { prefs.getBoolean(Settings.KEY_SIGHT_HEADSUP, true) }) {
+        p.text("Places you can reach in this time with the current travel mode from the centre of the map (your position while the map follows you). Your backpack services use the same time. By car the public route service answers up to 1 h; 2 h uses a distance estimate.", 11f)
+        p.section("Choosing a route or navigating")
+        intField(p, prefs, "Longest detour (min, there and back)", Settings.KEY_DETOUR_WEEKEND_MIN, Settings.DEFAULT_DETOUR_WEEKEND_MIN, 1, 60)
+        p.text("Sights along the proposed routes that you can visit within this extra time.", 11f)
+        p.section("Voice heads-up while navigating")
+        p.toggle("Tell me when a sight is coming up (voice + message)", { prefs.getBoolean(Settings.KEY_SIGHT_HEADSUP, true) }) {
             prefs.edit().putBoolean(Settings.KEY_SIGHT_HEADSUP, it).apply()
         }
-        p.text("While navigating in Weekend mode: a well-known place within your Weekend detour, said once, ~2 km before (1 km by bike, 300 m on foot), never near a turn. Tap the message to add it as a stop.", 11f)
-        p.section("Weekend sights route")
+        intField(p, prefs, "Minutes before the sight", Settings.KEY_SIGHT_HEADSUP_MIN, Settings.DEFAULT_SIGHT_HEADSUP_MIN, 1, 15)
+        p.text("Time, not distance: worked out with your route's average speed, so it fits walking, cycling and driving. Said once per place, never close to a turn. Tap the message to hear what Wikipedia says about it, or to add it as a stop.", 11f)
+        p.section("Sights route")
         intField(p, prefs, "Max extra time (%), 0 = off", Settings.KEY_SIGHTS_MAX_PCT, Settings.DEFAULT_SIGHTS_MAX_PCT, 0, 100)
-        p.text("In Weekend mode, an alternative passing clearly more well-known places is taken if it is at most this much slower.", 11f)
+        p.text("An alternative passing clearly more sights is taken if it is at most this much slower.", 11f)
+    }
+
+    private fun placesPage(c: Context, p: Popup, prefs: android.content.SharedPreferences, host: Host) {
+        p.section("Backpack services along a route: longest detour")
+        intField(p, prefs, "Work mode (min, there and back)", Settings.KEY_DETOUR_WORK_MIN, Settings.DEFAULT_DETOUR_WORK_MIN, 1, 30)
+        p.text("With a destination: the services you ticked in the backpack, along the route within this detour (Weekend mode: the detour in Settings > Sights). Emergency adds hospitals, police and fire stations (15 min) and hides sights. Without a destination: within the reach time (Settings > Sights) of the map centre; Emergency always around you.", 11f)
         p.section("Saved places")
         p.text("Places are fetched per square of about 5 km and kept on this phone (everyday places 3 days, sights 2 weeks), so an area already seen needs no server.", 11f)
         p.bodyButton("Clear recent searches") {

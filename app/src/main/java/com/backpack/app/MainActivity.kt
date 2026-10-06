@@ -159,6 +159,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var errorBubble: TextView
 
     private var currentMode = ModeUi.WALKING
+    /** 1.2.0: route chips this far (dp) above the message band's base. */
+    private val PILLS_ABOVE_BAND_DP = 96
     private var currentPreference = PreferenceUi.RECOMMENDED
     private var avoidTolls = false
     private var urgencyMode = UrgencyMode.WEEKEND
@@ -289,7 +291,6 @@ class MainActivity : AppCompatActivity() {
         setupWaypointToggle()
         setupNavigationButton()
         setupPoiToggle()
-        setupSightsOrigin()
         setupSightsButton()
         setupModeButtons()
         setupPreferenceRow()
@@ -580,8 +581,6 @@ class MainActivity : AppCompatActivity() {
             } else if (navUiActive) updateSpeedOnly(location)
             if (navUiActive) adaptTrackingZoom(location)
             queryPois()
-            // Sights around you: searched again once you moved ~2 km.
-            if (!navUiActive && TripState.plan == null && touristOn && sightsAroundMe()) refreshTourist()
         } else {
             // Likely signal loss / reacquisition noise: position, progress
             // and off-route detection keep using the last good fix.
@@ -1108,7 +1107,7 @@ class MainActivity : AppCompatActivity() {
     /** Well-known places are shown in Weekend mode or with the Sights POI category. */
     private val touristOn: Boolean
         // 1.0.9: Weekend's default layer, or the Sights category; never in Emergency (no distractions).
-        // 1.1.1: the Sights button's switch for this mode (Weekend on by default, Work off, Emergency never), with at least one kind.
+        // 1.2.0: Weekend mode with its small camera on, and at least one kind (Settings > Sights).
         get() = sightsSwitchOn() && sightGroups().isNotEmpty()
     // Results live in TripState: a rotation or day/night switch keeps them.
     private var touristResults: List<TouristPoi>
@@ -1217,19 +1216,17 @@ class MainActivity : AppCompatActivity() {
     /** "within 1 h on foot of you" style text for the result message. */
     private var reachLabel: String? = null
 
-    private fun sightsAroundMe() = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
-        .getBoolean(Settings.KEY_SIGHTS_AROUND_ME, true)
-
     private fun sightsReachMinutes() = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
         .getInt(Settings.KEY_SIGHTS_REACH_MIN, Reach.DEFAULT_MINUTES)
 
     /**
      * Well-known places reachable within the chosen time (Settings > Places)
-     * in the current travel mode, around you or the map centre. Searched
+     * in the current travel mode, around the map centre. Searched
      * again after you moved ~2 km (around you) or the map ~3 km (centre).
      */
     private fun refreshReach(force: Boolean) {
-        val aroundMe = sightsAroundMe()
+        // 1.2.0: always around the centre of the map (your position while it follows you).
+        val aroundMe = false
         val minutes = sightsReachMinutes()
         val origin = (if (aroundMe) currentPosition() else null) ?: cameraCenter() ?: return
         val settings = "$aroundMe/${currentMode.name}/$minutes"
@@ -1265,28 +1262,6 @@ class MainActivity : AppCompatActivity() {
                 onTouristCandidates(all, error, null, origin, announce = announce, scenic = false)
             }
         }
-    }
-
-    /** Small button next to POI (no route): places around me <-> map centre. */
-    private fun setupSightsOrigin() {
-        val b = findViewById<ImageButton>(R.id.sights_origin_button)
-        b.setOnClickListener {
-            val me = !sightsAroundMe()
-            getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE).edit().putBoolean(Settings.KEY_SIGHTS_AROUND_ME, me).apply()
-            refreshSightsOrigin()
-            showMessage(if (me) "Places around you" else "Places around the map centre")
-            if (TripState.plan == null) { if (touristOn) refreshTourist(force = true); queryPois(force = true) }
-        }
-        refreshSightsOrigin()
-    }
-
-    private fun refreshSightsOrigin() {
-        val b = findViewById<ImageButton>(R.id.sights_origin_button)
-        // 1.0.9: whenever places are searched around a point (no route).
-        val v = if (TripState.plan == null && (activeServices().isNotEmpty() || touristOn)) View.VISIBLE else View.GONE
-        if (b.visibility != v) b.visibility = v
-        val icon = if (sightsAroundMe()) R.drawable.ic_location_marker else R.drawable.ic_map_center
-        if (b.tag != icon) { b.tag = icon; b.setImageResource(icon); setIconActive(b, true) }
     }
 
     private fun onTouristCandidates(
@@ -1368,11 +1343,11 @@ class MainActivity : AppCompatActivity() {
         if (!sightsPrefs().getBoolean(Settings.KEY_SIGHT_HEADSUP, true)) return
         if (p.distanceToNextM < 400.0 || System.currentTimeMillis() - lastInstructionAtMs < 8000L) return
         val mode = currentMode.mode
-        val lead = when (mode) {
-            com.backpack.app.core.TravelMode.DRIVING -> 2000.0
-            com.backpack.app.core.TravelMode.CYCLING -> 1000.0
-            com.backpack.app.core.TravelMode.WALKING -> 300.0
-        }
+        // 1.2.0: set in minutes (Settings > Sights), turned into metres with
+        // the route's own average speed: the same warning time in every mode.
+        val route = selectedRoute() ?: return
+        val minutes = sightsPrefs().getInt(Settings.KEY_SIGHT_HEADSUP_MIN, Settings.DEFAULT_SIGHT_HEADSUP_MIN)
+        val lead = Tourist.headsUpLeadM(minutes, route.distanceMeters, route.durationSeconds, mode)
         val maxDetour = detourMinutes() * 60.0
         val poi = touristResults.asSequence()
             .filter { it.key !in touristDimOwner && it.key !in headsUpSaid && it.sitelinks >= 1 }
@@ -1382,7 +1357,8 @@ class MainActivity : AppCompatActivity() {
         headsUpSaid.add(poi.key)
         val ahead = (poi.alongM - p.alongM).coerceAtLeast(0.0)
         val mins = Tourist.minutesLabel(Tourist.estimateDetourSeconds(poi.offsetM, mode))
-        NavigationEngine.speak("In ${Speech.distance(ahead, useMetric)}, ${poi.name}, ${poi.category.label.lowercase()}, about $mins off your route")
+        val inMin = Math.round((ahead / lead) * minutes).toInt().coerceAtLeast(1)
+        NavigationEngine.speak("In about $inMin minute${if (inMin == 1) "" else "s"}, ${poi.name}, ${poi.category.label.lowercase()}, about $mins off your route")
         showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to add a stop",
             onTap = { addStopFlow(poi.point, poi.name) }, showMs = 8000L)
     }
@@ -1401,7 +1377,7 @@ class MainActivity : AppCompatActivity() {
      * are shown too, dimmed (1.0.7). Returns the selected route's places.
      */
     private fun showTouristFor(route: RouteResult?): List<TouristPoi> {
-        // 1.1.1: only the kinds ticked in the Sights panel (no new search).
+        // 1.1.1: only the kinds ticked in the Settings > Sights (no new search).
         val kinds = sightKinds()
         val all = TripState.touristCandidates.filter { it.category in kinds }
         val radius = corridorM()
@@ -2185,7 +2161,6 @@ class MainActivity : AppCompatActivity() {
      */
     private fun placeLayout() {
         refreshNavBox()
-        refreshSightsOrigin()
         val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val driving = currentMode == ModeUi.DRIVING
         val density = resources.displayMetrics.density
@@ -2226,13 +2201,13 @@ class MainActivity : AppCompatActivity() {
         fun shown(id: Int) = findViewById<View>(id).visibility == View.VISIBLE
         val resumeShown = shown(R.id.resume_button)
 
-        // Left column (planning): mode, urgency, POI, settings, resume.
+        // Left column (planning), 1.2.0 four buttons: mode (+ toll), urgency
+        // (+ sights camera in Weekend), backpack services, settings; resume.
         setMargins(R.id.mode_row, top = top0)
-        setMargins(R.id.urgency_button, top = gap)
+        setMargins(R.id.urgency_row, top = gap)
         setMargins(R.id.poi_row, top = gap)
-        setMargins(R.id.sights_row, top = gap) // 1.1.1: Sights under Services
-        setMargins(R.id.route_options_button, top = top0 + 4 * step)
-        var leftRows = if (navUiActive) 0 else 5
+        setMargins(R.id.route_options_button, top = top0 + 3 * step)
+        var leftRows = if (navUiActive) 0 else 4
 
         // Right column.
         setMargins(R.id.locate_button, top = top0)
@@ -2255,14 +2230,14 @@ class MainActivity : AppCompatActivity() {
             setMargins(R.id.search_button, top = top0 + 3 * step)
             rightRows = 4
             if (land) {
-                // Landscape: no room for a 6th row on the left -> 5th on the right.
+                // Landscape: resume as the 5th row on the right.
                 moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.END)
                 setMargins(R.id.resume_button, top = top0 + 4 * step, end = 8)
                 if (resumeShown) rightRows = 5
             } else {
                 moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.START)
-                setMargins(R.id.resume_button, top = top0 + 5 * step, start = 8)
-                if (resumeShown) leftRows = 6
+                setMargins(R.id.resume_button, top = top0 + 4 * step, start = 8)
+                if (resumeShown) leftRows = 5
             }
         }
 
@@ -2304,11 +2279,10 @@ class MainActivity : AppCompatActivity() {
         if (hideInfo && routeInfo.visibility == View.VISIBLE) routeInfo.visibility = View.INVISIBLE
         else if (!hideInfo && routeInfo.visibility == View.INVISIBLE) routeInfo.visibility = View.VISIBLE
         setMargins(R.id.message_band, bottom = bandBottom, start = if (land) 56 else 8, end = if (land) 0 else 8)
-        // Chips just over the messages (their measured height; 0 when none shown).
-        val band = findViewById<View>(R.id.message_band)
-        val bandH = if (band.visibility == View.VISIBLE) (band.height / resources.displayMetrics.density).toInt() else 0
-        // Landscape: right of the left column's small side buttons (toll, sights origin).
-        setMargins(R.id.route_options_scroll, bottom = bandBottom + bandH + 6, start = if (land) 88 else 8, end = 56, top = 0)
+        // 1.2.0: route chips at a fixed height (room for the route line and a
+        // two-line message under them): a message appearing no longer moves
+        // them while you are choosing.
+        setMargins(R.id.route_options_scroll, bottom = bandBottom + PILLS_ABOVE_BAND_DP, start = if (land) 88 else 8, end = 56, top = 0)
 
         // Guards: columns (with a little margin around) and the bottom buttons.
         setMargins(R.id.guard_left, top = top0 - 6)
@@ -2574,7 +2548,6 @@ class MainActivity : AppCompatActivity() {
 
     /** A tick changed: filter what is on the phone; search only if never searched here. */
     private fun servicesChanged() {
-        refreshSightsOrigin()
         if (activeServices().isEmpty()) {
             svcSlot.reset()
             refreshPoiPins()
@@ -2587,32 +2560,23 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- 1.1.1 Sights (own button, kinds, Weekend default) ----------
 
-    /** Kinds of sights in the Sights panel. */
-    private enum class SightGroup(val label: String, val kinds: Set<com.backpack.app.core.TouristCategory>) {
-        HISTORIC("Historic (castles, ruins, monuments, UNESCO)", setOf(com.backpack.app.core.TouristCategory.HISTORIC, com.backpack.app.core.TouristCategory.HERITAGE)),
-        NATURE("Nature (waterfalls, springs, caves, peaks, viewpoints)", setOf(com.backpack.app.core.TouristCategory.NATURE, com.backpack.app.core.TouristCategory.WATER, com.backpack.app.core.TouristCategory.VIEWPOINT)),
-        PARKS("Parks (national parks, reserves)", setOf(com.backpack.app.core.TouristCategory.PARK)),
-        CULTURE("Culture (museums, galleries, zoos, attractions)", setOf(com.backpack.app.core.TouristCategory.MUSEUM, com.backpack.app.core.TouristCategory.SIGHT))
-    }
-
     private fun sightsPrefs() = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
 
-    /** Sights on in this urgency mode: Weekend yes by default, Work no by default, Emergency never. */
-    private fun sightsSwitchOn(): Boolean = when (urgencyMode) {
-        UrgencyMode.WEEKEND -> sightsPrefs().getBoolean(Settings.KEY_SIGHTS_WEEKEND, true)
-        UrgencyMode.WORK -> sightsPrefs().getBoolean(Settings.KEY_SIGHTS_WORK, false)
-        UrgencyMode.EMERGENCY -> false
-    }
+    /** 1.2.0: sights only in Weekend mode, with its small camera on (default). */
+    private fun sightsSwitchOn(): Boolean =
+        urgencyMode == UrgencyMode.WEEKEND && sightsPrefs().getBoolean(Settings.KEY_SIGHTS_WEEKEND, true)
 
-    private fun sightGroups(): Set<SightGroup> {
-        val saved = sightsPrefs().getString(Settings.KEY_SIGHT_GROUPS, null) ?: return SightGroup.values().toSet()
-        return saved.split(',').mapNotNull { n -> SightGroup.values().firstOrNull { it.name == n } }.toSet()
-    }
+    private fun sightGroups(): Set<com.backpack.app.core.SightGroup> =
+        com.backpack.app.core.SightGroup.parse(sightsPrefs().getString(Settings.KEY_SIGHT_GROUPS, null))
 
     private fun sightKinds(): Set<com.backpack.app.core.TouristCategory> = sightGroups().flatMap { it.kinds }.toSet()
 
+    /** 1.2.0: the small camera next to Weekend (like the toll switch next
+     *  to Car): shown in Weekend only; purple = sights on, grey = off. */
     private fun refreshSightsButton() {
-        val b = findViewById<ImageButton>(R.id.sights_button)
+        val b = findViewById<ImageButton>(R.id.sights_toggle)
+        val v = if (urgencyMode == UrgencyMode.WEEKEND) View.VISIBLE else View.GONE
+        if (b.visibility != v) b.visibility = v
         if (touristOn) {
             b.imageTintList = ColorStateList.valueOf(0xFF4B1F6F.toInt())
             setStatusRing(b, touristResults.isNotEmpty())
@@ -2623,40 +2587,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupSightsButton() {
-        val b = findViewById<ImageButton>(R.id.sights_button)
-        b.setOnClickListener { showSightsPanel(b) }
+        val b = findViewById<ImageButton>(R.id.sights_toggle)
+        b.setOnClickListener {
+            val on = !sightsPrefs().getBoolean(Settings.KEY_SIGHTS_WEEKEND, true)
+            sightsPrefs().edit().putBoolean(Settings.KEY_SIGHTS_WEEKEND, on).apply()
+            sightsChanged()
+            showMessage(when {
+                !on -> "Sights off"
+                sightGroups().isEmpty() -> "Sights on, but no kinds ticked (Settings > Sights)"
+                else -> "Sights on"
+            })
+        }
+        // Hold: the list of the places shown.
         b.setOnLongClickListener {
             if (touristOn && touristResults.isNotEmpty()) showTouristList() else showMessage("No well-known places shown yet")
             true
         }
         refreshSightsButton()
-    }
-
-    /** On / off for this urgency mode, and which kinds. */
-    private fun showSightsPanel(anchor: View) {
-        val p = Popup(this, "Sights")
-        if (urgencyMode == UrgencyMode.EMERGENCY) {
-            p.text("Emergency mode: no sights (no distractions).")
-            p.button("Close", primary = true) { p.dismiss() }
-            p.show()
-            return
-        }
-        val key = if (urgencyMode == UrgencyMode.WEEKEND) Settings.KEY_SIGHTS_WEEKEND else Settings.KEY_SIGHTS_WORK
-        p.toggle("Show sights in ${if (urgencyMode == UrgencyMode.WEEKEND) "Weekend" else "Work"} mode", { sightsSwitchOn() }) {
-            sightsPrefs().edit().putBoolean(key, it).apply()
-            sightsChanged()
-        }
-        p.section("Kinds")
-        for (g in SightGroup.values()) {
-            p.toggle(g.label, { g in sightGroups() }) { on ->
-                val now = sightGroups().toMutableSet().apply { if (on) add(g) else remove(g) }
-                sightsPrefs().edit().putString(Settings.KEY_SIGHT_GROUPS, now.joinToString(",") { it.name }).apply()
-                sightsChanged()
-            }
-        }
-        p.text("Along the proposed routes when there is one, otherwise around you or the map centre (small button next to this one). Hold this button for the list.", 11f)
-        p.button("Done", primary = true) { p.dismiss() }
-        p.show()
     }
 
     /** On/off or kinds changed: kinds only re-filter what is on the phone. */
@@ -2665,7 +2612,6 @@ class MainActivity : AppCompatActivity() {
         touristModeChanged()
         if (wasOn && touristOn) showTouristFor(if (TripState.plan != null) selectedRoute() else null)
         refreshSightsButton()
-        refreshSightsOrigin()
     }
 
     // ---------- Services search (1.0.9 adaptive, 1.1.1 one search for all) ----------
@@ -2788,7 +2734,7 @@ class MainActivity : AppCompatActivity() {
         }
         // No route: within reach of you or the map centre.
         // Emergency mode: always around you (hospitals near you, not near the map centre).
-        val aroundMe = urgencyMode == UrgencyMode.EMERGENCY || sightsAroundMe()
+        val aroundMe = urgencyMode == UrgencyMode.EMERGENCY
         val origin = (if (aroundMe) currentPosition() else null) ?: cameraCenter() ?: return
         val minutes = sightsReachMinutes()
         val key = "A/${currentMode.name}/$minutes/$aroundMe"
@@ -2936,7 +2882,7 @@ class MainActivity : AppCompatActivity() {
             urgencyButton.setImageResource(urgencyMode.iconRes)
             showMessage(
                 when (urgencyMode) {
-                    UrgencyMode.WEEKEND -> "Weekend mode \u00b7 sights ${if (sightsSwitchOn()) "shown" else "off (Sights button)"}"
+                    UrgencyMode.WEEKEND -> "Weekend mode \u00b7 sights ${if (sightsSwitchOn()) "on" else "off"} (camera next to this button)"
                     UrgencyMode.WORK -> "Work mode \u00b7 your services only, short detours"
                     UrgencyMode.EMERGENCY -> "Emergency mode \u00b7 hospitals, police, fire stations shown"
                 }
@@ -2945,8 +2891,7 @@ class MainActivity : AppCompatActivity() {
             touristModeChanged()
             // 1.0.9: Emergency adds the emergency places on its own (your
             // category stays); Weekend / Work change the detour allowed.
-            refreshSightsOrigin()
-            refreshServicesButton()
+                refreshServicesButton()
 
             val start = resolveStartPoint()
             val end = TripState.destination
@@ -2989,8 +2934,11 @@ class MainActivity : AppCompatActivity() {
             settingsOpen = false
             if (isDestroyed) return
             loadSettings()
-            // A new reach time / detour applies at once.
-            if (touristOn) refreshTourist(force = true)
+            // A new reach time / detour applies at once; kinds (Settings > Sights)
+            // re-filter what is on the phone, or switch sights on / off.
+            val wasOn = touristWasOn
+            sightsChanged()
+            if (wasOn && touristOn) refreshTourist(force = true)
             queryPois(force = true)
             // Map style changed (day/night itself rebuilds the screen).
             val m = map

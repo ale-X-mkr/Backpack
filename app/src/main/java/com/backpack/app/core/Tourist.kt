@@ -58,6 +58,21 @@ data class TouristPoi(
     val readMoreUrl: String? get() = wikipediaUrl ?: articleUrl ?: wikidata.takeIf { it.isNotBlank() }?.let { "https://www.wikidata.org/wiki/$it" }
 }
 
+/** 1.2.0: kinds of sights (Settings > Sights), each a set of categories. */
+enum class SightGroup(val label: String, val kinds: Set<TouristCategory>) {
+    HISTORIC("Historic (castles, ruins, monuments, UNESCO)", setOf(TouristCategory.HISTORIC, TouristCategory.HERITAGE)),
+    NATURE("Nature (waterfalls, springs, caves, peaks, viewpoints)", setOf(TouristCategory.NATURE, TouristCategory.WATER, TouristCategory.VIEWPOINT)),
+    PARKS("Parks (national parks, reserves)", setOf(TouristCategory.PARK)),
+    CULTURE("Culture (museums, galleries, zoos, attractions)", setOf(TouristCategory.MUSEUM, TouristCategory.SIGHT));
+
+    companion object {
+        /** Saved "HISTORIC,NATURE" -> groups; nothing saved = all. */
+        fun parse(saved: String?): Set<SightGroup> =
+            saved?.split(',')?.mapNotNull { n -> values().firstOrNull { it.name == n } }?.toSet() ?: values().toSet()
+        fun save(groups: Set<SightGroup>): String = groups.joinToString(",") { it.name }
+    }
+}
+
 /**
  * Tourist mode, data side: which OSM objects count, the Overpass query
  * along a route corridor or in a box, parsing, Wikidata popularity, ranking
@@ -66,6 +81,43 @@ data class TouristPoi(
  * have an article about them.
  */
 object Tourist {
+
+    /**
+     * 1.2.0 voice heads-up: how far ahead (m) a sight is announced, from the
+     * minutes chosen in Settings and the route's own average speed (so the
+     * same minutes on foot, by bike or by car). Kept within 100 m .. 10 km.
+     */
+    fun headsUpLeadM(minutes: Int, routeLengthM: Double, routeSeconds: Double, mode: TravelMode): Double {
+        val fallback = when (mode) { TravelMode.WALKING -> 1.3; TravelMode.CYCLING -> 4.2; TravelMode.DRIVING -> 15.0 }
+        val speed = if (routeSeconds > 60.0 && routeLengthM > 0.0) routeLengthM / routeSeconds else fallback
+        return (minutes * 60.0 * speed).coerceIn(100.0, 10_000.0)
+    }
+
+    /** 1.2.0 read aloud: English Wikipedia title of a Wikidata item. */
+    fun enwikiTitleUrl(qid: String): String =
+        "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=sitelinks&sitefilter=enwiki&ids=" + qid
+
+    fun parseEnwikiTitle(body: String, qid: String): String? =
+        org.json.JSONObject(body).optJSONObject("entities")?.optJSONObject(qid)?.optJSONObject("sitelinks")
+            ?.optJSONObject("enwiki")?.optString("title", "")?.takeIf { it.isNotBlank() }
+
+    /** English title from an "https://en.wikipedia.org/wiki/Title" link or an "en:Title" tag. */
+    fun englishTitle(articleUrl: String?, wikipediaTag: String?): String? {
+        articleUrl?.let { u ->
+            val m = Regex("^https?://en\\.(?:m\\.)?wikipedia\\.org/wiki/(.+)$").find(u)
+            if (m != null) return java.net.URLDecoder.decode(m.groupValues[1], "UTF-8").replace('_', ' ')
+        }
+        wikipediaTag?.let { t -> if (t.startsWith("en:")) return t.substring(3).trim().ifBlank { null } }
+        return null
+    }
+
+    /** Wikipedia REST summary (first paragraph, plain text) of an English article. */
+    fun summaryUrl(title: String): String =
+        "https://en.wikipedia.org/api/rest_v1/page/summary/" +
+            java.net.URLEncoder.encode(title.replace(' ', '_'), "UTF-8").replace("+", "%20")
+
+    fun parseSummary(body: String): String? =
+        org.json.JSONObject(body).optString("extract", "").trim().ifBlank { null }
 
     // 1.0.x kinds (kept light: only places with a Wikidata entry).
     private val BASE = listOf(
