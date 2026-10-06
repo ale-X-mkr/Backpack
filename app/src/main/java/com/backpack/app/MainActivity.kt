@@ -1359,7 +1359,7 @@ class MainActivity : AppCompatActivity() {
         val mins = Tourist.minutesLabel(Tourist.estimateDetourSeconds(poi.offsetM, mode))
         val inMin = Math.round((ahead / lead) * minutes).toInt().coerceAtLeast(1)
         NavigationEngine.speak("In about $inMin minute${if (inMin == 1) "" else "s"}, ${poi.name}, ${poi.category.label.lowercase()}, about $mins off your route")
-        showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to add a stop",
+        showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to hear about it",
             onTap = { showSightGuide(poi) }, showMs = 8000L)
     }
 
@@ -2308,7 +2308,10 @@ class MainActivity : AppCompatActivity() {
         // 1.2.0: route chips at a fixed height (room for the route line and a
         // two-line message under them): a message appearing no longer moves
         // them while you are choosing.
-        setMargins(R.id.route_options_scroll, bottom = bandBottom + PILLS_ABOVE_BAND_DP, start = if (land) 88 else 8, end = 56, top = 0)
+        // Only an unusually tall band (two wrapped bubbles) lifts them, so it never covers a chip.
+        val band = findViewById<View>(R.id.message_band)
+        val bandH = if (band.visibility == View.VISIBLE) (band.height / resources.displayMetrics.density).toInt() else 0
+        setMargins(R.id.route_options_scroll, bottom = bandBottom + maxOf(PILLS_ABOVE_BAND_DP, bandH + 6), start = if (land) 88 else 8, end = 56, top = 0)
 
         // Guards: columns (with a little margin around) and the bottom buttons.
         setMargins(R.id.guard_left, top = top0 - 6)
