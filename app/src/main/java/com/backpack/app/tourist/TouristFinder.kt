@@ -92,12 +92,32 @@ class TouristFinder(context: Context) {
             // Matching on thinned lines: accurate enough for a corridor several
             // hundred metres wide, and fast.
             val match = rest.map { Polyline(Tourist.sampleLine(it, maxPoints = 800, minStepM = 50.0)) }
-            val cells = Tourist.wikiCellsAlong(rest, radius).take(MAX_WIKI_CELLS).map { it.first }
-            val wiki = wikiCells(gen, cells) { soFar ->
+            // Wikipedia for the stretch OpenStreetMap covers first (quick), then
+            // the rest of the route on its own thread, added as it comes.
+            val near = Tourist.wikiCellsAlong(parts, radius).map { it.first }
+            val nearSet = near.toHashSet()
+            val far = Tourist.wikiCellsAlong(rest, radius).map { it.first }.filter { it !in nearSet }
+                .take((MAX_WIKI_CELLS - near.size).coerceAtLeast(0))
+            val wiki = wikiCells(gen, near) { soFar ->
                 if (onPartial != null) { val part = withKnown(select(soFar, match, radius)); main.post { if (gen == generation) onPartial(part) } }
             }
             if (gen != generation) return@execute
-            load(gen, tiles, match, radius, coveredM, onSwitch, callback, onPartial = onPartial, seed = wiki)
+            val farFound = java.util.concurrent.atomic.AtomicReference<List<TouristPoi>>(emptyList())
+            /** The search's final list, once delivered (later far cells are added to it). */
+            val finalList = java.util.concurrent.atomic.AtomicReference<List<TouristPoi>?>(null)
+            fun pushFar() {
+                val base = finalList.get() ?: return
+                if (onPartial == null) return
+                val part = withKnown(select(base + farFound.get(), match, radius))
+                main.post { if (gen == generation) onPartial(part) }
+            }
+            if (far.isNotEmpty()) farWorker.execute {
+                if (gen != generation) return@execute
+                wikiCells(gen, far) { soFar -> farFound.set(soFar); pushFar() }
+            }
+            load(gen, tiles, match, radius, coveredM, onSwitch, callback, onPartial = onPartial, seed = wiki,
+                extra = { farFound.get() },
+                onFinal = { list, usedFar -> finalList.set(list); if (farFound.get().size != usedFar) pushFar() })
         }
     }
 
@@ -162,7 +182,11 @@ class TouristFinder(context: Context) {
     private fun load(
         gen: Int, tiles: List<Tile>, lines: List<Polyline>, radius: Double, coveredM: Double,
         onSwitch: () -> Unit, callback: ResultCallback, box: DoubleArray? = null, ring: List<LatLon>? = null,
-        onPartial: ((List<TouristPoi>) -> Unit)? = null, seed: List<TouristPoi> = emptyList()
+        onPartial: ((List<TouristPoi>) -> Unit)? = null, seed: List<TouristPoi> = emptyList(),
+        /** 1.2.1: places found meanwhile on the far part of the route. */
+        extra: () -> List<TouristPoi> = { emptyList() },
+        /** The list delivered, and how many [extra] places it included. */
+        onFinal: (List<TouristPoi>, Int) -> Unit = { _, _ -> }
     ) {
         fun select(list: List<TouristPoi>): List<TouristPoi> = select(list, lines, radius, box, ring)
         val deliver = { pois: List<TouristPoi>?, error: String? ->
@@ -252,7 +276,12 @@ class TouristFinder(context: Context) {
 
         // Inside the corridor (or the box) only; distance to the NEAREST line,
         // so places along an alternative count as much as along the first route.
-        withPopularity(gen, select(found)) { scored -> deliver(scored, error) }
+        val more = extra()
+        withPopularity(gen, select(found + more)) { scored ->
+            // Final first, then (posted after it) any far places that came meanwhile.
+            deliver(scored, error)
+            onFinal(scored, more.size)
+        }
     }
 
     /** Inside the corridor (or box / area); distance to the NEAREST line,
@@ -294,7 +323,7 @@ class TouristFinder(context: Context) {
         for (batch in missing.chunked(WIKI_BATCH)) {
             if (gen != generation) break
             val answers = batch.map { c -> wikiPool.submit(java.util.concurrent.Callable { c to wikiHits(c) }) }
-                .mapNotNull { f -> try { f.get(15, TimeUnit.SECONDS) } catch (e: Exception) { null } }
+                .mapNotNull { f -> try { f.get(12, TimeUnit.SECONDS) } catch (e: Exception) { null } }
                 .mapNotNull { (c, h) -> h?.let { c to it } }
             if (answers.isEmpty()) continue
             val ids = answers.flatMap { (c, h) -> h.filter { Tourist.wikiCellOf(it.point) == c }.map { it.wikidata } }.distinct()
@@ -469,6 +498,8 @@ class TouristFinder(context: Context) {
 
     companion object {
         private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
+        /** 1.2.1: Wikipedia for the far part of a route (never holds up other searches). */
+        private val farWorker = java.util.concurrent.Executors.newSingleThreadExecutor()
         /** Parses and stores answers (never blocked by a waiting search). */
         private val store = java.util.concurrent.Executors.newSingleThreadExecutor()
         private val inFlight = java.util.concurrent.ConcurrentHashMap<Any, CountDownLatch>()

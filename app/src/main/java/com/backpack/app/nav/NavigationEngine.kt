@@ -129,6 +129,8 @@ object NavigationEngine {
         pendingSpeech = null
         voice.clear()
         main.removeCallbacks(silentDone)
+        main.removeCallbacks(watchdog)
+        watchdogId = null
         tts?.stop()
         abandonFocus()
         for (l in listeners.toList()) l.onStopped()
@@ -283,8 +285,25 @@ object NavigationEngine {
         }
         voice.navStarted()
         requestFocus()
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_NAV)
+        say(text, UTTERANCE_NAV)
     }
+
+    /**
+     * Speaks [text]; never leaves the queue waiting: a refused call counts
+     * as said at once, and an utterance that never reports back is taken as
+     * said after a while (the voice engine may restart).
+     */
+    private fun say(text: String, id: String) {
+        main.removeCallbacks(watchdog)
+        watchdogId = null
+        val r = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) ?: TextToSpeech.ERROR
+        if (r == TextToSpeech.ERROR) { main.post { said(id) }; return }
+        watchdogId = id
+        main.postDelayed(watchdog, 20_000L + text.length * 120L)
+    }
+
+    private var watchdogId: String? = null
+    private val watchdog = Runnable { watchdogId?.let { id -> watchdogId = null; said(id) } }
 
     // ---------- 1.2.1 info voice: sight heads-ups and readings, queued ----------
 
@@ -313,6 +332,12 @@ object NavigationEngine {
     private val silentDone = Runnable { voice.sentenceDone(); pump() }
 
     private fun said(utteranceId: String?) {
+        // Only the latest utterance counts (a cut one may still report back late).
+        if (utteranceId != watchdogId && watchdogId != null && utteranceId != null) {
+            if (!(utteranceId == UTTERANCE_NAV && voice.navSpeaking) && !(utteranceId == UTTERANCE_INFO && voice.infoSpeaking)) return
+        }
+        main.removeCallbacks(watchdog)
+        watchdogId = null
         when (utteranceId) {
             UTTERANCE_NAV -> voice.navDone(System.currentTimeMillis())
             UTTERANCE_INFO -> voice.sentenceDone()
@@ -344,7 +369,7 @@ object NavigationEngine {
             return
         }
         requestFocus()
-        tts?.speak(s.text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_INFO)
+        say(s.text, UTTERANCE_INFO)
     }
 
     /** Music and podcasts duck (get quieter) while an instruction plays. */

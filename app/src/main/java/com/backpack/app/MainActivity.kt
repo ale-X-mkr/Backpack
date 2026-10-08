@@ -1893,7 +1893,7 @@ class MainActivity : AppCompatActivity() {
         val first = !navUiActive
         if (first) headsUpSaid.clear()
         // Navigation has its own camera (and its own north-up switch).
-        planFollow = PlanFollow.OFF
+        setPlanFollow(PlanFollow.OFF)
         flattenOnIdle = false
         navUiActive = true
         map?.uiSettings?.isTiltGesturesEnabled = true
@@ -1946,6 +1946,7 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.overview_button).visibility = View.GONE
         navUiActive = false
+        statusStrip.maxLines = 2
         setPlanFollow(PlanFollow.OFF)
         // Outside navigation the map stays flat: no tilting by accident.
         map?.uiSettings?.isTiltGesturesEnabled = false
@@ -2338,6 +2339,11 @@ class MainActivity : AppCompatActivity() {
         val circleTopRight = driving && !circleInBox
         setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) 96 else 0)
         val boxShown = navBox.visibility == View.VISIBLE && navBox.height > 0
+        // 1.2.1: the columns never move, so the box keeps above them: a long
+        // street name gets one line instead of two when it would reach them.
+        if (navUiActive && boxShown && navBox.bottom / density > COLUMNS_TOP_DP - 4 && statusStrip.maxLines > 1) {
+            statusStrip.maxLines = 1
+        }
 
         // Speed circle: inside the box at its right end, centred on its
         // height; otherwise top right.

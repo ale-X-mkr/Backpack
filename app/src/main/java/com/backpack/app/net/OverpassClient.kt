@@ -95,14 +95,33 @@ object OverpassClient {
         if (quick) { attempt(list, 0, 0, rounds, query, true, null, onSwitch, null, done); return }
         val job = HeavyJob(isStale, { done(null, null) }) { finished ->
             val race = Race()
+            // Main thread only (both tries report there).
             val once: (String?, Failure?) -> Unit = { body, failure ->
-                if (!race.finished) { race.finished = true; done(body, failure); finished() }
+                if (!race.finished) {
+                    race.finished = true
+                    // The other request is not needed any more: free its server slot.
+                    synchronized(race.calls) { race.calls.toList() }.forEach { try { it.cancel() } catch (e: Exception) { } }
+                    done(body, failure)
+                    finished()
+                }
             }
             attempt(list, 0, 0, rounds, query, false, null, onSwitch, race, once)
             // 1.2.1: the first server is slow: ask the next one too, first answer wins.
             if (!background && list.size > 1) main.postDelayed({
                 if (!race.finished && !race.advanced && isStale?.invoke() != true) {
-                    send(list[1], query, false, { body, _ -> if (body != null) once(body, null) }) { _ -> /* the main try goes on */ }
+                    race.hedgeTo = list[1]
+                    race.hedgePending = true
+                    val call = send(list[1], query, false, { body, _ ->
+                        race.hedgePending = false
+                        if (body != null) once(body, null)
+                    }) { _ ->
+                        main.post {
+                            race.hedgePending = false
+                            // The main try already gave up meanwhile: now it is a failure.
+                            race.chainFailed?.let { once(null, it) }
+                        }
+                    }
+                    synchronized(race.calls) { race.calls.add(call) }
                 }
             }, HEDGE_AFTER_MS)
         }
@@ -117,7 +136,16 @@ object OverpassClient {
     }
 
     /** One query's state: answered already; moved past the first server. */
-    private class Race { var finished = false; var advanced = false }
+    private class Race {
+        @Volatile var finished = false
+        @Volatile var advanced = false
+        /** Server the second try went to (the main try skips it). */
+        @Volatile var hedgeTo: String? = null
+        @Volatile var hedgePending = false
+        /** The main try ran out of servers while the second try was still out. */
+        @Volatile var chainFailed: Failure? = null
+        val calls = ArrayList<Call>()
+    }
     private const val HEDGE_AFTER_MS = 4000L
     /** 1.2.1: background fills, after every waiting query. */
     private val backgroundQueue = ArrayDeque<HeavyJob>()
@@ -155,8 +183,17 @@ object OverpassClient {
             if (round + 1 < maxRounds) {
                 main.postDelayed({ attempt(list, 0, round + 1, maxRounds, query, quick, lastFailure, onSwitch, race, done) }, 3000L)
             } else {
-                main.post { done(null, lastFailure ?: Failure.OFFLINE) }
+                main.post {
+                    // The second try may still answer: it decides.
+                    if (race != null && race.hedgePending) race.chainFailed = lastFailure ?: Failure.OFFLINE
+                    else done(null, lastFailure ?: Failure.OFFLINE)
+                }
             }
+            return
+        }
+        // Never the same query twice on one server.
+        if (race != null && race.hedgeTo == list[index]) {
+            attempt(list, index + 1, round, maxRounds, query, quick, lastFailure, onSwitch, race, done)
             return
         }
         fun next(f: Failure) {
@@ -167,9 +204,9 @@ object OverpassClient {
         }
         // First round: ask the status page first. Last round: just try.
         if (round + 1 < maxRounds || quick) {
-            withSlot(list[index], { next(Failure.BUSY) }) { send(list[index], query, quick, done) { f -> next(f) } }
+            withSlot(list[index], { next(Failure.BUSY) }) { track(race, send(list[index], query, quick, done) { f -> next(f) }) }
         } else {
-            send(list[index], query, quick, done) { f -> next(f) }
+            track(race, send(list[index], query, quick, done) { f -> next(f) })
         }
     }
 
@@ -205,13 +242,20 @@ object OverpassClient {
         })
     }
 
-    private fun send(server: String, query: String, quick: Boolean, done: (String?, Failure?) -> Unit, next: (Failure) -> Unit) {
+    private fun track(race: Race?, call: Call) {
+        if (race == null) return
+        synchronized(race.calls) { race.calls.add(call) }
+        if (race.finished) try { call.cancel() } catch (e: Exception) { }
+    }
+
+    private fun send(server: String, query: String, quick: Boolean, done: (String?, Failure?) -> Unit, next: (Failure) -> Unit): Call {
         val req = Request.Builder().url(server)
             .addHeader("User-Agent", USER_AGENT)
             .addHeader("Accept", "application/json")
             .post(FormBody.Builder().add("data", query).build())
             .build()
-        (if (quick) shortHttp else longHttp).newCall(req).enqueue(object : Callback {
+        val call = (if (quick) shortHttp else longHttp).newCall(req)
+        call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 next(if (e is java.net.SocketTimeoutException || e is java.io.InterruptedIOException) Failure.TIMEOUT else Failure.OFFLINE)
             }
@@ -233,5 +277,6 @@ object OverpassClient {
                 }
             }
         })
+        return call
     }
 }
