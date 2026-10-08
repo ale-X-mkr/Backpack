@@ -2292,6 +2292,67 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---------- 1.3.0 recorded trips ----------
+
+    private var tripToSave: com.backpack.app.track.TripRecorder.Trip? = null
+
+    /** Android's own "save as" screen: you choose where the GPX goes. */
+    private val saveGpxLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/gpx+xml")
+    ) { uri ->
+        val trip = tripToSave ?: return@registerForActivityResult
+        tripToSave = null
+        if (uri == null) return@registerForActivityResult
+        try {
+            contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(com.backpack.app.core.Gpx.write(tripTitle(trip), trip.points).toByteArray())
+            }
+            showMessage("Trip saved as GPX")
+        } catch (e: Exception) {
+            showError("Could not save the trip")
+        }
+    }
+
+    private fun tripTitle(t: com.backpack.app.track.TripRecorder.Trip): String {
+        val date = java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(t.startMs))
+        return if (t.name.isBlank()) "Backpack trip $date" else "${t.name} ($date)"
+    }
+
+    private fun showTrips() {
+        val trips = com.backpack.app.track.TripRecorder.trips(this)
+        val p = Popup(this, "My trips")
+        if (trips.isEmpty()) p.text("No trips yet. Your track is recorded while navigating (Settings > Navigation), on this phone only.")
+        for (t in trips) {
+            val pts = t.points
+            val km = distanceLabel(com.backpack.app.core.Gpx.length(pts))
+            val mins = if (pts.size >= 2) ((pts.last().timeMs - pts.first().timeMs) / 60_000L).toInt() else 0
+            p.text("${tripTitle(t)}\n$km \u00b7 ${if (mins >= 60) "${mins / 60} h ${mins % 60} min" else "$mins min"}", 14f).apply {
+                setPadding(0, dp(6), 0, dp(6))
+                setOnClickListener { p.dismiss(); showTrip(t) }
+            }
+        }
+        if (trips.isNotEmpty()) p.bodyButton("Delete all trips") {
+            com.backpack.app.track.TripRecorder.deleteAll(this)
+            p.dismiss()
+            showMessage("All trips deleted")
+        }
+        p.button("Close", primary = true) { p.dismiss() }
+        p.show()
+    }
+
+    private fun showTrip(t: com.backpack.app.track.TripRecorder.Trip) {
+        val p = Popup(this, tripTitle(t))
+        p.text("${t.points.size} points \u00b7 ${distanceLabel(com.backpack.app.core.Gpx.length(t.points))}. GPX opens in any map or hiking app.")
+        p.button("Delete") { com.backpack.app.track.TripRecorder.delete(t); p.dismiss(); showMessage("Trip deleted") }
+        p.button("Save as GPX", primary = true) {
+            p.dismiss()
+            tripToSave = t
+            val name = "Backpack_" + java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.ROOT).format(java.util.Date(t.startMs)) + ".gpx"
+            try { saveGpxLauncher.launch(name) } catch (e: Exception) { showError("No app to save files") }
+        }
+        p.show()
+    }
+
     /** 1.3.0: height profile of the route (walking / cycling). */
     private fun showElevation(r: RouteResult) {
         val pts = com.backpack.app.core.Elevation.profile(r)
@@ -3185,6 +3246,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        override fun onShowTrips() = showTrips()
         override fun onExitApp() {
             com.backpack.app.nav.NavigationService.exitApp(this@MainActivity)
             finishAndRemoveTask()

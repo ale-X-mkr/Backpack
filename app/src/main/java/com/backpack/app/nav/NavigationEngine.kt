@@ -88,6 +88,8 @@ object NavigationEngine {
         })
         planSelected = selectedIndex.coerceIn(0, plan.routes.size - 1)
         com.backpack.app.tourist.SightHeadsUp.reset()
+        // 1.3.0: your track, on this phone only (Settings > Navigation).
+        com.backpack.app.track.TripRecorder.start(c, null)
         setRoute(plan.routes[planSelected])
         isActive = true
         lastRerouteAtMs = System.currentTimeMillis()
@@ -119,6 +121,7 @@ object NavigationEngine {
         if (!isActive) return
         isActive = false
         planner?.cancel()
+        com.backpack.app.track.TripRecorder.stop()
         LocationHub.removeListener(fixListener)
         app?.let { c ->
             LocationHub.release(c, LocationHub.LEASE_NAV)

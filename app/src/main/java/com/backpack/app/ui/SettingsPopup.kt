@@ -38,6 +38,8 @@ object SettingsPopup {
         fun onPlacesCleared()
         /** 1.3.0: Exit Backpack (stops everything, closes the map). */
         fun onExitApp()
+        /** 1.3.0: the recorded trips. */
+        fun onShowTrips()
     }
 
     fun show(c: Context, host: Host, start: Page = Page.ROUTE) {
@@ -204,6 +206,12 @@ object SettingsPopup {
         }
         p.text("Instructions, sight tips and the guide's Wikipedia readings (in English when a place has no article in your language). Spanish uses a Latin American voice when your phone has one (Android Settings > Text-to-speech). Applies from the next route.", 11f)
         // 1.3.0: Backpack keeps running with the screen off until this (or Exit in the notification).
+        // 1.3.0: trip recording.
+        p.section("Trips")
+        p.toggle("Record my track while navigating (on this phone only)", { prefs.getBoolean(Settings.KEY_RECORD_TRIPS, true) }) {
+            prefs.edit().putBoolean(Settings.KEY_RECORD_TRIPS, it).apply()
+        }
+        p.bodyButton("My trips (save as GPX)") { host.onShowTrips() }
         p.section("Background")
         p.text("While Backpack is open, navigation, the speed alarm (by car) and sight tips go on with the screen off or another app in front. Exit stops everything.", 11f)
         p.bodyButton("Exit Backpack") { host.onExitApp() }

@@ -54,6 +54,8 @@ object Settings {
     const val KEY_VOICE_SHORT = "voice_short"
     /** 1.3.0: voice language: en, es (Latin America), fr, it, de. */
     const val KEY_VOICE_LANG = "voice_language"
+    /** 1.3.0: record the track while navigating (on this phone only). */
+    const val KEY_RECORD_TRIPS = "record_trips"
     const val KEY_ALARM_SOUND = "speed_alarm_sound"
 
     const val DEFAULT_SIGHTS_MAX_PCT = 20
