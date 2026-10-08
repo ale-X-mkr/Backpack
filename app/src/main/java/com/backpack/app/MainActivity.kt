@@ -441,6 +441,8 @@ class MainActivity : AppCompatActivity() {
 
         m.addOnMapClickListener { p ->
             hideSuggestions()
+            // 1.2.1: choosing a route, a place or a destination: no more following.
+            if (!navUiActive) stopPlanFollow()
             // A tap on the map closes the search box, nothing else.
             if (searchOpen) { closeSearch(); return@addOnMapClickListener true }
             val screen = m.projection.toScreenLocation(p)
@@ -479,12 +481,19 @@ class MainActivity : AppCompatActivity() {
         // Overview: any touch of the map restarts its 20 s.
         m.addOnCameraMoveStartedListener { reason ->
             if (overviewOn && reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) scheduleOverviewReturn()
+            // 1.2.1: moving the map by hand while planning = looking around: no following.
+            if (!navUiActive && reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) stopPlanFollow()
         }
         m.addOnMapLongClickListener { p ->
             handleStartOverride(LatLon(p.latitude, p.longitude))
             true
         }
         m.addOnCameraIdleListener {
+            if (flattenOnIdle && !navUiActive) {
+                flattenOnIdle = false
+                val cp = m.cameraPosition
+                if (cp.tilt > 0.5 || Math.abs(cp.bearing) > 0.5) cp.target?.let { flyFlat(it, cp.zoom, keepFollow = true) }
+            }
             queryPois()
             if (TripState.plan == null) refreshTourist()
         }
@@ -577,6 +586,7 @@ class MainActivity : AppCompatActivity() {
                 placeLinkDestination(point, label, mode)
             }
             if (puckActive()) map?.locationComponent?.forceLocationUpdate(withHeading(location))
+            keepArrowOnScreen(location)
             if (currentMode == ModeUi.DRIVING) {
                 updateSpeedLimit(location)
                 updateSpeedSignDisplay(location)
@@ -639,10 +649,66 @@ class MainActivity : AppCompatActivity() {
             showError(if (LocationHub.isGpsEnabled(this)) "Still waiting for a GPS fix -- try again in a moment" else "GPS is off -- turn on Location")
             return
         }
-        val locateButton = findViewById<ImageButton>(R.id.locate_button)
-        setIconActive(locateButton, true)
-        flyFlat(LatLng(current.latitude, current.longitude), 15.0)
-        handler.postDelayed({ setIconActive(locateButton, false) }, 900L)
+        // 1.2.1 planning: north up (flat, recentred only near the edge) ->
+        // your direction up (3D) -> north up ...
+        val here = LatLng(current.latitude, current.longitude)
+        when (planFollow) {
+            PlanFollow.OFF -> {
+                flyFlat(here, maxOf(m.cameraPosition.zoom, 15.0), keepFollow = true)
+                setPlanFollow(PlanFollow.NORTH)
+                showMessage("Following you \u00b7 north up")
+            }
+            PlanFollow.NORTH -> {
+                val lc = m.locationComponent
+                if (!puckActive()) return
+                lc.setCameraMode(CameraMode.TRACKING_GPS, 750L, maxOf(m.cameraPosition.zoom, 16.0), null,
+                    Prefs.navTilt(this, currentMode == ModeUi.DRIVING), null)
+                setPlanFollow(PlanFollow.HEADING)
+                showMessage("Following you \u00b7 your direction up")
+            }
+            PlanFollow.HEADING -> {
+                if (puckActive()) m.locationComponent.cameraMode = CameraMode.NONE
+                flyFlat(here, m.cameraPosition.zoom, keepFollow = true)
+                setPlanFollow(PlanFollow.NORTH)
+                showMessage("Following you \u00b7 north up")
+            }
+        }
+    }
+
+    // ---------- 1.2.1 following you while planning (not navigating) ----------
+
+    private enum class PlanFollow { OFF, NORTH, HEADING }
+    private var planFollow = PlanFollow.OFF
+    /** The map was moved by hand in 3D: made flat again once it stops. */
+    private var flattenOnIdle = false
+
+    private fun setPlanFollow(f: PlanFollow) {
+        planFollow = f
+        findViewById<ImageButton>(R.id.locate_button)?.let { setIconActive(it, f != PlanFollow.OFF) }
+    }
+
+    /** Searching the map, choosing routes or places: no more following. */
+    private fun stopPlanFollow() {
+        if (planFollow == PlanFollow.OFF) return
+        if (planFollow == PlanFollow.HEADING && puckActive() && !navUiActive) {
+            map?.locationComponent?.cameraMode = CameraMode.NONE
+            flattenOnIdle = true
+        }
+        setPlanFollow(PlanFollow.OFF)
+    }
+
+    /** North up: the map moves only when the arrow nears the edge of the screen. */
+    private fun keepArrowOnScreen(location: android.location.Location) {
+        if (planFollow != PlanFollow.NORTH || navUiActive) return
+        val m = map ?: return
+        val here = LatLng(location.latitude, location.longitude)
+        val pt = m.projection.toScreenLocation(here)
+        val w = mapView.width.toFloat()
+        val h = mapView.height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        if (pt.x < w * 0.15f || pt.x > w * 0.85f || pt.y < h * 0.2f || pt.y > h * 0.8f) {
+            flyFlat(here, m.cameraPosition.zoom, keepFollow = true)
+        }
     }
 
     // ---------- Toggle state (same keys as Step 38) ----------
@@ -848,6 +914,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Search box shown just over the keyboard, keyboard opened. */
     private fun openSearch() {
+        stopPlanFollow()
         searchOpen = true
         val searchInput = findViewById<EditText>(R.id.search_input)
         searchInput.visibility = View.VISIBLE
@@ -1515,6 +1582,7 @@ class MainActivity : AppCompatActivity() {
      * Go here / Add stop.
      */
     private fun showPlacePopup(title: String, detail: String, point: LatLon, readMoreUrl: String?, linkLabel: String, voyageUrl: String? = null) {
+        stopPlanFollow()
         val p = Popup(this, title)
         p.text(detail)
         val route = touristRoute()
@@ -1778,6 +1846,9 @@ class MainActivity : AppCompatActivity() {
     private fun startNavigationUi() {
         val first = !navUiActive
         if (first) headsUpSaid.clear()
+        // Navigation has its own camera (and its own north-up switch).
+        planFollow = PlanFollow.OFF
+        flattenOnIdle = false
         navUiActive = true
         map?.uiSettings?.isTiltGesturesEnabled = true
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1829,6 +1900,7 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.overview_button).visibility = View.GONE
         navUiActive = false
+        setPlanFollow(PlanFollow.OFF)
         // Outside navigation the map stays flat: no tilting by accident.
         map?.uiSettings?.isTiltGesturesEnabled = false
         deadReckoningActive = false
@@ -3167,6 +3239,7 @@ class MainActivity : AppCompatActivity() {
     // ---------- Map taps ----------
 
     private fun handleDestinationTap(point: LatLon) {
+        stopPlanFollow()
         if (NavigationEngine.isActive) {
             showMessage("Stop navigation before changing your route (or open a place: Go here)")
             return
@@ -3361,6 +3434,8 @@ class MainActivity : AppCompatActivity() {
     private fun fitCamera(results: List<RouteResult>) {
         val m = map ?: return
         if (navUiActive) return // the navigation view keeps its own camera
+        stopPlanFollow()
+        flattenOnIdle = false
         val all = results.flatMap { it.points }
         if (all.size < 2) return
         try {
@@ -3392,8 +3467,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Planning moves: flat, north up (3D is for navigation only). */
-    private fun flyFlat(target: LatLng, zoom: Double) {
+    private fun flyFlat(target: LatLng, zoom: Double, keepFollow: Boolean = false) {
         val m = map ?: return
+        if (!keepFollow) stopPlanFollow()
+        flattenOnIdle = false
         m.animateCamera(CameraUpdateFactory.newCameraPosition(
             CameraPosition.Builder().target(target).zoom(zoom).bearing(0.0).tilt(0.0).padding(0.0, 0.0, 0.0, 0.0).build()
         ))
