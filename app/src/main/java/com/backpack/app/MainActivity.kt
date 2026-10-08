@@ -352,7 +352,7 @@ class MainActivity : AppCompatActivity() {
         com.backpack.app.speed.SpeedGuard.addListener(speedListener)
         com.backpack.app.tourist.SightHeadsUp.ui = headsUpUi
         com.backpack.app.nav.AppRunning.onExit = { finishAndRemoveTask() }
-        com.backpack.app.nav.AppRunning.setUiVisible(true)
+        com.backpack.app.nav.AppRunning.markUiVisible(true)
         com.backpack.app.nav.NavigationService.keepRunning(this)
         if (navUiActive) {
             handler.removeCallbacks(deadReckoningRunnable)
@@ -405,7 +405,7 @@ class MainActivity : AppCompatActivity() {
         if (com.backpack.app.tourist.SightHeadsUp.ui === headsUpUi) com.backpack.app.tourist.SightHeadsUp.ui = null
         // GPS keeps running only if navigation (or, by car, the background service) holds its own lease.
         LocationHub.release(this, LocationHub.LEASE_UI)
-        com.backpack.app.nav.AppRunning.setUiVisible(false)
+        com.backpack.app.nav.AppRunning.markUiVisible(false)
         handler.removeCallbacks(deadReckoningRunnable)
         mapView.onStop()
     }

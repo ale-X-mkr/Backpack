@@ -15,7 +15,7 @@ object AppRunning {
     /** The background service re-checks what it must keep (screen shown / hidden). */
     var onChange: (() -> Unit)? = null
 
-    fun setUiVisible(v: Boolean) {
+    fun markUiVisible(v: Boolean) {
         uiVisible = v
         onChange?.invoke()
     }
