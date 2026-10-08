@@ -23,6 +23,8 @@ class OpeningHoursTest {
         assertEquals(true, at("08:00-20:00", 4, 12))
         assertEquals(true, at("Mo-Fr 17:00+", 0, 23))
         assertEquals(true, at("Su-Tu 10:00-12:00", 0, 11))         // wraps the week
+        assertEquals(false, at("Mo-Fr 08:00-12:00, 14:00-18:00", 1, 13))
+        assertEquals(true, at("Mo-Fr, Sa 08:00-12:00", 5, 9))
     }
 
     @Test fun unknownNeverClosed() {

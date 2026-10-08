@@ -45,7 +45,8 @@ class NavigationService : Service() {
     }
 
     private val moveListener = com.backpack.app.location.LocationHub.Listener { loc, ok ->
-        if (ok && loc.hasSpeed() && loc.speed > 1.5f) lastMovingAtMs = System.currentTimeMillis()
+        // Slow city traffic still counts as moving (~3 km/h).
+        if (ok && loc.hasSpeed() && loc.speed > 0.8f) lastMovingAtMs = System.currentTimeMillis()
         updateBackground()
     }
 

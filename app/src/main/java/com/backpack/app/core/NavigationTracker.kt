@@ -116,7 +116,11 @@ class NavigationTracker(
         for ((k, pt) in stopPoints) {
             if (k in reachedStops) continue
             val passedAlong = stepStart[k] <= lastAlongM + ARRIVE_RADIUS_M
-            if (Geo.distance(p, pt) < reach * 1.5 || passedAlong) {
+            // Only on this stop's own leg, and within 1 km of it along the route:
+            // a road passing near it earlier (loop, start) does not count.
+            val prevGoal = goals.lastOrNull { it < k }?.let { stepStart[it] } ?: 0.0
+            val onItsLeg = lastAlongM >= prevGoal - ARRIVE_RADIUS_M && stepStart[k] - lastAlongM < 1000.0
+            if ((onItsLeg && Geo.distance(p, pt) < reach * 1.5) || passedAlong) {
                 reachedStops.add(k)
                 // Reached before the line got there: said now, its own
                 // "arrive" instruction is not repeated afterwards.

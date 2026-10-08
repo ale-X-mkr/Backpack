@@ -87,9 +87,13 @@ object NavigationEngine {
             com.backpack.app.core.TravelMode.DRIVING -> 1000L
         })
         planSelected = selectedIndex.coerceIn(0, plan.routes.size - 1)
-        com.backpack.app.tourist.SightHeadsUp.reset()
-        // 1.3.0: your track, on this phone only (Settings > Navigation).
-        com.backpack.app.track.TripRecorder.start(c, null)
+        // A new trip only (not an alternative started mid-trip): heads-ups said
+        // stay said, and the track goes on in the same recording.
+        if (!isActive) {
+            com.backpack.app.tourist.SightHeadsUp.reset()
+            // 1.3.0: your track, on this phone only (Settings > Navigation).
+            com.backpack.app.track.TripRecorder.start(c, null)
+        }
         setRoute(plan.routes[planSelected])
         isActive = true
         lastRerouteAtMs = System.currentTimeMillis()

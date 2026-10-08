@@ -16,7 +16,8 @@ object OpeningHours {
 
     /** [day] 0 = Monday .. 6 = Sunday; [minute] of the day (0..1439). */
     fun isOpen(spec: String?, day: Int, minute: Int): Boolean? {
-        val text = spec?.trim().orEmpty()
+        // "08:00-12:00, 14:00-18:00" and "Mo-Fr, Sa" are common: no space after commas.
+        val text = spec?.trim().orEmpty().replace(Regex(",\\s+"), ",")
         if (text.isEmpty()) return null
         if (text == "24/7") return true
         val rules = parse(text) ?: return null

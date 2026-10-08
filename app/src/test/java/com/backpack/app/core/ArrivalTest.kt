@@ -59,4 +59,21 @@ class ArrivalTest {
         assertFalse(pr.offRoute)
         assertEquals(1, t.passedStops())
     }
+
+    @Test fun stopNearTheStartIsNotReachedAtDeparture() {
+        // The stop is only 50 m from the start as the crow flies (route goes around).
+        val o = origin
+        val stop = Geo.project(o, 90.0, 50.0)
+        val far = Geo.project(o, 0.0, 1500.0)
+        val pts = listOf(o, far, Geo.project(far, 90.0, 50.0), stop, Geo.project(stop, 90.0, 1000.0))
+        val line = Polyline(pts)
+        val steps = listOf(NavStep("Go", Maneuver.DEPART, 1500.0, 100.0, 0, 1),
+            NavStep("Turn", Maneuver.RIGHT, 50.0, 10.0, 1, 2), NavStep("Back", Maneuver.RIGHT, 1500.0, 100.0, 2, 3),
+            NavStep("Arrive at your stop", Maneuver.GOAL, 0.0, 0.0, 3, 3),
+            NavStep("Go on", Maneuver.STRAIGHT, 1000.0, 60.0, 3, 4), NavStep("Arrive", Maneuver.GOAL, 0.0, 0.0, 4, 4))
+        val t = NavigationTracker(RouteResult(pts, line.length, 300.0, steps = steps), TravelMode.DRIVING, true)
+        val pr = t.update(fix(o))
+        assertFalse(pr.speech == "You have reached your stop")
+        assertEquals(0, t.passedStops())
+    }
 }
