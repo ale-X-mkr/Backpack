@@ -53,6 +53,8 @@ class TouristFinder(context: Context) {
     // kinds come in their own small cache on top ("sights_x").
     private val cache = TileCache.of(app, "sights", 14L * DAY_MS)
     private val cacheX = TileCache.of(app, "sights_x", 14L * DAY_MS)
+    /** 1.2.1: Wikipedia cells (0.1°), a month. */
+    private val wikiCache = TileCache.of(app, "wiki10", 30L * DAY_MS)
 
     /** A square to fetch: everything, or only the new kinds. */
     private data class Need(val tile: Tile, val extras: Boolean)
@@ -84,10 +86,18 @@ class TouristFinder(context: Context) {
             // Cut list: the search reaches only as far as the last square kept.
             val reach = if (ordered.size > MAX_TILES) (ordered[MAX_TILES - 1].second - radius).coerceAtLeast(0.0) else ahead
             val coveredM = full.firstOrNull()?.let { minOf(it.length, fromM + reach) } ?: 0.0
-            // Matching on thinned lines (≤ 400 points): accurate enough for a
-            // corridor several hundred metres wide, and fast.
-            val match = parts.map { Polyline(Tourist.sampleLine(it, maxPoints = 400, minStepM = 50.0)) }
-            load(gen, tiles, match, radius, coveredM, onSwitch, callback, onPartial = onPartial)
+            // 1.2.1: the whole rest of the route (Wikipedia, fast); OpenStreetMap
+            // (Overpass) adds the spots without an article on the stretch above.
+            val rest = full.map { SpeedLimits.section(it, fromM, it.length) }
+            // Matching on thinned lines: accurate enough for a corridor several
+            // hundred metres wide, and fast.
+            val match = rest.map { Polyline(Tourist.sampleLine(it, maxPoints = 800, minStepM = 50.0)) }
+            val cells = Tourist.wikiCellsAlong(rest, radius).take(MAX_WIKI_CELLS).map { it.first }
+            val wiki = wikiCells(gen, cells) { soFar ->
+                if (onPartial != null) { val part = withKnown(select(soFar, match, radius)); main.post { if (gen == generation) onPartial(part) } }
+            }
+            if (gen != generation) return@execute
+            load(gen, tiles, match, radius, coveredM, onSwitch, callback, onPartial = onPartial, seed = wiki)
         }
     }
 
@@ -104,13 +114,19 @@ class TouristFinder(context: Context) {
      * areas (walking, cycling) use the cached squares; a big one (by car)
      * is one Overpass request with the polygon itself.
      */
-    fun inReach(ring: List<LatLon>, key: String, onSwitch: () -> Unit, callback: ResultCallback) {
+    fun inReach(ring: List<LatLon>, key: String, onSwitch: () -> Unit,
+                onPartial: ((List<TouristPoi>) -> Unit)? = null, callback: ResultCallback) {
         val gen = ++generation
         worker.execute {
             val b = Reach.bounds(ring)
+            // 1.2.1: Wikipedia first (fast, nearest cells first), shown as it comes.
+            val wiki = wikiCells(gen, Tourist.wikiCellsInBox(b[0], b[1], b[2], b[3], MAX_WIKI_AREA_CELLS)) { soFar ->
+                if (onPartial != null) { val part = withKnown(select(soFar, emptyList(), 0.0, ring = ring)); main.post { if (gen == generation) onPartial(part) } }
+            }
+            if (gen != generation) return@execute
             val tiles = Tiles.inBox(b[0], b[1], b[2], b[3], max = Int.MAX_VALUE)
             if (tiles.size <= MAX_TILES) {
-                load(gen, tiles, emptyList(), 0.0, 0.0, onSwitch, callback, ring = ring)
+                load(gen, tiles, emptyList(), 0.0, 0.0, onSwitch, callback, ring = ring, seed = wiki)
                 return@execute
             }
             val deliver = { pois: List<TouristPoi>?, error: String? ->
@@ -118,7 +134,8 @@ class TouristFinder(context: Context) {
             }
             // Same area as last time (kept in memory): no new request.
             val cached = synchronized(reachMemory) { if (reachMemory.first == key) reachMemory.second else null }
-            if (cached != null) { withPopularity(gen, cached) { deliver(it, null) }; return@execute }
+            val wikiInside = wiki.filter { Reach.contains(ring, it.point) }
+            if (cached != null) { withPopularity(gen, (wikiInside + cached).distinctBy { it.identity }) { deliver(it, null) }; return@execute }
             main.post {
                 if (gen != generation) return@post
                 OverpassClient.query(app, Tourist.reachQuery(ring), onSwitch = { if (gen == generation) onSwitch() }, singleRound = true) { body, failure ->
@@ -126,17 +143,14 @@ class TouristFinder(context: Context) {
                     // "store" must stay free to release other searches' squares.
                     slow.execute {
                         val parsed = body?.let { try { Tourist.parseOverpass(it) } catch (e: Exception) { null } }
-                        val list = parsed ?: run {
-                            // 1.1.0: Overpass failed: Wikipedia's nearby articles around the centre.
-                            val b = Reach.bounds(ring)
-                            wikiNearby(gen, listOf(LatLon((b[0] + b[2]) / 2, (b[1] + b[3]) / 2))).ifEmpty { null }
-                        }
+                        // 1.2.1: Overpass failed: what Wikipedia gave is enough.
+                        val list = parsed ?: wiki.ifEmpty { null }
                         if (list == null) {
                             deliver(null, if (body == null) failure?.message ?: "Places search failed" else OverpassClient.Failure.BAD_ANSWER.message)
                             return@execute
                         }
-                        val inside = list.distinctBy { it.identity }.filter { Reach.contains(ring, it.point) }
-                        synchronized(reachMemory) { reachMemory = key to inside }
+                        val inside = (wiki + list).distinctBy { it.identity }.filter { Reach.contains(ring, it.point) }
+                        if (parsed != null) synchronized(reachMemory) { reachMemory = key to inside }
                         if (gen == generation) withPopularity(gen, inside) { deliver(it, null) }
                     }
                 }
@@ -148,23 +162,14 @@ class TouristFinder(context: Context) {
     private fun load(
         gen: Int, tiles: List<Tile>, lines: List<Polyline>, radius: Double, coveredM: Double,
         onSwitch: () -> Unit, callback: ResultCallback, box: DoubleArray? = null, ring: List<LatLon>? = null,
-        onPartial: ((List<TouristPoi>) -> Unit)? = null
+        onPartial: ((List<TouristPoi>) -> Unit)? = null, seed: List<TouristPoi> = emptyList()
     ) {
-        /** Inside the corridor (or box / area); distance to the NEAREST line,
-         *  so places along an alternative count as much as along the first route. */
-        fun select(list: List<TouristPoi>): List<TouristPoi> = list.distinctBy { it.identity }.mapNotNull { p ->
-            if (lines.isEmpty()) {
-                if (ring != null) { if (Reach.contains(ring, p.point)) p else null }
-                else if (box != null && (p.point.lat < box[0] || p.point.lat > box[2] || p.point.lon < box[1] || p.point.lon > box[3])) null else p
-            } else {
-                val best = lines.mapNotNull { it.snap(p.point) }.minByOrNull { it.offsetM }
-                if (best == null || best.offsetM > radius * 1.05) null else p.copy(offsetM = best.offsetM, alongM = best.alongM)
-            }
-        }
+        fun select(list: List<TouristPoi>): List<TouristPoi> = select(list, lines, radius, box, ring)
         val deliver = { pois: List<TouristPoi>?, error: String? ->
             main.post { if (gen == generation) callback.onResult(pois, error, coveredM) }
         }
-        val found = ArrayList<TouristPoi>()
+        // 1.2.1: Wikipedia's places first (same place twice: one entry).
+        val found = ArrayList<TouristPoi>(seed)
         // 1.1.1: squares already on the phone are used as they are; only the
         // new kinds are fetched "on top" of them (a small query).
         val missing = ArrayList<Need>()
@@ -201,8 +206,7 @@ class TouristFinder(context: Context) {
             for (n in chunk) read(if (n.extras) cacheX else cache, n.tile)?.let { found.addAll(it) }
             // First answer (the nearest squares): shown at once, ranked with what the phone knows.
             if (k == 0 && chunks.size > 1 && onPartial != null) {
-                val known = SiteInfoStore.load(app)
-                val part = select(found).map { p -> known[p.wikidata]?.let { p.copy(sitelinks = it.sitelinks, articleUrl = it.articleUrl, voyageUrl = it.voyageUrl) } ?: p }
+                val part = withKnown(select(found))
                 main.post { if (gen == generation) onPartial(part) }
             }
         }
@@ -226,6 +230,9 @@ class TouristFinder(context: Context) {
             }
         }
         if (gen != generation) return
+        // 1.2.1: Wikipedia already gave the places: an OpenStreetMap failure only
+        // means a few spots without an article may be missing -- not worth a warning.
+        if (error != null && seed.isNotEmpty()) error = null
         // 1.1.0: Overpass failed (part): Wikipedia's nearby articles fill in.
         if (error != null) {
             val probes = when {
@@ -246,6 +253,91 @@ class TouristFinder(context: Context) {
         // Inside the corridor (or the box) only; distance to the NEAREST line,
         // so places along an alternative count as much as along the first route.
         withPopularity(gen, select(found)) { scored -> deliver(scored, error) }
+    }
+
+    /** Inside the corridor (or box / area); distance to the NEAREST line,
+     *  so places along an alternative count as much as along the first route. */
+    private fun select(
+        list: List<TouristPoi>, lines: List<Polyline>, radius: Double,
+        box: DoubleArray? = null, ring: List<LatLon>? = null
+    ): List<TouristPoi> = list.distinctBy { it.identity }.mapNotNull { p ->
+        if (lines.isEmpty()) {
+            if (ring != null) { if (Reach.contains(ring, p.point)) p else null }
+            else if (box != null && (p.point.lat < box[0] || p.point.lat > box[2] || p.point.lon < box[1] || p.point.lon > box[3])) null else p
+        } else {
+            val best = lines.mapNotNull { it.snap(p.point) }.minByOrNull { it.offsetM }
+            if (best == null || best.offsetM > radius * 1.05) null else p.copy(offsetM = best.offsetM, alongM = best.alongM)
+        }
+    }
+
+    /** Popularity already on the phone (no request): for results shown early. */
+    private fun withKnown(list: List<TouristPoi>): List<TouristPoi> {
+        val known = SiteInfoStore.load(app)
+        return list.map { p ->
+            known[p.wikidata]?.let { p.copy(sitelinks = maxOf(p.sitelinks, it.sitelinks), articleUrl = it.articleUrl, voyageUrl = it.voyageUrl) } ?: p
+        }
+    }
+
+    /**
+     * 1.2.1 main source, blocking (worker thread): Wikipedia articles with
+     * coordinates in each cell (3 cells at a time), kept when Wikidata says
+     * they are a place to visit (castle, museum, waterfall...), with how
+     * widely each is written about. Cells are kept on the phone for a month;
+     * [onProgress] gets everything found so far after each batch.
+     */
+    private fun wikiCells(gen: Int, cells: List<Tile>, onProgress: (List<TouristPoi>) -> Unit): List<TouristPoi> {
+        val found = ArrayList<TouristPoi>()
+        val missing = ArrayList<Tile>()
+        for (c in cells) { val l = read(wikiCache, c); if (l == null) missing.add(c) else found.addAll(l) }
+        if (found.isNotEmpty()) onProgress(ArrayList(found))
+        val info = HashMap<String, Tourist.SiteInfo>()
+        for (batch in missing.chunked(WIKI_BATCH)) {
+            if (gen != generation) break
+            val answers = batch.map { c -> wikiPool.submit(java.util.concurrent.Callable { c to wikiHits(c) }) }
+                .mapNotNull { f -> try { f.get(15, TimeUnit.SECONDS) } catch (e: Exception) { null } }
+                .mapNotNull { (c, h) -> h?.let { c to it } }
+            if (answers.isEmpty()) continue
+            val ids = answers.flatMap { (c, h) -> h.filter { Tourist.wikiCellOf(it.point) == c }.map { it.wikidata } }.distinct()
+            // Kinds unknown (Wikidata busy): those cells are asked again next time.
+            val kinds = if (ids.isEmpty()) emptyMap() else wikiKinds(ids) ?: continue
+            for ((c, h) in answers) {
+                val places = Tourist.wikiPlaces(c, h, kinds)
+                wikiCache.put(c, Tourist.toJson(places))
+                found.addAll(places)
+                for (p in places) info[p.wikidata] = Tourist.SiteInfo(p.sitelinks, p.wikipediaUrl, null)
+            }
+            onProgress(ArrayList(found))
+        }
+        if (info.isNotEmpty()) {
+            // Popularity known from now on (no second Wikidata request for these).
+            val known = SiteInfoStore.load(app)
+            SiteInfoStore.add(app, info.filterKeys { it !in known })
+        }
+        return found.map { p -> info[p.wikidata]?.let { p.copy(sitelinks = it.sitelinks) } ?: p }
+    }
+
+    private fun wikiHits(cell: Tile): List<Tourist.WikiHit>? = try {
+        wikiHttp.newCall(Request.Builder().url(Tourist.wikiCellUrl(cell)).addHeader("User-Agent", OverpassClient.USER_AGENT)
+            .addHeader("Accept", "application/json").build()).execute().use { r ->
+            if (!r.isSuccessful) null else r.body?.string()?.let { Tourist.parseWikiNearby(it) }
+        }
+    } catch (e: Exception) { null }
+
+    /** Kinds + popularity for [ids] (Wikidata Query Service, POST, 400 at a time); null on failure. */
+    private fun wikiKinds(ids: List<String>): Map<String, Pair<com.backpack.app.core.TouristCategory, Int>>? {
+        val out = HashMap<String, Pair<com.backpack.app.core.TouristCategory, Int>>()
+        for (chunk in ids.chunked(400)) {
+            val body = try {
+                val form = okhttp3.FormBody.Builder().add("query", Tourist.kindsLinksQuery(chunk)).build()
+                wikiHttp.newCall(Request.Builder().url("https://query.wikidata.org/sparql").post(form)
+                    .addHeader("User-Agent", OverpassClient.USER_AGENT)
+                    .addHeader("Accept", "application/sparql-results+json").build()).execute().use { r ->
+                    if (r.isSuccessful) r.body?.string() else null
+                }
+            } catch (e: Exception) { null } ?: return null
+            try { out.putAll(Tourist.parseKindsLinks(body)) } catch (e: Exception) { return null }
+        }
+        return out
     }
 
     /** Sitelink counts + article links, from the phone first, Wikidata for the rest. */
@@ -395,6 +487,15 @@ class TouristFinder(context: Context) {
         private const val TILES_PER_REQUEST = 25
         private const val MAX_TILES = 150
         private const val MAX_WIKIDATA = 300
+        /** 1.2.1 Wikipedia: cells per route (~1000 km of corridor), per area, per round. */
+        private const val MAX_WIKI_CELLS = 300
+        private const val MAX_WIKI_AREA_CELLS = 36
+        private const val WIKI_BATCH = 6
+        /** Three cells asked at once (Wikimedia API: modest parallel reads). */
+        private val wikiPool = java.util.concurrent.Executors.newFixedThreadPool(3)
+        private val wikiHttp = RoutePlanner.http.newBuilder()
+            .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(12, java.util.concurrent.TimeUnit.SECONDS).build()
         const val ROUTE_LIMIT = 25
         const val AREA_LIMIT = 20
         /** Sights within reach (1.0.7). */

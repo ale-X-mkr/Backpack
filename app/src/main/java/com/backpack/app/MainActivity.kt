@@ -1364,7 +1364,14 @@ class MainActivity : AppCompatActivity() {
             ) return@get
             reachLabel = "within ${if (exact) "" else "about "}$time $how of ${if (aroundMe) "you" else "the map centre"}"
             val key = "%.3f,%.3f,%s,%d,%b".format(java.util.Locale.ROOT, origin.lat, origin.lon, mode.name, minutes, exact)
-            touristFinder.inReach(ring, key, { if (announce) onPlacesServerSwitch() }) { all, error, _ ->
+            touristFinder.inReach(ring, key, { if (announce) onPlacesServerSwitch() },
+                onPartial = { part ->
+                    // 1.2.1: Wikipedia's nearest cells answered: show them now.
+                    if (touristOn && TripState.plan == null && reachSettings == settings && reachOrigin === origin) {
+                        TripState.touristCandidates = part
+                        showTouristFor(null)
+                    }
+                }) { all, error, _ ->
                 if (all == null) { reachOrigin = null; reachRetryAfterMs = System.currentTimeMillis() + 120_000L }
                 onTouristCandidates(all, error, null, origin, announce = announce, scenic = false)
             }
@@ -1526,7 +1533,8 @@ class MainActivity : AppCompatActivity() {
         val kinds = sightKinds()
         val all = TripState.touristCandidates.filter { it.category in kinds }
         val radius = corridorM()
-        fun along(r: RouteResult) = Tourist.rank(Tourist.placeOnRoute(all, r.line).filter { it.offsetM <= radius * 1.05 }, TouristFinder.ROUTE_LIMIT)
+        // 1.2.1: spread over the whole route (each stretch its best first).
+        fun along(r: RouteResult) = Tourist.rankAlong(Tourist.placeOnRoute(all, r.line).filter { it.offsetM <= radius * 1.05 }, r.line.length)
         val owner = HashMap<String, Int>()
         val shown = if (route != null) along(route) else {
             Tourist.rank(all, TouristFinder.REACH_LIMIT)

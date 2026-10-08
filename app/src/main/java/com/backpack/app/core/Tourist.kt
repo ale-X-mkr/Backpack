@@ -417,7 +417,12 @@ object Tourist {
         "Q34038" to TouristCategory.WATER, "Q124714" to TouristCategory.WATER, "Q177380" to TouristCategory.WATER,
         "Q8502" to TouristCategory.NATURE, "Q35509" to TouristCategory.NATURE, "Q40080" to TouristCategory.NATURE,
         "Q8072" to TouristCategory.NATURE, "Q46169" to TouristCategory.PARK, "Q179049" to TouristCategory.PARK,
-        "Q6017969" to TouristCategory.VIEWPOINT, "Q9259" to TouristCategory.HERITAGE
+        "Q6017969" to TouristCategory.VIEWPOINT, "Q9259" to TouristCategory.HERITAGE,
+        // 1.2.1 (Wikipedia as main source): a few more common kinds.
+        "Q43501" to TouristCategory.SIGHT, "Q194195" to TouristCategory.SIGHT, "Q2281788" to TouristCategory.SIGHT,
+        "Q167346" to TouristCategory.PARK, "Q1007870" to TouristCategory.MUSEUM, "Q676050" to TouristCategory.HISTORIC,
+        "Q16748868" to TouristCategory.HISTORIC, "Q32815" to TouristCategory.HISTORIC, "Q44539" to TouristCategory.HISTORIC,
+        "Q83471" to TouristCategory.WATER, "Q35666" to TouristCategory.NATURE, "Q150784" to TouristCategory.NATURE
     )
 
     /** SPARQL for the direct kinds (P31) of [ids] (Wikidata Query Service). */
@@ -436,6 +441,89 @@ object Tourist {
             if (out[item] == null || cat == TouristCategory.HERITAGE) out[item] = cat
         }
         return out
+    }
+
+    // ---------- 1.2.1: Wikipedia as the main source of sights ----------
+
+    /** Wikipedia cells: 0.1° squares (~11 x 8 km), one nearby-articles request each. */
+    const val WIKI_CELL = 0.1
+    /** Search radius around a cell's centre: covers the whole cell. */
+    const val WIKI_RADIUS_M = 8000
+
+    fun wikiCellOf(p: LatLon): Tile = Tile(kotlin.math.floor(p.lon / WIKI_CELL).toInt(), kotlin.math.floor(p.lat / WIKI_CELL).toInt())
+    fun wikiCellCenter(t: Tile): LatLon = LatLon((t.y + 0.5) * WIKI_CELL, (t.x + 0.5) * WIKI_CELL)
+
+    /** Cells within [radiusM] of the lines, nearest along first. */
+    fun wikiCellsAlong(lines: List<List<LatLon>>, radiusM: Double): List<Pair<Tile, Double>> =
+        Tiles.alongLinesOrdered(lines, radiusM, WIKI_CELL)
+
+    /** Cells covering a box, nearest to its centre first, at most [max]. */
+    fun wikiCellsInBox(south: Double, west: Double, north: Double, east: Double, max: Int): List<Tile> {
+        val a = wikiCellOf(LatLon(south, west))
+        val b = wikiCellOf(LatLon(north, east))
+        val cy = (south + north) / 2
+        val cx = (west + east) / 2
+        val out = ArrayList<Tile>()
+        for (x in a.x..b.x) for (y in a.y..b.y) out.add(Tile(x, y))
+        return out.sortedBy { val c = wikiCellCenter(it); (c.lat - cy) * (c.lat - cy) + (c.lon - cx) * (c.lon - cx) }.take(max)
+    }
+
+    /** English Wikipedia: up to 500 articles with coordinates around the cell's centre, with their Wikidata ids. */
+    fun wikiCellUrl(t: Tile): String {
+        val c = wikiCellCenter(t)
+        return "https://en.wikipedia.org/w/api.php?action=query&format=json&generator=geosearch" +
+            "&ggscoord=%.5f%%7C%.5f".format(java.util.Locale.ROOT, c.lat, c.lon) +
+            "&ggsradius=$WIKI_RADIUS_M&ggslimit=500&prop=coordinates%7Cpageprops&colimit=max&ppprop=wikibase_item"
+    }
+
+    /** SPARQL: direct kinds (P31) and number of Wikimedia articles of [ids] (sent by POST). */
+    fun kindsLinksQuery(ids: List<String>): String =
+        "SELECT ?item ?kind ?links WHERE { VALUES ?item { " + ids.joinToString(" ") { "wd:$it" } +
+            " } ?item wdt:P31 ?kind . ?item wikibase:sitelinks ?links . }"
+
+    /** id -> (category, sitelinks), only for the kinds above (heritage wins). */
+    fun parseKindsLinks(body: String): Map<String, Pair<TouristCategory, Int>> {
+        val rows = JSONObject(body).optJSONObject("results")?.optJSONArray("bindings") ?: return emptyMap()
+        val out = HashMap<String, Pair<TouristCategory, Int>>()
+        for (i in 0 until rows.length()) {
+            val r = rows.getJSONObject(i)
+            val item = r.optJSONObject("item")?.optString("value", "").orEmpty().substringAfterLast('/')
+            val kind = r.optJSONObject("kind")?.optString("value", "").orEmpty().substringAfterLast('/')
+            val cat = WIKIDATA_KINDS[kind] ?: continue
+            val links = r.optJSONObject("links")?.optString("value", "0")?.toIntOrNull() ?: 0
+            if (out[item] == null || cat == TouristCategory.HERITAGE) out[item] = cat to links
+        }
+        return out
+    }
+
+    /** Wikipedia hits of one cell (only those inside it) + their kinds -> places. */
+    fun wikiPlaces(cell: Tile, hits: List<WikiHit>, kinds: Map<String, Pair<TouristCategory, Int>>): List<TouristPoi> =
+        hits.filter { wikiCellOf(it.point) == cell }.distinctBy { it.wikidata }.mapNotNull { h ->
+            val (cat, links) = kinds[h.wikidata] ?: return@mapNotNull null
+            TouristPoi("q" + h.wikidata, h.title, h.point, cat, h.wikidata, "en:${h.title}", sitelinks = links)
+        }
+
+    /**
+     * 1.2.1: the best places spread along the whole route: every stretch of
+     * [segmentM] gives its best first, then its second best... (so a long
+     * route is not all one famous city); [limit] grows with the length.
+     */
+    fun rankAlong(pois: List<TouristPoi>, routeLengthM: Double, segmentM: Double = 25_000.0, base: Int = 25, max: Int = 100): List<TouristPoi> {
+        val limit = (base + 3 * (routeLengthM / segmentM).toInt()).coerceAtMost(max)
+        if (pois.size <= limit) return rank(pois, limit)
+        val groups = pois.groupBy { (it.alongM / segmentM).toInt() }.toSortedMap()
+            .values.map { g -> g.sortedByDescending { it.sitelinks } }
+        val out = ArrayList<TouristPoi>()
+        var round = 0
+        while (out.size < limit) {
+            var any = false
+            for (g in groups) {
+                if (round < g.size && out.size < limit) { out.add(g[round]); any = true }
+            }
+            if (!any) break
+            round++
+        }
+        return out.sortedWith(compareByDescending<TouristPoi> { it.sitelinks }.thenBy { it.alongM })
     }
 
     /** 1.1.0: Nominatim reverse (town level) -> (name, Wikidata id) for the destination's travel guide. */

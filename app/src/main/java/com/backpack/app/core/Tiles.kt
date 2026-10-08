@@ -52,12 +52,12 @@ object Tiles {
      * needed. All lines are interleaved by that distance, so cutting the list
      * keeps the same stretch of every alternative, not all of the first line.
      */
-    fun alongLinesOrdered(lines: List<List<LatLon>>, radiusM: Double): List<Pair<Tile, Double>> {
+    fun alongLinesOrdered(lines: List<List<LatLon>>, radiusM: Double, size: Double = SIZE): List<Pair<Tile, Double>> {
         val first = HashMap<Tile, Pair<Double, Int>>()
         for ((li, points) in lines.withIndex()) {
             if (points.isEmpty()) continue
             val line = Polyline(points)
-            val step = minOf(radiusM, 1000.0).coerceAtLeast(100.0)
+            val step = minOf(radiusM, 1000.0 * size / SIZE).coerceAtLeast(100.0)
             var at = 0.0
             var i = 0
             while (true) {
@@ -65,10 +65,10 @@ object Tiles {
                 val p = if (points.size == 1) points[0] else pointAt(line, i, at)
                 val dLat = radiusM / 111_000.0
                 val dLon = radiusM / (111_000.0 * cos(Math.toRadians(p.lat)).coerceAtLeast(0.2))
-                val x0 = floor((p.lon - dLon) / SIZE).toInt()
-                val x1 = floor((p.lon + dLon) / SIZE).toInt()
-                val y0 = floor((p.lat - dLat) / SIZE).toInt()
-                val y1 = floor((p.lat + dLat) / SIZE).toInt()
+                val x0 = floor((p.lon - dLon) / size).toInt()
+                val x1 = floor((p.lon + dLon) / size).toInt()
+                val y0 = floor((p.lat - dLat) / size).toInt()
+                val y1 = floor((p.lat + dLat) / size).toInt()
                 for (x in x0..x1) for (y in y0..y1) {
                     val t = Tile(x, y)
                     val old = first[t]
