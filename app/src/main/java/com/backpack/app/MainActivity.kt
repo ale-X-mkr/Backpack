@@ -1613,7 +1613,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun showPoiPlace(place: PoiPlace) {
         val kind = com.backpack.app.core.Places.kindLabel(place.kind)
-        val detail = if (place.name.isBlank()) kind else kind + (place.openingHours?.let { " \u00b7 $it" } ?: "")
+        // 1.3.0: open or closed right now, then the hours as written.
+        val now = when (com.backpack.app.core.OpeningHours.isOpenNow(place.openingHours)) {
+            true -> " \u00b7 Open now"
+            false -> " \u00b7 Closed now"
+            null -> ""
+        }
+        val detail = kind + now + (place.openingHours?.let { "\n$it" } ?: "")
         val link = when {
             place.wikipedia != null -> "Read about it on Wikipedia"
             place.wikidata != null -> "Read about it on Wikidata"
@@ -2865,7 +2871,10 @@ class MainActivity : AppCompatActivity() {
             val radius = if (alongRoute) corridorM(cat == PoiCategory.EMERGENCY) else Double.MAX_VALUE
             minOf(30, svcSlot.results.count { cat.name in it.services && it.offsetM <= radius })
         }
-        layers.setPois(shown.map { (p, cat) -> MapLayers.Pin(p.key, p.point, cat.iconName) })
+        // 1.3.0: closed right now (opening hours known) = faint.
+        layers.setPois(shown.map { (p, cat) ->
+            MapLayers.Pin(p.key, p.point, cat.iconName, dim = com.backpack.app.core.OpeningHours.isOpenNow(p.openingHours) == false)
+        })
         refreshServicesButton()
     }
 

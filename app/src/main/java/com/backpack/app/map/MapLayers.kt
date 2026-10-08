@@ -35,7 +35,8 @@ import org.maplibre.geojson.Point
  */
 class MapLayers(private val context: Context) {
 
-    data class Pin(val id: String, val point: LatLon, val icon: String)
+    /** [dim]: 1.3.0 a place closed right now (drawn faint). */
+    data class Pin(val id: String, val point: LatLon, val icon: String, val dim: Boolean = false)
 
     private var style: Style? = null
     private var routes: List<RouteResult> = emptyList()
@@ -172,6 +173,7 @@ class MapLayers(private val context: Context) {
         ))
         add(SymbolLayer(LAYER_POI, SRC_POI).withProperties(
             PropertyFactory.iconImage(Expression.get("icon")),
+            PropertyFactory.iconOpacity(dimmed()),
             PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
             PropertyFactory.iconAllowOverlap(true),
             PropertyFactory.iconIgnorePlacement(true)
@@ -364,6 +366,7 @@ class MapLayers(private val context: Context) {
             Feature.fromGeometry(Point.fromLngLat(p.point.lon, p.point.lat)).also {
                 it.addStringProperty("icon", p.icon)
                 it.addStringProperty("id", p.id)
+                it.addNumberProperty("dim", if (p.dim) 1 else 0)
             }
         }
         s.getSourceAs<GeoJsonSource>(source)?.setGeoJson(FeatureCollection.fromFeatures(features))
