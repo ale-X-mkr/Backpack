@@ -161,6 +161,8 @@ class MainActivity : AppCompatActivity() {
     private var currentMode = ModeUi.WALKING
     /** 1.2.0: route chips this far (dp) above the message band's base. */
     private val PILLS_ABOVE_BAND_DP = 96
+    /** 1.2.1: fixed top (dp) of both button columns. */
+    private val COLUMNS_TOP_DP = 100
     private var currentPreference = PreferenceUi.RECOMMENDED
     private var avoidTolls = false
     private var urgencyMode = UrgencyMode.WEEKEND
@@ -2207,7 +2209,6 @@ class MainActivity : AppCompatActivity() {
         val circleTopRight = driving && !circleInBox
         setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) 96 else 0)
         val boxShown = navBox.visibility == View.VISIBLE && navBox.height > 0
-        val boxBottom = if (boxShown) (navBox.bottom / density).toInt() else 0
 
         // Speed circle: inside the box at its right end, centred on its
         // height; otherwise top right.
@@ -2220,8 +2221,10 @@ class MainActivity : AppCompatActivity() {
             setMargins(R.id.speed_widget, top = 12, end = 14)
         }
 
-        // Columns start under the top band (speed circle when driving).
-        val top0 = maxOf(if (driving) 100 else 60, if (boxShown) boxBottom + 10 else 0)
+        // 1.2.1 (Alex): the columns never move -- always at the car-mode
+        // height, in every mode, planning or navigating; the speed circle
+        // and the instruction box fit above them.
+        val top0 = COLUMNS_TOP_DP
         val step = if (land) 46 else 53
         val gap = step - 38
         fun shown(id: Int) = findViewById<View>(id).visibility == View.VISIBLE
