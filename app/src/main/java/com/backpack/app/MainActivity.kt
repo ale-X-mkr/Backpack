@@ -1225,7 +1225,43 @@ class MainActivity : AppCompatActivity() {
         getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
             .getInt(Settings.KEY_SIGHTS_MAX_PCT, Settings.DEFAULT_SIGHTS_MAX_PCT) / 100.0
 
-    private fun onPlacesServerSwitch() = showMessage("Places server busy, trying another...")
+    /** 1.2.1: no message any more -- the faint "Searching places" line says it. */
+    private fun onPlacesServerSwitch() {
+        searchingSwitched = true
+        pokeSearching()
+    }
+
+    // ---------- 1.2.1 faint "Searching places..." line with a spinner ----------
+
+    private var searchingStartedAtMs = 0L
+    private var searchingSwitched = false
+    private val searchingPoll = object : Runnable {
+        override fun run() { if (refreshSearching()) handler.postDelayed(this, 500L) }
+    }
+
+    private fun searchingNow(): Boolean =
+        (svcSlot.busyGen != 0 && svcSlot.busyGen == svcSlot.gen) || touristPendingRoute != null || touristPendingCenter != null
+
+    /** A places search started (or changed server): show the line, watch until done. */
+    private fun pokeSearching() {
+        if (!searchingNow()) return
+        if (findViewById<View>(R.id.searching_line).visibility != View.VISIBLE) searchingStartedAtMs = System.currentTimeMillis()
+        refreshSearching()
+        handler.removeCallbacks(searchingPoll)
+        handler.postDelayed(searchingPoll, 500L)
+    }
+
+    /** Shows / hides the line; true while it is shown. Never longer than 2 min. */
+    private fun refreshSearching(): Boolean {
+        val line = findViewById<View>(R.id.searching_line) ?: return false
+        val on = searchingNow() && System.currentTimeMillis() - searchingStartedAtMs < 120_000L
+        if (!on) searchingSwitched = false
+        findViewById<TextView>(R.id.searching_text).text =
+            if (searchingSwitched) "Searching places\u2026 trying another server" else "Searching places\u2026"
+        val v = if (on) View.VISIBLE else View.GONE
+        if (line.visibility != v) line.visibility = v
+        return on
+    }
 
     /** Along the routes of the current plan when there is one (all
      *  alternatives in Weekend, to pick the sights route), else in the
@@ -1244,6 +1280,7 @@ class MainActivity : AppCompatActivity() {
             if (!force && touristPendingRoute === plan) return
             touristPendingRoute = plan
             touristPendingCenter = null
+            pokeSearching()
             val scenic = urgencyMode == UrgencyMode.WEEKEND && !NavigationEngine.isActive && !plan.tollDecision &&
                 plan.routes.size > 1 && sightsMaxFraction() > 0.0
             // All routes of the plan before Go (picking another chip then
@@ -1312,6 +1349,7 @@ class MainActivity : AppCompatActivity() {
         reachSettings = settings
         touristPendingRoute = null
         touristPendingCenter = origin
+        pokeSearching()
         val mode = currentMode
         val time = if (minutes < 60) "$minutes min" else "${minutes / 60} h"
         val how = when (mode.mode) {
@@ -2742,11 +2780,14 @@ class MainActivity : AppCompatActivity() {
         var origin: LatLon? = null
         var sayKey: String? = null
         var gen = 0
+        /** 1.2.1: generation of the search in flight (0 = none), for "Searching places...". */
+        var busyGen = 0
         var failures = 0
         var retryAtMs = 0L
 
         fun reset() {
             gen++
+            busyGen = 0
             finder.cancel()
             results = emptyList()
             key = null
@@ -2841,6 +2882,8 @@ class MainActivity : AppCompatActivity() {
             slot.key = key
             slot.origin = null
             val gen = ++slot.gen
+            slot.busyGen = gen
+            pokeSearching()
             val stretch = com.backpack.app.core.SpeedLimits.section(route.line, from, ahead)
             slot.finder.alongRoutes(servicesCategory, listOf(stretch), radius,
                 onSwitch = { if (gen == slot.gen && force) onPlacesServerSwitch() }
@@ -2863,6 +2906,8 @@ class MainActivity : AppCompatActivity() {
         slot.key = key
         slot.origin = origin
         val gen = ++slot.gen
+        slot.busyGen = gen
+        pokeSearching()
         val time = if (minutes < 60) "$minutes min" else "${minutes / 60} h"
         val how = when (currentMode.mode) {
             com.backpack.app.core.TravelMode.WALKING -> "on foot"
@@ -2885,6 +2930,8 @@ class MainActivity : AppCompatActivity() {
         serverFailed: Boolean, announce: Boolean, where: String
     ) {
         if (gen != slot.gen || isDestroyed) return
+        slot.busyGen = 0
+        refreshSearching()
         if (results == null) {
             // Allowed again when asked, or after a pause (1, 2, then 5 min).
             slot.key = null

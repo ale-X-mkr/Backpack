@@ -431,6 +431,37 @@
         android:gravity="center_horizontal"
         android:orientation="vertical">
 
+        <!-- 1.2.1: faint, while places are being searched (spinner + text). -->
+        <LinearLayout
+            android:id="@+id/searching_line"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:alpha="0.6"
+            android:background="@drawable/message_bubble_background"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:layout_width="14dp"
+                android:layout_height="14dp"
+                android:layout_marginEnd="6dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/backpack_ink" />
+
+            <TextView
+                android:id="@+id/searching_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Searching places…"
+                android:textColor="@color/backpack_ink"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
         <TextView
             android:id="@+id/error_bubble"
             android:layout_width="wrap_content"
