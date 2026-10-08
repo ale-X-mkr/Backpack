@@ -61,6 +61,21 @@ class RoutePlanner(context: Context) {
         }
     }
 
+    /**
+     * 1.3.0 off-route recalculation: one request, no alternatives (only one
+     * route is needed mid-trip, and it answers faster). Car + Balanced keeps
+     * the toll choice already made for this trip ([followedHasTolls]).
+     */
+    fun reroute(req: RouteRequest, followedHasTolls: Boolean, callback: PlanCallback) {
+        val gen = ++generation
+        val deliver = PlanCallback { plan, error ->
+            main.post { if (gen == generation) callback.onResult(plan, error) }
+        }
+        val balanced = req.mode == TravelMode.DRIVING && req.preference == RoutePreference.RECOMMENDED && !req.avoidTolls
+        val r = if (balanced) req.copy(avoidTolls = !followedHasTolls) else req
+        planSingle(r, alternatives = false, deliver)
+    }
+
     private class Outcome(val routes: List<RouteResult>?, val httpCode: Int?, val body: String?, val failed: Boolean = false, val noKey: Boolean = false)
 
     private fun planBalanced(req: RouteRequest, cb: PlanCallback) {

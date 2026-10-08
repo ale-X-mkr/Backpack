@@ -48,6 +48,7 @@ object NavigationEngine {
     private var tracker: NavigationTracker? = null
     private var request: RouteRequest? = null
     private var lastRerouteAtMs = 0L
+    private const val REROUTE_GAP_MS = 8000L
     private var rerouting = false
     private var arrived = false
 
@@ -209,7 +210,8 @@ object NavigationEngine {
 
     private fun maybeReroute(current: LatLon) {
         val now = System.currentTimeMillis()
-        if (rerouting || now - lastRerouteAtMs < 15000L) return
+        // 1.3.0: 8 s between recalculations (was 15 s).
+        if (rerouting || now - lastRerouteAtMs < REROUTE_GAP_MS) return
         val req = request ?: return
         val pl = planner ?: return
         lastRerouteAtMs = now
@@ -219,7 +221,9 @@ object NavigationEngine {
         // minus the stops already visited.
         val passed = (tracker?.passedStops() ?: 0).coerceAtMost(req.waypoints.size)
         val newReq = req.copy(from = current, waypoints = req.waypoints.drop(passed))
-        pl.plan(newReq) { newPlan, error ->
+        // One quick request (no alternatives), same toll choice as the route followed.
+        val hasTolls = (route?.tollDistanceMeters ?: 0.0) > 0.0
+        pl.reroute(newReq, hasTolls) plan@{ newPlan, error ->
             rerouting = false
             if (!isActive) return@plan
             if (newPlan == null) {
