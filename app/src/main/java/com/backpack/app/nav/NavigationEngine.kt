@@ -127,7 +127,10 @@ object NavigationEngine {
         lastProgress = null
         plan = null
         pendingSpeech = null
+        voice.clear()
+        main.removeCallbacks(silentDone)
         tts?.stop()
+        abandonFocus()
         for (l in listeners.toList()) l.onStopped()
     }
 
@@ -186,7 +189,9 @@ object NavigationEngine {
         )
         val p = t.update(fix)
         lastProgress = p
+        lastSpeedMps = fix.speedMps?.toDouble()
         p.speech?.let { speak(it) }
+        pump() // a queued heads-up may fit in now
         for (l in listeners.toList()) l.onProgress(p, r)
 
         if (p.arrived) {
@@ -252,16 +257,23 @@ object NavigationEngine {
                 )
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {}
-                    override fun onDone(utteranceId: String?) = abandonFocus()
+                    override fun onDone(utteranceId: String?) { main.post { said(utteranceId) } }
                     @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) = abandonFocus()
+                    override fun onError(utteranceId: String?) { main.post { said(utteranceId) } }
+                    // Cut on purpose (an instruction, Stop reading): the queue already knows.
+                    override fun onStop(utteranceId: String?, interrupted: Boolean) {}
                 })
                 // Said while the voice was still starting up.
-                main.post { pendingSpeech?.let { pendingSpeech = null; if (isActive) speak(it) } }
+                main.post {
+                    pendingSpeech?.let { pendingSpeech = null; if (isActive) speak(it) }
+                    pump()
+                }
             }
         }
     }
 
+    /** A navigation instruction: always first, cuts any info being said
+     *  (which resumes afterwards from the start of its sentence). */
     fun speak(text: String) {
         // Settings > Navigation > Spoken instructions.
         if (app?.let { Prefs.voiceOn(it) } == false) return
@@ -269,15 +281,70 @@ object NavigationEngine {
             pendingSpeech = text
             return
         }
+        voice.navStarted()
         requestFocus()
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "nav")
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_NAV)
     }
 
-    /** 1.2.0: stops whatever is being said (e.g. a sight read aloud). */
-    fun stopSpeaking() {
-        pendingSpeech = null
-        tts?.stop()
-        abandonFocus()
+    // ---------- 1.2.1 info voice: sight heads-ups and readings, queued ----------
+
+    private val voice = com.backpack.app.core.VoiceQueue()
+    private var lastSpeedMps: Double? = null
+    private const val UTTERANCE_NAV = "nav"
+    private const val UTTERANCE_INFO = "info"
+    /** Voice off: a heads-up still shows its message, for this long. */
+    private const val SILENT_HEADS_UP_MS = 8000L
+
+    /** Queues a heads-up or a reading (said between instructions, one at a time). */
+    fun speakInfo(item: com.backpack.app.core.VoiceQueue.Item) {
+        voice.add(item)
+        pump()
+    }
+
+    fun pendingInfo(kind: com.backpack.app.core.VoiceQueue.Kind): Int = voice.pendingCount(kind)
+
+    /** Stop reading: drops the reading (being said and queued); heads-ups stay. */
+    fun stopReading() {
+        if (voice.dropReadings()) tts?.stop()
+        pump()
+        if (!voice.navSpeaking && !voice.infoSpeaking) abandonFocus()
+    }
+
+    private val silentDone = Runnable { voice.sentenceDone(); pump() }
+
+    private fun said(utteranceId: String?) {
+        when (utteranceId) {
+            UTTERANCE_NAV -> voice.navDone(System.currentTimeMillis())
+            UTTERANCE_INFO -> voice.sentenceDone()
+        }
+        pump()
+        if (!voice.navSpeaking && !voice.infoSpeaking) abandonFocus()
+    }
+
+    /** Seconds to the next maneuver at your speed (route average when slow / unknown). */
+    private fun secondsToNext(): Double? {
+        if (!isActive) return null
+        val p = lastProgress ?: return null
+        val r = route
+        val avg = if (r != null && r.durationSeconds > 60.0) r.distanceMeters / r.durationSeconds else 10.0
+        val v = lastSpeedMps?.takeIf { it > 1.0 } ?: avg
+        return p.distanceToNextM / v.coerceAtLeast(0.5)
+    }
+
+    private fun pump() {
+        val voiceOn = app?.let { Prefs.voiceOn(it) } != false
+        if (voiceOn && !ttsReady) return // waits for the voice to start
+        val s = voice.next(System.currentTimeMillis(), secondsToNext())
+        if (s !is com.backpack.app.core.VoiceQueue.Say.Sentence) return
+        if (!voiceOn) {
+            // Readings need the voice; a heads-up still shows its message for a while.
+            if (s.item.kind == com.backpack.app.core.VoiceQueue.Kind.READING) { voice.dropReadings(); pump(); return }
+            main.removeCallbacks(silentDone)
+            main.postDelayed(silentDone, SILENT_HEADS_UP_MS / s.item.sentences.size.coerceAtLeast(1))
+            return
+        }
+        requestFocus()
+        tts?.speak(s.text, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_INFO)
     }
 
     /** Music and podcasts duck (get quieter) while an instruction plays. */

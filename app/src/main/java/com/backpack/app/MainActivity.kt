@@ -1332,18 +1332,19 @@ class MainActivity : AppCompatActivity() {
     // ---------- 1.1.1 Weekend voice heads-up ----------
 
     private val headsUpSaid = HashSet<String>()
-    private var lastInstructionAtMs = 0L
 
     /**
      * Weekend, navigating: a well-known sight within your Weekend detour is
-     * coming up (2 km ahead by car, 1 km by bike, 300 m on foot): said once,
-     * never close to a turn or over an instruction; the message can be
-     * tapped to add it as a stop.
+     * coming up (minutes from Settings > Sights): queued once per place;
+     * 1.2.1 the voice says it in a gap between instructions, its message
+     * shows at that moment, and a place already passed is dropped. The
+     * message can be tapped to hear about it.
      */
     private fun maybeSightHeadsUp(p: Progress) {
         if (urgencyMode != UrgencyMode.WEEKEND || !touristOn || p.offRoute || p.arrived) return
         if (!sightsPrefs().getBoolean(Settings.KEY_SIGHT_HEADSUP, true)) return
-        if (p.distanceToNextM < 400.0 || System.currentTimeMillis() - lastInstructionAtMs < 8000L) return
+        // At most two waiting: more would be stale by the time a gap comes.
+        if (NavigationEngine.pendingInfo(com.backpack.app.core.VoiceQueue.Kind.HEADS_UP) >= 2) return
         val mode = currentMode.mode
         // 1.2.0: set in minutes (Settings > Sights), turned into metres with
         // the route's own average speed: the same warning time in every mode.
@@ -1357,12 +1358,21 @@ class MainActivity : AppCompatActivity() {
             .filter { Tourist.estimateDetourSeconds(it.offsetM, mode) <= maxDetour }
             .maxByOrNull { it.sitelinks } ?: return
         headsUpSaid.add(poi.key)
-        val ahead = (poi.alongM - p.alongM).coerceAtLeast(0.0)
         val mins = Tourist.minutesLabel(Tourist.estimateDetourSeconds(poi.offsetM, mode))
-        val inMin = Math.round((ahead / lead) * minutes).toInt().coerceAtLeast(1)
-        NavigationEngine.speak("In about $inMin minute${if (inMin == 1) "" else "s"}, ${poi.name}, ${poi.category.label.lowercase()}, about $mins off your route")
-        showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to hear about it",
-            onTap = { showSightGuide(poi) }, showMs = 8000L)
+        fun aheadM() = NavigationEngine.lastProgress?.let { poi.alongM - it.alongM }
+        NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
+            com.backpack.app.core.VoiceQueue.Kind.HEADS_UP,
+            text = {
+                // Worded when said: the time is still right after waiting for a gap.
+                val inMin = Math.round(((aheadM() ?: 0.0).coerceAtLeast(0.0) / lead) * minutes).toInt().coerceAtLeast(1)
+                "In about $inMin minute${if (inMin == 1) "" else "s"}, ${poi.name}, ${poi.category.label.lowercase()}, about $mins off your route"
+            },
+            valid = { NavigationEngine.isActive && (aheadM() ?: -1.0) > 150.0 },
+            onStart = {
+                if (!isDestroyed) showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to hear about it",
+                    onTap = { showSightGuide(poi) }, showMs = 8000L)
+            }
+        ))
     }
 
     /**
@@ -1373,8 +1383,8 @@ class MainActivity : AppCompatActivity() {
     private fun showSightGuide(poi: TouristPoi) {
         val p = Popup(this, poi.name)
         val body = p.text("Looking it up on Wikipedia...")
-        p.button("Stop reading") { NavigationEngine.stopSpeaking() }
-        p.button("Add stop") { NavigationEngine.stopSpeaking(); p.dismiss(); addStopFlow(poi.point, poi.name) }
+        p.button("Stop reading") { NavigationEngine.stopReading() }
+        p.button("Add stop") { NavigationEngine.stopReading(); p.dismiss(); addStopFlow(poi.point, poi.name) }
         // Close keeps the voice going (eyes back on the road); Stop reading ends it.
         p.button("Close", primary = true) { p.dismiss() }
         p.show()
@@ -1387,7 +1397,9 @@ class MainActivity : AppCompatActivity() {
             body.text = text + "\n\nWikipedia, CC BY-SA"
             p.fit()
             if (!Prefs.voiceOn(this)) showMessage("Voice is off (Settings > Navigation)")
-            else NavigationEngine.speak("${poi.name}. $text")
+            // Queued: after the heads-up being said, cut by instructions and resumed.
+            else NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
+                com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text"))
         }
     }
 
@@ -1911,7 +1923,6 @@ class MainActivity : AppCompatActivity() {
         }
         if (overviewOn && p.anticipation) leaveOverview() // back to the drive view before a turn
         extendTouristIfNeeded(p, route)
-        if (p.speech != null) lastInstructionAtMs = System.currentTimeMillis()
         maybeSightHeadsUp(p)
         layers.setProgress(p.alongM, route) // driven part darker
         queryPois() // the stretch ahead, every 40 % of it
