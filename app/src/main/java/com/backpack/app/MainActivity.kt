@@ -539,8 +539,8 @@ class MainActivity : AppCompatActivity() {
             .accuracyAlpha(0.12f)
             .enableStaleState(false)
             // Position arrow 170 % (Alex, 0.7.0 test), same size at every zoom.
-            .minZoomIconScale(1.8f) // 1.2.0: 1.8 (1.1.1 had 2.0)
-            .maxZoomIconScale(1.8f)
+            .minZoomIconScale(2.0f) // 1.3.0: back to 2.0 (Alex)
+            .maxZoomIconScale(2.0f)
             .build()
         // useDefaultLocationEngine(false): MapLibre gets positions only from
         // LocationHub (GPS chip), never from its own location engine.
@@ -1481,10 +1481,40 @@ class MainActivity : AppCompatActivity() {
             },
             valid = { NavigationEngine.isActive && (aheadM() ?: -1.0) > 150.0 },
             onStart = {
-                if (!isDestroyed) showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to hear about it",
-                    onTap = { showSightGuide(poi) }, showMs = 8000L)
+                if (!isDestroyed) {
+                    showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to hear about it",
+                        onTap = { showSightGuide(poi) }, showMs = 8000L)
+                    showListenButton(poi)
+                }
             }
         ))
+    }
+
+    /** 1.3.0: faint "Listen" for 5 s after a heads-up: one tap, the guide reads (no popup). */
+    private val hideListen = Runnable { findViewById<View>(R.id.listen_button)?.visibility = View.GONE }
+
+    private fun showListenButton(poi: TouristPoi) {
+        val b = findViewById<TextView>(R.id.listen_button) ?: return
+        b.visibility = View.VISIBLE
+        b.setOnClickListener {
+            handler.removeCallbacks(hideListen)
+            b.visibility = View.GONE
+            readAloud(poi)
+        }
+        handler.removeCallbacks(hideListen)
+        handler.postDelayed(hideListen, 5000L)
+    }
+
+    /** The place's Wikipedia summary, read aloud (queued like every reading). */
+    private fun readAloud(poi: TouristPoi) {
+        if (!Prefs.voiceOn(this)) { showMessage("Voice is off (Settings > Navigation)"); return }
+        showMessage("Looking up ${poi.name}\u2026")
+        com.backpack.app.tourist.WikiSummary.forPoi(poi) { text ->
+            if (isDestroyed) return@forPoi
+            if (text == null) { showMessage("No Wikipedia article to read for ${poi.name}"); return@forPoi }
+            NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
+                com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text"))
+        }
     }
 
     /**

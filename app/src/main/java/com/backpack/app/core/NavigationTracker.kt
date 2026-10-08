@@ -54,6 +54,12 @@ class NavigationTracker(
     private var arrivedFlag = false
     /** step index -> bit 1 = continue, 2 = early, 4 = now */
     private val announced = HashMap<Int, Int>()
+    /** 1.3.0: "goal" steps (end of each leg) and the intermediate stops reached. */
+    private val goals: List<Int> = route.steps.indices.filter { route.steps[it].maneuver == Maneuver.GOAL }
+    private val stopPoints: Map<Int, LatLon> = goals.dropLast(1).associateWith { SpeedLimits.pointAt(line, stepStart[it]) }
+    private val reachedStops = HashSet<Int>()
+    /** Closest you came to the destination on the last stretch (pass-by arrival). */
+    private var minToEnd = Double.MAX_VALUE
 
     /** Distance along the route at the last on-route fix. */
     var lastAlongM = 0.0
@@ -69,10 +75,17 @@ class NavigationTracker(
      *  with a "goal" step; the last one is the destination). Used so a
      *  reroute does not send you back to a stop you already visited. */
     fun passedStops(): Int {
-        val goals = route.steps.indices.filter { route.steps[it].maneuver == Maneuver.GOAL }
         if (goals.size <= 1) return 0
-        return goals.dropLast(1).count { stepStart[it] <= lastAlongM + ARRIVE_RADIUS_M }
+        // 1.3.0: also a stop you came close to without touching the line there.
+        return goals.dropLast(1).count { it in reachedStops || stepStart[it] <= lastAlongM + ARRIVE_RADIUS_M }
     }
+
+    /** 1.3.0: how close counts as "there": by mode, a bit more with a poor GPS (max 60 m). */
+    private fun reachRadius(accuracy: Double): Double = max(when (mode) {
+        TravelMode.WALKING -> 20.0
+        TravelMode.CYCLING -> 30.0
+        TravelMode.DRIVING -> 40.0
+    }, minOf(accuracy, 60.0))
 
     fun update(fix: Fix): Progress {
         val p = fix.latLon
@@ -93,6 +106,22 @@ class NavigationTracker(
 
         val remaining = (line.length - along).coerceAtLeast(0.0)
         val toEnd = if (route.points.isEmpty()) 0.0 else Geo.distance(p, route.points.last())
+        val reach = reachRadius(accuracy)
+
+        // 1.3.0: an intermediate stop counts as reached once you were close to
+        // it, even passing by: never guided back to it afterwards.
+        var stopSpeech: String? = null
+        for ((k, pt) in stopPoints) {
+            if (k in reachedStops) continue
+            val passedAlong = stepStart[k] <= lastAlongM + ARRIVE_RADIUS_M
+            if (Geo.distance(p, pt) < reach * 1.5 || passedAlong) {
+                reachedStops.add(k)
+                // Reached before the line got there: said now, its own
+                // "arrive" instruction is not repeated afterwards.
+                if (!passedAlong && (announced[k] ?: 0) and 4 == 0) stopSpeech = "You have reached your stop"
+                announced[k] = 7
+            }
+        }
 
         // Upcoming maneuver: first step (after the departure) whose
         // maneuver point is still ahead of us.
@@ -110,7 +139,15 @@ class NavigationTracker(
         // (start == destination) or a road passing close to the destination
         // earlier must not count as arrival.
         val nearEndAlong = !isOff && remaining < ARRIVE_ALONG_M
-        if (!arrivedFlag && ((toEnd < ARRIVE_RADIUS_M && nearEndAlong) || (!isOff && remaining < ARRIVE_RADIUS_M))) {
+        // On the last stretch (last on-route position): off the line there
+        // (parking, a square, the other side of the street) still counts.
+        val onLastStretch = line.length - lastAlongM < ARRIVE_ALONG_M * 2 && lastAlongM > line.length * 0.5
+        if (onLastStretch) minToEnd = minOf(minToEnd, toEnd)
+        // 1.3.0 pass-by: you came close and are now moving away -> arrived.
+        val passedBy = onLastStretch && minToEnd < reach * 2 && toEnd > minToEnd + 25.0
+        if (!arrivedFlag && (
+                (toEnd < reach && (nearEndAlong || onLastStretch)) ||
+                (!isOff && remaining < ARRIVE_RADIUS_M) || passedBy)) {
             arrivedFlag = true
             return Progress(snap, along, remaining, 0.0, -1, 0.0, null, false, stepAdvanced, false, true)
         }
@@ -143,7 +180,10 @@ class NavigationTracker(
             }
         }
 
-        return Progress(snap, along, remaining, remainingS, next, distToNext, speech, anticipation, stepAdvanced, offRoute, false)
+        if (speech == null) speech = stopSpeech
+        // Next to a stop just reached: no "off route" (no reroute back to it).
+        val off = offRoute && stopSpeech == null
+        return Progress(snap, along, remaining, remainingS, next, distToNext, speech, anticipation, stepAdvanced, off, false)
     }
 
     private fun remainingSeconds(along: Double, next: Int): Double {

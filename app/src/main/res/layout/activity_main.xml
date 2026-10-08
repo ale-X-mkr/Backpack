@@ -462,6 +462,22 @@
 
         </LinearLayout>
 
+        <!-- 1.3.0: after a sight heads-up, 5 s: tap to hear the guide. -->
+        <TextView
+            android:id="@+id/listen_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:alpha="0.75"
+            android:background="@drawable/message_bubble_background"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="6dp"
+            android:text="▶  Listen"
+            android:textColor="@color/backpack_ink"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/error_bubble"
             android:layout_width="wrap_content"
