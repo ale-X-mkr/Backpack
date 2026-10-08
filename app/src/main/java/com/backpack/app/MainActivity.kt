@@ -244,6 +244,11 @@ class MainActivity : AppCompatActivity() {
         navInstructionBar = findViewById(R.id.nav_instruction_bar)
         navBox = findViewById(R.id.nav_box)
         routeInfo = findViewById(R.id.route_info)
+        // 1.3.0: walking / cycling: tap the distance line for the height profile.
+        routeInfo.setOnClickListener {
+            val r = (if (NavigationEngine.isActive) NavigationEngine.route else null) ?: selectedRoute()
+            if (r != null && r.elevations.isNotEmpty()) showElevation(r)
+        }
         routeInfoDist = findViewById(R.id.route_info_dist)
         routeInfoEta = findViewById(R.id.route_info_eta)
         routeInfoCost = findViewById(R.id.route_info_cost)
@@ -2275,11 +2280,29 @@ class MainActivity : AppCompatActivity() {
     private fun setRouteInfoText(r: RouteResult) {
         routeInfoDist.text = distanceLabel(r.distanceMeters)
         routeInfoEta.text = etaLabel(r.durationSeconds)
-        routeInfoCost.text = if (r.tollDistanceMeters > 0) {
-            "Cost: ~€%.0f".format(r.tollDistanceMeters / 1000.0 * tollRatePerKm)
-        } else {
-            "Cost: --"
+        routeInfoCost.text = when {
+            // 1.3.0 walking / cycling: climb and descent (tap the line for the profile).
+            currentMode != ModeUi.DRIVING && r.elevations.isNotEmpty() -> {
+                val (up, down) = com.backpack.app.core.Elevation.gain(r)
+                fun h(v: Double) = if (useMetric) "${v.toInt()} m" else "${(v * 3.28084).toInt()} ft"
+                "\u2191 ${h(up)}  \u2193 ${h(down)}"
+            }
+            r.tollDistanceMeters > 0 -> "Cost: ~€%.0f".format(r.tollDistanceMeters / 1000.0 * tollRatePerKm)
+            else -> "Cost: --"
         }
+    }
+
+    /** 1.3.0: height profile of the route (walking / cycling). */
+    private fun showElevation(r: RouteResult) {
+        val pts = com.backpack.app.core.Elevation.profile(r)
+        if (pts.isEmpty()) return
+        val (up, down) = com.backpack.app.core.Elevation.gain(r)
+        fun h(v: Double) = if (useMetric) "${v.toInt()} m" else "${(v * 3.28084).toInt()} ft"
+        val p = Popup(this, "Height profile")
+        p.text("Climb ${h(up)} \u00b7 descent ${h(down)} \u00b7 ${distanceLabel(r.distanceMeters)}")
+        p.view(com.backpack.app.ui.ElevationView(this, pts, useMetric), 140)
+        p.button("Close", primary = true) { p.dismiss() }
+        p.show()
     }
 
     /** Message band: full width in portrait, compact bottom-left in landscape. */

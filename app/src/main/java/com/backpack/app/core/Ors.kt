@@ -62,9 +62,12 @@ object Ors {
             val feature = features.getJSONObject(f)
             val coordinates = feature.getJSONObject("geometry").getJSONArray("coordinates")
             val points = ArrayList<LatLon>(coordinates.length())
+            val heights = ArrayList<Double>()
             for (i in 0 until coordinates.length()) {
                 val pair = coordinates.getJSONArray(i)
                 points.add(LatLon(pair.getDouble(1), pair.getDouble(0)))
+                // 1.3.0: [lon, lat, height] when elevation was asked.
+                if (pair.length() >= 3) heights.add(pair.getDouble(2))
             }
 
             val properties = feature.getJSONObject("properties")
@@ -102,7 +105,9 @@ object Ors {
                     }
                 }
             }
-            results.add(RouteResult(points, distanceMeters, durationSeconds, tollDistance, unpavedDistance, steps))
+            val elevations = if (heights.size == points.size) heights else emptyList()
+            results.add(RouteResult(points, distanceMeters, durationSeconds, tollDistance, unpavedDistance, steps,
+                elevations, properties.optDouble("ascent", 0.0), properties.optDouble("descent", 0.0)))
         }
         return results
     }

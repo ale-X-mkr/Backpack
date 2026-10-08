@@ -58,7 +58,11 @@ class RouteResult(
     val durationSeconds: Double,
     val tollDistanceMeters: Double = 0.0,
     val unpavedDistanceMeters: Double = 0.0,
-    val steps: List<NavStep> = emptyList()
+    val steps: List<NavStep> = emptyList(),
+    /** 1.3.0: height (m) of each point, walking / cycling (empty when not asked). */
+    val elevations: List<Double> = emptyList(),
+    val ascentM: Double = 0.0,
+    val descentM: Double = 0.0
 ) {
     val line: Polyline by lazy { Polyline(points) }
 

@@ -193,6 +193,12 @@ class Popup(private val context: Context, title: String) {
     }
 
     /** A small button inside the body (not in the bottom row). */
+    /** 1.3.0: any view in the body (e.g. the height profile), [heightDp] tall. */
+    fun view(v: android.view.View, heightDp: Int) {
+        body.addView(v, android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT, dp(heightDp)))
+    }
+
     fun bodyButton(label: String, onClick: () -> Unit): TextView {
         val row = FlowRow(context)
         val b = TextView(context).apply {
