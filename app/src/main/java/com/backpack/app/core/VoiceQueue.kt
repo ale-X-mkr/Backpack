@@ -23,9 +23,11 @@ class VoiceQueue {
         /** Still worth saying (e.g. the place is still ahead). */
         val valid: () -> Boolean = { true },
         /** Called once, when it starts to be said (e.g. show its message). */
-        val onStart: () -> Unit = {}
+        val onStart: () -> Unit = {},
+        /** 1.3.0: language of the text when not the voice language (e.g. "en"). */
+        val lang: String? = null
     ) {
-        constructor(kind: Kind, text: String) : this(kind, { text })
+        constructor(kind: Kind, text: String, lang: String? = null) : this(kind, { text }, { true }, {}, lang)
         var sentences: List<String> = emptyList()
             private set
         internal var index = 0

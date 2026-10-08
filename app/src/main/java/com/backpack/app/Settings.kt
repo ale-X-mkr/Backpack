@@ -52,6 +52,8 @@ object Settings {
     const val KEY_VOICE = "voice_on"
     /** 1.1.0: spoken instructions "full" (ORS sentences) or "short" (maneuver only). */
     const val KEY_VOICE_SHORT = "voice_short"
+    /** 1.3.0: voice language: en, es (Latin America), fr, it, de. */
+    const val KEY_VOICE_LANG = "voice_language"
     const val KEY_ALARM_SOUND = "speed_alarm_sound"
 
     const val DEFAULT_SIGHTS_MAX_PCT = 20

@@ -23,6 +23,8 @@ object TripState {
     var touristResults: List<com.backpack.app.core.TouristPoi> = emptyList()
     /** Everything found (scored), re-ranked locally when another route is picked. */
     var touristCandidates: List<com.backpack.app.core.TouristPoi> = emptyList()
+    /** 1.3.0: places of the routes not chosen (dimmed): never announced. */
+    var touristDimKeys: Set<String> = emptySet()
     var touristRouteKey: Any? = null
     /** Plan already given the Weekend sights choice (applied at most once). */
     var scenicCheckedPlan: Any? = null

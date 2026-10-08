@@ -55,6 +55,7 @@ import com.backpack.app.nav.NavigationEngine
 import com.backpack.app.route.RoutePlanner
 import com.backpack.app.places.PlacesFinder
 import com.backpack.app.speed.SpeedLimitLookup
+import com.backpack.app.core.SpeedAlarm.Ring as SpeedRing
 import com.backpack.app.ui.LetterBadge
 import com.backpack.app.ui.Popup
 import com.backpack.app.ui.SettingsPopup
@@ -187,13 +188,9 @@ class MainActivity : AppCompatActivity() {
     private var lastTrackingZoom = 0.0
 
     // Speed limit (loaded per route by SpeedLimitLookup).
-    private var lastKnownSpeedLimit: Int? = null
-    private var lastSpeedLimitOkAtMs = 0L
     private val handler = Handler(Looper.getMainLooper())
     private var blinkOn = true
     private var isBlinking = false
-    private var toneGenerator: ToneGenerator? = null
-    private var lastAlarmAtMs = 0L
 
     // POIs.
     /** Everyday places on the map, both layers (tap one for its popup). */
@@ -272,6 +269,9 @@ class MainActivity : AppCompatActivity() {
         speedSignText.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> centerDigits(v as TextView) }
 
         mapView.onCreate(savedInstanceState)
+        // 1.3.0: the speed alarm lives outside the screen (also with it off).
+        com.backpack.app.speed.SpeedGuard.start(this)
+        com.backpack.app.nav.AppRunning.onExit = { finishAndRemoveTask() }
         mapView.addOnDidFailLoadingMapListener { showError("Map could not load -- check the connection") }
         mapView.getMapAsync { m -> onMapReady(m) }
 
@@ -342,6 +342,13 @@ class MainActivity : AppCompatActivity() {
         LocationHub.addListener(uiFixListener)
         NavigationEngine.addListener(navListener)
         if (LocationHub.hasPermission(this)) LocationHub.acquire(this, LocationHub.LEASE_UI)
+        // 1.3.0: open until expressly exited; the service keeps the rest going in the background.
+        com.backpack.app.speed.SpeedGuard.start(this)
+        com.backpack.app.speed.SpeedGuard.addListener(speedListener)
+        com.backpack.app.tourist.SightHeadsUp.ui = headsUpUi
+        com.backpack.app.nav.AppRunning.onExit = { finishAndRemoveTask() }
+        com.backpack.app.nav.AppRunning.setUiVisible(true)
+        com.backpack.app.nav.NavigationService.keepRunning(this)
         if (navUiActive) {
             handler.removeCallbacks(deadReckoningRunnable)
             handler.postDelayed(deadReckoningRunnable, 1000L)
@@ -389,8 +396,11 @@ class MainActivity : AppCompatActivity() {
         super.onStop()
         LocationHub.removeListener(uiFixListener)
         NavigationEngine.removeListener(navListener)
-        // GPS keeps running only if navigation holds its own lease.
+        com.backpack.app.speed.SpeedGuard.removeListener(speedListener)
+        if (com.backpack.app.tourist.SightHeadsUp.ui === headsUpUi) com.backpack.app.tourist.SightHeadsUp.ui = null
+        // GPS keeps running only if navigation (or, by car, the background service) holds its own lease.
         LocationHub.release(this, LocationHub.LEASE_UI)
+        com.backpack.app.nav.AppRunning.setUiVisible(false)
         handler.removeCallbacks(deadReckoningRunnable)
         mapView.onStop()
     }
@@ -414,8 +424,6 @@ class MainActivity : AppCompatActivity() {
         }
         planner.cancel()
         handler.removeCallbacksAndMessages(null)
-        toneGenerator?.release()
-        toneGenerator = null
         mapView.onDestroy()
         super.onDestroy()
     }
@@ -587,10 +595,8 @@ class MainActivity : AppCompatActivity() {
             }
             if (puckActive()) map?.locationComponent?.forceLocationUpdate(withHeading(location))
             keepArrowOnScreen(location)
-            if (currentMode == ModeUi.DRIVING) {
-                updateSpeedLimit(location)
-                updateSpeedSignDisplay(location)
-            } else if (navUiActive) updateSpeedOnly(location)
+            // Car: SpeedGuard watches and reports (speedListener); else your speed only.
+            if (currentMode != ModeUi.DRIVING && navUiActive) updateSpeedOnly(location)
             if (navUiActive) adaptTrackingZoom(location)
             queryPois()
         } else {
@@ -1443,51 +1449,13 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- 1.1.1 Weekend voice heads-up ----------
 
-    private val headsUpSaid = HashSet<String>()
-
-    /**
-     * Weekend, navigating: a well-known sight within your Weekend detour is
-     * coming up (minutes from Settings > Sights): queued once per place;
-     * 1.2.1 the voice says it in a gap between instructions, its message
-     * shows at that moment, and a place already passed is dropped. The
-     * message can be tapped to hear about it.
-     */
-    private fun maybeSightHeadsUp(p: Progress) {
-        if (urgencyMode != UrgencyMode.WEEKEND || !touristOn || p.offRoute || p.arrived) return
-        if (!sightsPrefs().getBoolean(Settings.KEY_SIGHT_HEADSUP, true)) return
-        // At most two waiting: more would be stale by the time a gap comes.
-        if (NavigationEngine.pendingInfo(com.backpack.app.core.VoiceQueue.Kind.HEADS_UP) >= 2) return
-        val mode = currentMode.mode
-        // 1.2.0: set in minutes (Settings > Sights), turned into metres with
-        // the route's own average speed: the same warning time in every mode.
-        val route = selectedRoute() ?: return
-        val minutes = sightsPrefs().getInt(Settings.KEY_SIGHT_HEADSUP_MIN, Settings.DEFAULT_SIGHT_HEADSUP_MIN)
-        val lead = Tourist.headsUpLeadM(minutes, route.distanceMeters, route.durationSeconds, mode)
-        val maxDetour = detourMinutes() * 60.0
-        val poi = touristResults.asSequence()
-            .filter { it.key !in touristDimOwner && it.key !in headsUpSaid && it.sitelinks >= 1 }
-            .filter { (it.alongM - p.alongM) in 0.0..lead }
-            .filter { Tourist.estimateDetourSeconds(it.offsetM, mode) <= maxDetour }
-            .maxByOrNull { it.sitelinks } ?: return
-        headsUpSaid.add(poi.key)
-        val mins = Tourist.minutesLabel(Tourist.estimateDetourSeconds(poi.offsetM, mode))
-        fun aheadM() = NavigationEngine.lastProgress?.let { poi.alongM - it.alongM }
-        NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
-            com.backpack.app.core.VoiceQueue.Kind.HEADS_UP,
-            text = {
-                // Worded when said: the time is still right after waiting for a gap.
-                val inMin = Math.round(((aheadM() ?: 0.0).coerceAtLeast(0.0) / lead) * minutes).toInt().coerceAtLeast(1)
-                "In about $inMin minute${if (inMin == 1) "" else "s"}, ${poi.name}, ${poi.category.label.lowercase()}, about $mins off your route"
-            },
-            valid = { NavigationEngine.isActive && (aheadM() ?: -1.0) > 150.0 },
-            onStart = {
-                if (!isDestroyed) {
-                    showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to hear about it",
-                        onTap = { showSightGuide(poi) }, showMs = 8000L)
-                    showListenButton(poi)
-                }
-            }
-        ))
+    /** 1.3.0: sight heads-ups run with the navigation ([com.backpack.app.tourist.SightHeadsUp]);
+     *  while the map is shown, its message and the Listen button appear here. */
+    private val headsUpUi = com.backpack.app.tourist.SightHeadsUp.Ui { poi, mins ->
+        if (isDestroyed) return@Ui
+        showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to hear about it",
+            onTap = { showSightGuide(poi) }, showMs = 8000L)
+        showListenButton(poi)
     }
 
     /** 1.3.0: faint "Listen" for 5 s after a heads-up: one tap, the guide reads (no popup). */
@@ -1509,11 +1477,12 @@ class MainActivity : AppCompatActivity() {
     private fun readAloud(poi: TouristPoi) {
         if (!Prefs.voiceOn(this)) { showMessage("Voice is off (Settings > Navigation)"); return }
         showMessage("Looking up ${poi.name}\u2026")
-        com.backpack.app.tourist.WikiSummary.forPoi(poi) { text ->
+        val lang = Prefs.voiceLanguage(this)
+        com.backpack.app.tourist.WikiSummary.forPoi(poi, lang) { text, textLang ->
             if (isDestroyed) return@forPoi
             if (text == null) { showMessage("No Wikipedia article to read for ${poi.name}"); return@forPoi }
             NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
-                com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text"))
+                com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text", textLang.takeIf { it != lang }))
         }
     }
 
@@ -1530,10 +1499,11 @@ class MainActivity : AppCompatActivity() {
         // Close keeps the voice going (eyes back on the road); Stop reading ends it.
         p.button("Close", primary = true) { p.dismiss() }
         p.show()
-        com.backpack.app.tourist.WikiSummary.forPoi(poi) { text ->
+        val lang = Prefs.voiceLanguage(this)
+        com.backpack.app.tourist.WikiSummary.forPoi(poi, lang) { text, textLang ->
             if (isDestroyed) return@forPoi
             if (text == null) {
-                body.text = "No English Wikipedia article for this place (or no connection)."
+                body.text = "No Wikipedia article for this place (or no connection)."
                 return@forPoi
             }
             body.text = text + "\n\nWikipedia, CC BY-SA"
@@ -1541,7 +1511,7 @@ class MainActivity : AppCompatActivity() {
             if (!Prefs.voiceOn(this)) showMessage("Voice is off (Settings > Navigation)")
             // Queued: after the heads-up being said, cut by instructions and resumed.
             else NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
-                com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text"))
+                com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text", textLang.takeIf { it != lang }))
         }
     }
 
@@ -1579,6 +1549,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         touristDimOwner = owner
+        TripState.touristDimKeys = owner.keys.toSet()
         touristResults = shown + extra
         layers.setTourist(shown + extra, owner.keys)
         refreshSightsButton()
@@ -1921,7 +1892,6 @@ class MainActivity : AppCompatActivity() {
     /** Switches the screen into navigation look; safe to call again. */
     private fun startNavigationUi() {
         val first = !navUiActive
-        if (first) headsUpSaid.clear()
         // Navigation has its own camera (and its own north-up switch).
         setPlanFollow(PlanFollow.OFF)
         flattenOnIdle = false
@@ -2072,7 +2042,6 @@ class MainActivity : AppCompatActivity() {
         }
         if (overviewOn && p.anticipation) leaveOverview() // back to the drive view before a turn
         extendTouristIfNeeded(p, route)
-        maybeSightHeadsUp(p)
         layers.setProgress(p.alongM, route) // driven part darker
         queryPois() // the stretch ahead, every 40 % of it
         // Live remaining distance and arrival time.
@@ -3163,6 +3132,7 @@ class MainActivity : AppCompatActivity() {
             settingsOpen = false
             if (isDestroyed) return
             loadSettings()
+            NavigationEngine.languageChanged()
             // A new reach time / detour applies at once; kinds (Settings > Sights)
             // re-filter what is on the phone, or switch sights on / off.
             val wasOn = touristWasOn
@@ -3182,6 +3152,10 @@ class MainActivity : AppCompatActivity() {
                     followPosition(18.0 + Prefs.navZoomOffset(this@MainActivity))
                 }
             }
+        }
+        override fun onExitApp() {
+            com.backpack.app.nav.NavigationService.exitApp(this@MainActivity)
+            finishAndRemoveTask()
         }
         override fun onPlacesCleared() {
             TripState.touristCoveredM = 0.0
@@ -3208,38 +3182,6 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- Speed limit (alarm rules unchanged) ----------
 
-    /**
-     * Road limit for the sign. Along a route (planned or navigated) the
-     * roads ahead are loaded in one go and looked up on the phone; off a
-     * route, one quick lookup around you at most every 15 s. The last known
-     * limit is kept for 2 min when nothing answers.
-     */
-    private fun updateSpeedLimit(location: Location) {
-        val now = System.currentTimeMillis()
-        val route = (if (NavigationEngine.isActive) NavigationEngine.route else null) ?: selectedRoute()
-        if (route != null && route.points.size >= 2) {
-            val along = (if (NavigationEngine.isActive) NavigationEngine.lastProgress?.alongM else null)
-                ?: route.line.snap(LatLon(location.latitude, location.longitude))?.alongM ?: 0.0
-            SpeedLimitLookup.prepare(this, route, along)
-        }
-        if (SpeedLimitLookup.covers(location)) {
-            lastKnownSpeedLimit = SpeedLimitLookup.limitAt(location)
-            lastSpeedLimitOkAtMs = now
-            return
-        }
-        if (now - lastSpeedLimitOkAtMs > 120_000L) lastKnownSpeedLimit = null
-        SpeedLimitLookup.lookupHere(this, location) { ok ->
-            if (!ok || isDestroyed) return@lookupHere
-            val fix = LocationHub.lastFix ?: return@lookupHere
-            if (SpeedLimitLookup.covers(fix)) {
-                lastKnownSpeedLimit = SpeedLimitLookup.limitAt(fix)
-                lastSpeedLimitOkAtMs = System.currentTimeMillis()
-            }
-            if (currentMode == ModeUi.DRIVING) updateSpeedSignDisplay(fix)
-            else if (navUiActive) updateSpeedOnly(fix)
-        }
-    }
-
     /** Green 5+ under, yellow within 5 under, red up to 5 over, blinking
      *  red + high alarm beyond; blue + low alarm when 15+ under on a 100+
      *  road; red + low alarm when stopped on a 100+ road. */
@@ -3255,61 +3197,38 @@ class MainActivity : AppCompatActivity() {
         stopBlinking()
     }
 
-    private fun updateSpeedSignDisplay(location: Location) {
-        val limit = lastKnownSpeedLimit
-        val speedKmh = (location.speed * 3.6).toInt()
-        val hasRealMovement = location.hasSpeed() && speedKmh > 3
+    /** 1.3.0: the alarm itself runs in [com.backpack.app.speed.SpeedGuard] (also
+     *  with the screen off); the screen draws its verdict. */
+    private val speedListener = com.backpack.app.speed.SpeedGuard.Listener { location, limit, state, _ ->
+        if (isDestroyed || currentMode != ModeUi.DRIVING) return@Listener
+        if (state.beep != com.backpack.app.core.SpeedAlarm.Beep.NONE) wakeDisplay()
+        drawSpeed(location, limit, state)
+    }
+
+    private fun drawSpeed(location: Location, limit: Int?, state: com.backpack.app.core.SpeedAlarm.State) {
         // Hidden only while the keyboard is open (search bar in its place).
         speedWidget.visibility = View.VISIBLE
         val background = speedSign.background?.mutate() as? GradientDrawable
-
         // Circle = your speed; sign on top = the road's limit (OSM, km/h).
+        val speedKmh = (location.speed * 3.6).toInt()
         val shown = if (useMetric) speedKmh else (location.speed * 2.23694).toInt()
         speedSignText.text = if (location.hasSpeed()) shown.toString() else "--"
         speedUnitText.text = if (useMetric) "km/h" else "mph"
-        if (limit == null) {
-            speedLimitSign.visibility = View.GONE
-            background?.setStroke(dp(4), Color.parseColor("#9E9E9E"))
-            stopBlinking()
-            return
+        if (limit == null) speedLimitSign.visibility = View.GONE
+        else {
+            speedLimitSign.visibility = View.VISIBLE
+            speedLimitSign.text = (if (useMetric) limit else Math.round(limit * 0.621371).toInt()).toString()
         }
-        speedLimitSign.visibility = View.VISIBLE
-        speedLimitSign.text = (if (useMetric) limit else Math.round(limit * 0.621371).toInt()).toString()
-        val diff = speedKmh - limit
-        val stoppedOnHighway = !hasRealMovement && limit >= 100
-        val tooSlowForHighway = hasRealMovement && limit >= 100 && diff <= -15
-        when {
-            stoppedOnHighway -> {
-                background?.setStroke(dp(4), Color.parseColor("#C0392B"))
-                stopBlinking()
-                maybeSoundAlarm(highPitch = false)
-            }
-            !hasRealMovement -> {
-                background?.setStroke(dp(4), Color.parseColor("#9E9E9E"))
-                stopBlinking()
-            }
-            tooSlowForHighway -> {
-                background?.setStroke(dp(4), Color.parseColor("#1565C0"))
-                stopBlinking()
-                maybeSoundAlarm(highPitch = false)
-            }
-            diff > 5 -> {
-                startBlinking()
-                maybeSoundAlarm(highPitch = true)
-            }
-            diff > 0 -> {
-                background?.setStroke(dp(4), Color.parseColor("#C0392B"))
-                stopBlinking()
-            }
-            diff > -5 -> {
-                background?.setStroke(dp(4), Color.parseColor("#F1C40F"))
-                stopBlinking()
-            }
-            else -> {
-                background?.setStroke(dp(4), Color.parseColor("#2E7D32"))
-                stopBlinking()
-            }
+        if (state.ring == SpeedRing.BLINK_RED) { startBlinking(); return }
+        stopBlinking()
+        val color = when (state.ring) {
+            SpeedRing.GREEN -> "#2E7D32"
+            SpeedRing.YELLOW -> "#F1C40F"
+            SpeedRing.RED, SpeedRing.STOPPED_RED, SpeedRing.BLINK_RED -> "#C0392B"
+            SpeedRing.BLUE -> "#1565C0"
+            SpeedRing.GREY -> "#9E9E9E"
         }
+        background?.setStroke(dp(4), Color.parseColor(color))
     }
 
     private val blinkRunnable = object : Runnable {
@@ -3331,21 +3250,6 @@ class MainActivity : AppCompatActivity() {
         if (!isBlinking) return
         isBlinking = false
         handler.removeCallbacks(blinkRunnable)
-    }
-
-    private fun maybeSoundAlarm(highPitch: Boolean) {
-        wakeDisplay()
-        // Settings > Speed > Alarm sound (the sign itself always shows).
-        if (!Prefs.alarmSound(this)) return
-        val now = System.currentTimeMillis()
-        if (now - lastAlarmAtMs < 3000L) return
-        lastAlarmAtMs = now
-        try {
-            if (toneGenerator == null) toneGenerator = ToneGenerator(AudioManager.STREAM_ALARM, 80)
-            toneGenerator?.startTone(if (highPitch) ToneGenerator.TONE_CDMA_HIGH_L else ToneGenerator.TONE_CDMA_LOW_L, 200)
-        } catch (e: Exception) {
-            // The visual sign is still there.
-        }
     }
 
     // ---------- Map taps ----------

@@ -20,7 +20,11 @@ object Ors {
         avoidFeatures: List<String>,
         profileParams: JSONObject?,
         extraInfo: List<String>,
-        alternatives: Boolean
+        alternatives: Boolean,
+        /** 1.3.0: instructions in the voice language (en, es, fr, it, de). */
+        language: String = "en",
+        /** 1.3.0: heights along the route (walking / cycling profile). */
+        elevation: Boolean = false
     ): JSONObject {
         val coords = JSONArray()
         for (c in coordinates) coords.put(JSONArray().put(c.lon).put(c.lat))
@@ -28,7 +32,7 @@ object Ors {
             .put("coordinates", coords)
             .put("preference", preference)
             .put("instructions", true)
-            .put("language", "en")
+            .put("language", language)
             .put("units", "m")
         if (avoidFeatures.isNotEmpty() || profileParams != null) {
             val options = JSONObject()
@@ -37,6 +41,7 @@ object Ors {
             body.put("options", options)
         }
         if (extraInfo.isNotEmpty()) body.put("extra_info", jsonArrayOf(extraInfo))
+        if (elevation) body.put("elevation", true)
         // ORS only computes alternatives between exactly two points.
         if (alternatives && coordinates.size == 2) {
             body.put(

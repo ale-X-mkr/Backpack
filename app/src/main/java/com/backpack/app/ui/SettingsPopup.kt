@@ -36,6 +36,8 @@ object SettingsPopup {
         fun onSettingsClosed()
         /** Place caches were emptied. */
         fun onPlacesCleared()
+        /** 1.3.0: Exit Backpack (stops everything, closes the map). */
+        fun onExitApp()
     }
 
     fun show(c: Context, host: Host, start: Page = Page.ROUTE) {
@@ -62,7 +64,7 @@ object SettingsPopup {
             when (page) {
                 // Saved at once: a screen rebuild while the popup is open loses nothing.
                 Page.ROUTE -> routePage(c, p, host.travelMode, { o }, { o = it; Prefs.saveRouteOptions(c, it) }, prefs)
-                Page.NAVIGATION -> navigationPage(p, prefs)
+                Page.NAVIGATION -> navigationPage(p, prefs, host)
                 Page.SPEED -> speedPage(p, prefs)
                 Page.SIGHTS -> sightsPage(p, prefs)
                 Page.PLACES -> placesPage(c, p, prefs, host)
@@ -172,7 +174,7 @@ object SettingsPopup {
         p.text("Balanced mode compares the toll with the time it saves, at the value of the current mode (urgency button).", 11f)
     }
 
-    private fun navigationPage(p: Popup, prefs: android.content.SharedPreferences) {
+    private fun navigationPage(p: Popup, prefs: android.content.SharedPreferences, host: Host) {
         p.section("3D view while navigating")
         val tilts = listOf(-1 to "Auto", 0 to "Flat", 30 to "30°", 45 to "45°", 60 to "60°")
         p.choices(tilts, { it.second }, { tilts.firstOrNull { t -> t.first == prefs.getInt(Settings.KEY_NAV_TILT, -1) } ?: tilts[0] }) {
@@ -194,6 +196,17 @@ object SettingsPopup {
             prefs.edit().putBoolean(Settings.KEY_VOICE_SHORT, it.first).apply()
         }
         p.text("Short: only the maneuver -- \"In 100 m, turn right\", \"Turn right\", \"Take the 3rd exit\" -- no street names, no \"Continue for...\". Applies from the next route.", 11f)
+        // 1.3.0: voice language (instructions, heads-ups, the guide's readings).
+        p.section("Voice language")
+        val langs = com.backpack.app.core.VoiceText.LANGUAGES
+        p.choices(langs, { it.second }, { langs.firstOrNull { l -> l.first == (prefs.getString(Settings.KEY_VOICE_LANG, null) ?: com.backpack.app.core.VoiceText.defaultFor(java.util.Locale.getDefault().language)) } ?: langs[0] }) {
+            prefs.edit().putString(Settings.KEY_VOICE_LANG, it.first).apply()
+        }
+        p.text("Instructions, sight tips and the guide's Wikipedia readings (in English when a place has no article in your language). Spanish uses a Latin American voice when your phone has one (Android Settings > Text-to-speech). Applies from the next route.", 11f)
+        // 1.3.0: Backpack keeps running with the screen off until this (or Exit in the notification).
+        p.section("Background")
+        p.text("While Backpack is open, navigation, the speed alarm (by car) and sight tips go on with the screen off or another app in front. Exit stops everything.", 11f)
+        p.bodyButton("Exit Backpack") { host.onExitApp() }
     }
 
     private fun speedPage(p: Popup, prefs: android.content.SharedPreferences) {

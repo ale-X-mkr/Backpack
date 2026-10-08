@@ -44,7 +44,9 @@ class NavigationTracker(
     private val metric: Boolean,
     /** 1.1.0 "Short" voice: only the maneuver ("Turn right", "Take the 3rd
      *  exit"), no street names, no "Continue for...". */
-    private val short: Boolean = false
+    private val short: Boolean = false,
+    /** 1.3.0: the voice language (Settings > Navigation). */
+    private val text: VoiceText = VoiceText.forLanguage("en")
 ) {
     private val line = route.line
     private val stepStart: DoubleArray = DoubleArray(route.steps.size) { line.alongAt(route.steps[it].wayStart) }
@@ -69,7 +71,7 @@ class NavigationTracker(
     fun departureSpeech(): String? = if (short) null else route.steps.firstOrNull()?.instruction
 
     /** What is said for [step]: ORS's full sentence, or the short form. */
-    private fun say(step: NavStep): String = if (short) shortPhrase(step) else step.instruction
+    private fun say(step: NavStep): String = if (short) text.short(step) else step.instruction
 
     /** How many intermediate stops have been passed (ORS ends every leg
      *  with a "goal" step; the last one is the destination). Used so a
@@ -118,7 +120,7 @@ class NavigationTracker(
                 reachedStops.add(k)
                 // Reached before the line got there: said now, its own
                 // "arrive" instruction is not repeated afterwards.
-                if (!passedAlong && (announced[k] ?: 0) and 4 == 0) stopSpeech = "You have reached your stop"
+                if (!passedAlong && (announced[k] ?: 0) and 4 == 0) stopSpeech = text.stopReached()
                 announced[k] = 7
             }
         }
@@ -163,19 +165,19 @@ class NavigationTracker(
 
             if (!short && stepAdvanced && distToNext > max(1000.0, earlyDist * 3) && flags and 1 == 0) {
                 announced[next] = flags or 1
-                speech = "Continue for ${spokenDistance(distToNext)}"
+                speech = text.continueFor(text.distance(distToNext, metric))
             } else if (distToNext <= nowDist && flags and 4 == 0) {
                 announced[next] = flags or 6
                 speech = say(step)
                 // A second maneuver right after this one: say both now.
                 val after = next + 1
                 if (after < route.steps.size && stepStart[after] - stepStart[next] < nowDist * 2) {
-                    speech += ", then " + lowerFirst(say(route.steps[after]))
+                    speech = text.then(speech, say(route.steps[after]))
                     announced[after] = (announced[after] ?: 0) or 2
                 }
             } else if (distToNext <= earlyDist && distToNext > nowDist * 1.5 && flags and 2 == 0) {
                 announced[next] = flags or 2
-                speech = "In ${spokenDistance(distToNext)}, ${lowerFirst(say(step))}"
+                speech = text.inDistance(distToNext, metric, say(step))
                 anticipation = true
             }
         }

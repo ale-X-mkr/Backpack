@@ -93,27 +93,32 @@ object Tourist {
         return (minutes * 60.0 * speed).coerceIn(100.0, 10_000.0)
     }
 
-    /** 1.2.0 read aloud: English Wikipedia title of a Wikidata item. */
-    fun enwikiTitleUrl(qid: String): String =
-        "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=sitelinks&sitefilter=enwiki&ids=" + qid
+    /** 1.2.0 read aloud (1.3.0 any language): Wikipedia title of a Wikidata item in [lang]. */
+    fun wikiTitleUrl(qid: String, lang: String = "en"): String =
+        "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=sitelinks&sitefilter=${lang}wiki&ids=" + qid
 
-    fun parseEnwikiTitle(body: String, qid: String): String? =
+    fun parseWikiTitle(body: String, qid: String, lang: String = "en"): String? =
         org.json.JSONObject(body).optJSONObject("entities")?.optJSONObject(qid)?.optJSONObject("sitelinks")
-            ?.optJSONObject("enwiki")?.optString("title", "")?.takeIf { it.isNotBlank() }
+            ?.optJSONObject("${lang}wiki")?.optString("title", "")?.takeIf { it.isNotBlank() }
 
-    /** English title from an "https://en.wikipedia.org/wiki/Title" link or an "en:Title" tag. */
-    fun englishTitle(articleUrl: String?, wikipediaTag: String?): String? {
+    fun enwikiTitleUrl(qid: String): String = wikiTitleUrl(qid, "en")
+    fun parseEnwikiTitle(body: String, qid: String): String? = parseWikiTitle(body, qid, "en")
+
+    /** Title in [lang] from a "https://xx.wikipedia.org/wiki/Title" link or an "xx:Title" tag. */
+    fun titleIn(lang: String, articleUrl: String?, wikipediaTag: String?): String? {
         articleUrl?.let { u ->
-            val m = Regex("^https?://en\\.(?:m\\.)?wikipedia\\.org/wiki/(.+)$").find(u)
+            val m = Regex("^https?://" + Regex.escape(lang) + "\\.(?:m\\.)?wikipedia\\.org/wiki/(.+)$").find(u)
             if (m != null) return java.net.URLDecoder.decode(m.groupValues[1], "UTF-8").replace('_', ' ')
         }
-        wikipediaTag?.let { t -> if (t.startsWith("en:")) return t.substring(3).trim().ifBlank { null } }
+        wikipediaTag?.let { t -> if (t.startsWith("$lang:")) return t.substring(lang.length + 1).trim().ifBlank { null } }
         return null
     }
 
-    /** Wikipedia REST summary (first paragraph, plain text) of an English article. */
-    fun summaryUrl(title: String): String =
-        "https://en.wikipedia.org/api/rest_v1/page/summary/" +
+    fun englishTitle(articleUrl: String?, wikipediaTag: String?): String? = titleIn("en", articleUrl, wikipediaTag)
+
+    /** Wikipedia REST summary (first paragraph, plain text) of an article in [lang]. */
+    fun summaryUrl(title: String, lang: String = "en"): String =
+        "https://$lang.wikipedia.org/api/rest_v1/page/summary/" +
             java.net.URLEncoder.encode(title.replace(' ', '_'), "UTF-8").replace("+", "%20")
 
     fun parseSummary(body: String): String? =

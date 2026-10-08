@@ -164,7 +164,9 @@ class RoutePlanner(context: Context) {
             req.options.avoidFeatures(req.mode, avoidTolls),
             req.options.profileParams(req.mode),
             extra,
-            alternatives
+            alternatives,
+            language = Prefs.voiceLanguage(app),
+            elevation = req.mode != TravelMode.DRIVING
         )
         val builder = Request.Builder()
             .url("$baseUrl/v2/directions/${req.options.orsProfile(req.mode)}/geojson")

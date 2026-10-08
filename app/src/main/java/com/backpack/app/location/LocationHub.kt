@@ -34,6 +34,8 @@ object LocationHub {
 
     const val LEASE_UI = "ui"
     const val LEASE_NAV = "nav"
+    /** 1.3.0: screen off / app behind, no navigation, by car: the speed alarm. */
+    const val LEASE_BG = "bg"
 
     /**
      * 1.1.0 battery: how often the GPS chip is asked. Navigation sets its
@@ -42,6 +44,7 @@ object LocationHub {
      * the map alone 5 s / 5 m. The fastest wanted pace wins.
      */
     private var navPace = 1000L
+    private var bgPace = 1000L
     private const val UI_PACE = 5000L
 
     /** Interval currently asked of the GPS (ms); 0 when off. */
@@ -53,6 +56,15 @@ object LocationHub {
         navPace = ms
         refresh(c.applicationContext)
     }
+
+    /** 1.3.0: background pace (1 s while moving by car, slow when standing still). */
+    fun setBgPace(c: Context, ms: Long) {
+        if (bgPace == ms) return
+        bgPace = ms
+        refresh(c.applicationContext)
+    }
+
+    fun holds(lease: String): Boolean = lease in leases
 
     private val leases = mutableSetOf<String>()
     private val listeners = mutableListOf<Listener>()
@@ -131,6 +143,7 @@ object LocationHub {
         }
         val wanted = listOfNotNull(
             if (LEASE_NAV in leases) navPace to 0f else null,
+            if (LEASE_BG in leases) bgPace to 0f else null,
             if (LEASE_UI in leases) UI_PACE to 5f else null
         ).minByOrNull { it.first } ?: return
         if (registered == wanted) return

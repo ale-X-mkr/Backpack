@@ -87,6 +87,7 @@ object NavigationEngine {
             com.backpack.app.core.TravelMode.DRIVING -> 1000L
         })
         planSelected = selectedIndex.coerceIn(0, plan.routes.size - 1)
+        com.backpack.app.tourist.SightHeadsUp.reset()
         setRoute(plan.routes[planSelected])
         isActive = true
         lastRerouteAtMs = System.currentTimeMillis()
@@ -121,7 +122,9 @@ object NavigationEngine {
         LocationHub.removeListener(fixListener)
         app?.let { c ->
             LocationHub.release(c, LocationHub.LEASE_NAV)
-            c.stopService(Intent(c, NavigationService::class.java))
+            // 1.3.0: while Backpack is open (not exited) the service stays for
+            // the speed alarm; it switches its notification itself (onStopped).
+            if (!AppRunning.open) c.stopService(Intent(c, NavigationService::class.java))
         }
         tracker = null
         route = null
@@ -157,7 +160,8 @@ object NavigationEngine {
         route = r
         arrived = false
         val c = app ?: return
-        tracker = NavigationTracker(r, request?.mode ?: com.backpack.app.core.TravelMode.DRIVING, Prefs.useMetric(c), Prefs.voiceShort(c))
+        tracker = NavigationTracker(r, request?.mode ?: com.backpack.app.core.TravelMode.DRIVING, Prefs.useMetric(c), Prefs.voiceShort(c),
+            com.backpack.app.core.VoiceText.forLanguage(Prefs.voiceLanguage(c)))
         lastProgress = null
     }
 
@@ -196,11 +200,13 @@ object NavigationEngine {
         p.speech?.let { speak(it) }
         pump() // a queued heads-up may fit in now
         for (l in listeners.toList()) l.onProgress(p, r)
+        // 1.3.0: sight heads-ups with the navigation itself (screen off too).
+        app?.let { com.backpack.app.tourist.SightHeadsUp.onProgress(it, p, r) }
 
         if (p.arrived) {
             // Freeze on "Arrived" for the last 4 s instead of flickering back.
             arrived = true
-            speak("You have arrived")
+            speak(words().arrived())
             for (l in listeners.toList()) l.onArrived()
             main.postDelayed({ if (isActive && route === r) stop() }, 4000L)
             return
@@ -234,7 +240,7 @@ object NavigationEngine {
             plan = newPlan
             planSelected = newPlan.primaryIndex
             setRoute(newPlan.routes[newPlan.primaryIndex])
-            speak("Route recalculated")
+            speak(words().recalculated())
             for (l in listeners.toList()) l.onRerouted(newPlan)
             LocationHub.lastGoodFix?.let { onFix(it) }
         }
@@ -252,8 +258,8 @@ object NavigationEngine {
         tts = TextToSpeech(c) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
             if (ttsReady) {
-                // Instructions come from the server in English.
-                tts?.language = Locale.ENGLISH
+                // 1.3.0: the voice language from Settings (Spanish: a Latin American voice first).
+                setVoiceLocale(Prefs.voiceLanguage(c))
                 tts?.setSpeechRate(0.85f)
                 tts?.setAudioAttributes(
                     AudioAttributes.Builder()
@@ -278,6 +284,36 @@ object NavigationEngine {
         }
     }
 
+    private fun words() = com.backpack.app.core.VoiceText.forLanguage(app?.let { Prefs.voiceLanguage(it) })
+
+    /** Language the voice is set to now. */
+    private var voiceLang: String? = null
+
+    /** Spanish: a Latin American voice when the phone has one (es-419, Mexico, US...), then any Spanish. */
+    private fun setVoiceLocale(lang: String) {
+        if (lang == voiceLang) return
+        val t = tts ?: return
+        val wanted = when (lang) {
+            "es" -> listOf(Locale("es", "419"), Locale("es", "MX"), Locale("es", "US"), Locale("es", "CO"), Locale("es", "AR"), Locale("es", "CL"))
+            "fr" -> listOf(Locale.FRANCE, Locale("fr", "CA"))
+            "it" -> listOf(Locale.ITALY)
+            "de" -> listOf(Locale.GERMANY, Locale("de", "AT"))
+            else -> listOf(Locale.US, Locale.UK)
+        }
+        val chosen = try {
+            wanted.firstOrNull { t.isLanguageAvailable(it) >= TextToSpeech.LANG_COUNTRY_AVAILABLE }
+                ?: wanted.firstOrNull { t.isLanguageAvailable(it) >= TextToSpeech.LANG_AVAILABLE }
+        } catch (e: Exception) { null }
+        try { t.language = chosen ?: Locale.ENGLISH } catch (e: Exception) { }
+        voiceLang = lang
+    }
+
+    /** Settings changed: the next words use the new language (instructions from the next route). */
+    fun languageChanged() {
+        val c = app ?: return
+        if (ttsReady) setVoiceLocale(Prefs.voiceLanguage(c))
+    }
+
     /** A navigation instruction: always first, cuts any info being said
      *  (which resumes afterwards from the start of its sentence). */
     fun speak(text: String) {
@@ -297,7 +333,9 @@ object NavigationEngine {
      * as said at once, and an utterance that never reports back is taken as
      * said after a while (the voice engine may restart).
      */
-    private fun say(text: String, kind: String) {
+    private fun say(text: String, kind: String, lang: String? = null) {
+        // A reading in another language (no article in yours): that voice for it only.
+        app?.let { c -> setVoiceLocale(lang ?: Prefs.voiceLanguage(c)) }
         main.removeCallbacks(watchdog)
         // Own id per utterance: a late report of a cut one is never taken for this one.
         val id = "$kind#${++utteranceSeq}"
@@ -374,7 +412,7 @@ object NavigationEngine {
             return
         }
         requestFocus()
-        say(s.text, UTTERANCE_INFO)
+        say(s.text, UTTERANCE_INFO, s.item.lang)
     }
 
     /** Music and podcasts duck (get quieter) while an instruction plays. */

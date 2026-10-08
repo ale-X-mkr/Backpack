@@ -115,6 +115,9 @@ object Prefs {
     fun navZoomOffset(c: Context): Double = settings(c).getInt(Settings.KEY_NAV_ZOOM, 0).coerceIn(-2, 2).toDouble()
 
     fun voiceOn(c: Context) = settings(c).getBoolean(Settings.KEY_VOICE, true)
+    /** 1.3.0: voice language; the phone's own when it is one of ours, else English. */
+    fun voiceLanguage(c: Context): String = settings(c).getString(Settings.KEY_VOICE_LANG, null)
+        ?: com.backpack.app.core.VoiceText.defaultFor(java.util.Locale.getDefault().language)
 
     fun alarmSound(c: Context) = settings(c).getBoolean(Settings.KEY_ALARM_SOUND, true)
 }
