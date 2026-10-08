@@ -293,17 +293,20 @@ object NavigationEngine {
      * as said at once, and an utterance that never reports back is taken as
      * said after a while (the voice engine may restart).
      */
-    private fun say(text: String, id: String) {
+    private fun say(text: String, kind: String) {
         main.removeCallbacks(watchdog)
-        watchdogId = null
+        // Own id per utterance: a late report of a cut one is never taken for this one.
+        val id = "$kind#${++utteranceSeq}"
+        watchdogId = id
         val r = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) ?: TextToSpeech.ERROR
         if (r == TextToSpeech.ERROR) { main.post { said(id) }; return }
-        watchdogId = id
         main.postDelayed(watchdog, 20_000L + text.length * 120L)
     }
 
+    private var utteranceSeq = 0
+    /** The utterance being said (the only one whose report counts). */
     private var watchdogId: String? = null
-    private val watchdog = Runnable { watchdogId?.let { id -> watchdogId = null; said(id) } }
+    private val watchdog = Runnable { watchdogId?.let { said(it) } }
 
     // ---------- 1.2.1 info voice: sight heads-ups and readings, queued ----------
 
@@ -324,7 +327,7 @@ object NavigationEngine {
 
     /** Stop reading: drops the reading (being said and queued); heads-ups stay. */
     fun stopReading() {
-        if (voice.dropReadings()) tts?.stop()
+        if (voice.dropReadings()) { tts?.stop(); main.removeCallbacks(watchdog); watchdogId = null }
         pump()
         if (!voice.navSpeaking && !voice.infoSpeaking) abandonFocus()
     }
@@ -333,12 +336,10 @@ object NavigationEngine {
 
     private fun said(utteranceId: String?) {
         // Only the latest utterance counts (a cut one may still report back late).
-        if (utteranceId != watchdogId && watchdogId != null && utteranceId != null) {
-            if (!(utteranceId == UTTERANCE_NAV && voice.navSpeaking) && !(utteranceId == UTTERANCE_INFO && voice.infoSpeaking)) return
-        }
+        if (utteranceId == null || utteranceId != watchdogId) return
         main.removeCallbacks(watchdog)
         watchdogId = null
-        when (utteranceId) {
+        when (utteranceId.substringBefore('#')) {
             UTTERANCE_NAV -> voice.navDone(System.currentTimeMillis())
             UTTERANCE_INFO -> voice.sentenceDone()
         }
