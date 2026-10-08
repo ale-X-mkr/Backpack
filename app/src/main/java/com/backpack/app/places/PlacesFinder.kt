@@ -38,6 +38,11 @@ class PlacesFinder(context: Context) {
         /** 1.1.1: one request for all services of the squares (or one filter). */
         var query: (List<Tile>) -> String = { tiles -> Places.tileQuery(overpassFilter, tiles) }
         var maxShown: Int = MAX_SHOWN
+        /** 1.2.1: services kept per service ("svc_<NAME>" caches): the ones
+         *  wanted now (ticked) are fetched first... */
+        var services: (() -> List<String>)? = null
+        /** ...and these (the rest of their groups) later, in the background. */
+        var backgroundServices: (() -> List<String>)? = null
     }
 
     fun interface ResultCallback {
@@ -95,6 +100,7 @@ class PlacesFinder(context: Context) {
     /** [rank]: null = left out, else the place (maybe with its offset) and the sort key (smaller first). */
     private fun search(category: Category, tiles: List<Tile>, center: LatLon, onSwitch: () -> Unit, callback: ResultCallback, rank: (PoiPlace) -> Pair<PoiPlace, Double>?) {
         val gen = ++generation
+        category.services?.invoke()?.let { names -> searchServices(gen, category, names, tiles, center, onSwitch, callback, rank); return }
         val cache = TileCache.of(app, category.layer, 3L * 24 * 3600_000L)
         // Cache files are read and written off the screen's thread.
         io.execute {
@@ -104,14 +110,107 @@ class PlacesFinder(context: Context) {
                 val list = cache.get(t)?.let { try { Places.fromJson(it) } catch (e: Exception) { null } }
                 if (list == null) missing.add(t) else found.addAll(list)
             }
-            main.post { if (gen == generation) fetchMissing(gen, category, cache, center, found, missing, onSwitch, callback, rank) }
+            main.post {
+                if (gen == generation) fetchMissing(gen, category, if (missing.isEmpty()) null else category.query(missing),
+                    { parsed -> for ((t, list) in Places.byTile(parsed, missing)) cache.put(t, Places.toJson(list)) },
+                    center, found, onSwitch, callback, rank)
+            }
         }
     }
 
+    // ---------- 1.2.1 services: per service, ticked first, the rest in the background ----------
+
+    private fun serviceCache(name: String) = TileCache.of(app, "svc_$name", 3L * 24 * 3600_000L)
+
+    /** (squares, services) still missing for [names] among [tiles]; reads what is on the phone into [found]. */
+    private fun missingServices(names: List<String>, tiles: List<Tile>, found: MutableMap<String, PoiPlace>?): Pair<List<Tile>, Set<String>> {
+        val mt = ArrayList<Tile>()
+        val mn = LinkedHashSet<String>()
+        for (t in tiles) {
+            var miss = false
+            for (n in names) {
+                val list = serviceCache(n).get(t)?.let { try { Places.fromJson(it) } catch (e: Exception) { null } }
+                if (list == null) { miss = true; mn.add(n) } else found?.let { f -> for (p in list) f.putIfAbsent(p.key, p) }
+            }
+            if (miss) mt.add(t)
+        }
+        return mt to mn
+    }
+
+    /** Stores an answer per service and square (empty lists too: "none here"). */
+    private fun storeServices(parsed: List<PoiPlace>, tiles: List<Tile>, names: Collection<String>) {
+        for (t in tiles) for (n in names) serviceCache(n).put(t, Places.toJson(Places.ofService(parsed, n, t)))
+    }
+
+    private fun searchServices(
+        gen: Int, category: Category, names: List<String>, tiles: List<Tile>, center: LatLon,
+        onSwitch: () -> Unit, callback: ResultCallback, rank: (PoiPlace) -> Pair<PoiPlace, Double>?
+    ) {
+        io.execute {
+            val found = LinkedHashMap<String, PoiPlace>()
+            val (mt, mn) = missingServices(names, tiles, found)
+            val query = if (mt.isEmpty()) null else Places.servicesQuery(mt, names = mn)
+            main.post {
+                if (gen != generation) return@post
+                fetchMissing(gen, category, query, { parsed -> storeServices(parsed, mt, mn) },
+                    center, found.values.toList(), onSwitch, callback, rank,
+                    afterSuccess = { fillInBackground(category, tiles) })
+            }
+        }
+    }
+
+    /** The other services of the groups ticked, for the same squares: later,
+     *  when the servers are idle, so ticking one more is instant there. */
+    private fun fillInBackground(category: Category, tiles: List<Tile>) {
+        val names = category.backgroundServices?.invoke().orEmpty()
+        if (names.isEmpty() || backgroundBusy) return
+        backgroundBusy = true
+        io.execute {
+            val (mt, mn) = missingServices(names, tiles.take(MAX_BACKGROUND_TILES), null)
+            if (mt.isEmpty()) { backgroundBusy = false; return@execute }
+            main.post {
+                OverpassClient.query(app, Places.servicesQuery(mt, names = mn), singleRound = true, background = true) { body, _ ->
+                    if (body == null) { backgroundBusy = false; return@query }
+                    io.execute {
+                        try { Places.parseOverpass(body).let { storeServices(it, mt, mn) } } catch (e: Exception) { }
+                        backgroundBusy = false
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 1.2.1: the services you ticked along the whole route, fetched ahead in
+     * the background (nearest squares first, 25 per request, only when the
+     * servers are idle), so they are on the phone when you get there. A new
+     * route replaces the old prefetch.
+     */
+    fun prefetchAlong(category: Category, line: List<LatLon>, radiusM: Double) {
+        val names = category.services?.invoke().orEmpty()
+        if (names.isEmpty() || line.size < 2) return
+        val gen = ++prefetchGen
+        io.execute {
+            val tiles = Tiles.alongLinesOrdered(listOf(line), radiusM).take(MAX_PREFETCH_TILES).map { it.first }
+            val (mt, mn) = missingServices(names, tiles, null)
+            if (mt.isEmpty()) return@execute
+            for (chunk in mt.chunked(25)) {
+                main.post {
+                    OverpassClient.query(app, Places.servicesQuery(chunk, names = mn), singleRound = true, background = true,
+                        isStale = { gen != prefetchGen }) { body, _ ->
+                        if (body != null) io.execute { try { storeServices(Places.parseOverpass(body), chunk, mn) } catch (e: Exception) { } }
+                    }
+                }
+            }
+        }
+    }
+
+    fun cancelPrefetch() { prefetchGen++ }
+
     private fun fetchMissing(
-        gen: Int, category: Category, cache: TileCache, center: LatLon,
-        found: List<PoiPlace>, missing: List<Tile>, onSwitch: () -> Unit, callback: ResultCallback,
-        rank: (PoiPlace) -> Pair<PoiPlace, Double>?
+        gen: Int, category: Category, query: String?, store: (List<PoiPlace>) -> Unit, center: LatLon,
+        found: List<PoiPlace>, onSwitch: () -> Unit, callback: ResultCallback,
+        rank: (PoiPlace) -> Pair<PoiPlace, Double>?, afterSuccess: () -> Unit = {}
     ) {
         fun finish(extra: List<PoiPlace>, error: String?, note: String?, serverFailed: Boolean) {
             if (gen != generation) return
@@ -129,15 +228,15 @@ class PlacesFinder(context: Context) {
                 }
             }
         }
-        if (missing.isEmpty()) { finish(emptyList(), null, null, false); return }
-        val query = category.query(missing)
+        if (query == null) { finish(emptyList(), null, null, false); afterSuccess(); return }
         OverpassClient.query(app, query, onSwitch = { if (gen == generation) onSwitch() }, isStale = { gen != generation }) { body, failure ->
             if (body != null) {
                 io.execute {
                     // Stored even if a newer search came meanwhile: nothing wasted.
                     val parsed = try { Places.parseOverpass(body) } catch (e: Exception) { null }
-                    if (parsed != null) for ((t, list) in Places.byTile(parsed, missing)) cache.put(t, Places.toJson(list))
+                    if (parsed != null) store(parsed)
                     main.post {
+                        if (parsed != null) afterSuccess()
                         if (gen != generation) return@post
                         if (parsed != null) finish(parsed, null, null, false)
                         else fallback(gen, category, center, OverpassClient.Failure.BAD_ANSWER.message, ::finish)
@@ -197,6 +296,12 @@ class PlacesFinder(context: Context) {
         const val MAX_SHOWN = 60
         private const val MAX_ROUTE_TILES = 60
         private const val MAX_AREA_TILES = 36
+        /** 1.2.1: squares filled in the background per search (the nearest). */
+        private const val MAX_BACKGROUND_TILES = 25
+        @Volatile private var backgroundBusy = false
+        @Volatile private var prefetchGen = 0
+        /** Whole route: up to ~150 squares (a long trip in a narrow corridor). */
+        private const val MAX_PREFETCH_TILES = 150
         private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
         @Volatile private var orsFailedAtMs = 0L
     }

@@ -2718,6 +2718,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         refreshPoiPins()
+        // 1.2.1: a newly ticked service is fetched (instant when on the phone).
         if (svcSlot.key == null) queryPois(force = true) else queryPois()
     }
 
@@ -2810,8 +2811,20 @@ class MainActivity : AppCompatActivity() {
         PlacesFinder.Category("services2", "", com.backpack.app.core.Places.SERVICES.flatMap { it.orsIds.entries }.associate { it.key to it.value }).apply {
             query = { tiles -> com.backpack.app.core.Places.servicesQuery(tiles) }
             maxShown = 600
+            // 1.2.1: only the services ticked (faster answers); the rest of
+            // their groups follows in the background for the same squares.
+            services = { activeServices().map { it.name } }
+            backgroundServices = {
+                val active = activeServices()
+                PoiCategory.values().filter { c ->
+                    c != PoiCategory.NONE && c !in active && active.any { it.essential == c.essential }
+                }.map { it.name }
+            }
         }
     }
+
+    /** Route whose services were fetched ahead (whole route, background). */
+    private var prefetchedRouteKey: String? = null
 
     /** Longest there-and-back detour for places along a route (minutes). */
     private fun detourMinutes(emergencyLayer: Boolean = false): Int {
@@ -2881,7 +2894,8 @@ class MainActivity : AppCompatActivity() {
             val radius = active.maxOf { corridorM(it == PoiCategory.EMERGENCY) }
             val ahead = minOf(Tourist.searchAheadM(currentMode.mode), 60_000.0)
             val from = if (navUiActive) NavigationEngine.lastProgress?.alongM ?: 0.0 else 0.0
-            val key = "R/${System.identityHashCode(route)}/${radius.toInt()}/${(from / (ahead * 0.4)).toInt()}"
+            val names = active.joinToString(",") { it.name }
+            val key = "R/${System.identityHashCode(route)}/${radius.toInt()}/${(from / (ahead * 0.4)).toInt()}/$names"
             if (!force && key == slot.key) return
             if (!force && now < slot.retryAtMs) return
             val sayKey = "${TripState.destination}/${active.joinToString { it.name }}/${radius.toInt()}"
@@ -2897,6 +2911,13 @@ class MainActivity : AppCompatActivity() {
                 onSwitch = { if (gen == slot.gen && force) onPlacesServerSwitch() }
             ) { results, error, note, serverFailed ->
                 onPoiResults(slot, gen, results, error, note, serverFailed, announce, "along your route")
+                // 1.2.1: then the rest of the route, in the background.
+                val pk = "${System.identityHashCode(route)}/${radius.toInt()}/$names"
+                if (results != null && gen == slot.gen && pk != prefetchedRouteKey) {
+                    prefetchedRouteKey = pk
+                    val rest = com.backpack.app.core.SpeedLimits.section(route.line, from, route.line.length)
+                    slot.finder.prefetchAlong(servicesCategory, rest, radius)
+                }
             }
             return
         }
@@ -2905,7 +2926,7 @@ class MainActivity : AppCompatActivity() {
         val aroundMe = urgencyMode == UrgencyMode.EMERGENCY
         val origin = (if (aroundMe) currentPosition() else null) ?: cameraCenter() ?: return
         val minutes = sightsReachMinutes()
-        val key = "A/${currentMode.name}/$minutes/$aroundMe"
+        val key = "A/${currentMode.name}/$minutes/$aroundMe/${active.joinToString(",") { it.name }}"
         val step = maxOf(if (aroundMe) 2000.0 else 3000.0, 0.25 * minOf(Reach.radiusM(currentMode.mode, minutes), Reach.MAX_SEARCH_M))
         val moved = slot.origin?.let { Geo.distance(it, origin) >= step } ?: true
         if (!force && key == slot.key && !moved) return
@@ -3349,6 +3370,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun clearRoute() {
         planner.cancel()
+        svcSlot.finder.cancelPrefetch()
+        prefetchedRouteKey = null
         TripState.pendingLink = null
         TripState.pendingLinkMode = null
         TripState.clear()

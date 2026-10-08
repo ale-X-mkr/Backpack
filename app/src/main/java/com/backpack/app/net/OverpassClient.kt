@@ -28,6 +28,10 @@ import java.util.concurrent.TimeUnit
  *   slot is free. A server with no free slot for more than a few seconds is
  *   skipped in the first round instead of making us wait for a refusal.
  *   The answer is remembered for 30 s (cheap: a tiny text page).
+ * - 1.2.1: a server with your own key (Settings > Servers) goes first; if
+ *   the first server has not answered within [HEDGE_AFTER_MS], the next one
+ *   is asked too and the first answer wins; background fills (services not
+ *   ticked yet) run only when nothing else waits, one at a time.
  * Callbacks: [onSwitch] and [done] run on the main thread.
  */
 object OverpassClient {
@@ -59,7 +63,9 @@ object OverpassClient {
     fun servers(c: Context): List<String> {
         val prefs = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
         val own = prefs.getString(Settings.KEY_OVERPASS_URL, "")?.trim().orEmpty()
-        return (listOf(own) + listOf(MAIN, PRIVATE_COFFEE)).filter { it.startsWith("https://") || it.startsWith("http://") }.distinct()
+        val keyed = com.backpack.app.core.OverpassProviders.byId(prefs.getString(Settings.KEY_OVERPASS_PROVIDER, null))
+            ?.url(prefs.getString(Settings.KEY_OVERPASS_KEY, "").orEmpty()).orEmpty()
+        return (listOf(keyed, own) + listOf(MAIN, PRIVATE_COFFEE)).filter { it.startsWith("https://") || it.startsWith("http://") }.distinct()
     }
 
     /**
@@ -77,6 +83,8 @@ object OverpassClient {
         priority: Boolean = false,
         /** Replaced search: skipped when its turn comes (answered with nothing). */
         isStale: (() -> Boolean)? = null,
+        /** 1.2.1: filling the cache ahead of need: only when nothing else waits. */
+        background: Boolean = false,
         done: (body: String?, failure: Failure?) -> Unit
     ) {
         val list = servers(c.applicationContext)
@@ -84,15 +92,35 @@ object OverpassClient {
         // Speed limits (quick) run on their own; every other query waits its
         // turn, so places, sights and emergency layers never hold more than
         // the 2 slots a user gets on the public servers (1.0.9).
-        if (quick) { attempt(list, 0, 0, rounds, query, true, null, onSwitch, done); return }
+        if (quick) { attempt(list, 0, 0, rounds, query, true, null, onSwitch, null, done); return }
         val job = HeavyJob(isStale, { done(null, null) }) { finished ->
-            attempt(list, 0, 0, rounds, query, false, null, onSwitch) { body, failure ->
-                done(body, failure)
-                finished()
+            val race = Race()
+            val once: (String?, Failure?) -> Unit = { body, failure ->
+                if (!race.finished) { race.finished = true; done(body, failure); finished() }
             }
+            attempt(list, 0, 0, rounds, query, false, null, onSwitch, race, once)
+            // 1.2.1: the first server is slow: ask the next one too, first answer wins.
+            if (!background && list.size > 1) main.postDelayed({
+                if (!race.finished && !race.advanced && isStale?.invoke() != true) {
+                    send(list[1], query, false, { body, _ -> if (body != null) once(body, null) }) { _ -> /* the main try goes on */ }
+                }
+            }, HEDGE_AFTER_MS)
         }
-        main.post { if (priority) heavyQueue.addFirst(job) else heavyQueue.addLast(job); runNextHeavy() }
+        main.post {
+            when {
+                background -> backgroundQueue.addLast(job)
+                priority -> heavyQueue.addFirst(job)
+                else -> heavyQueue.addLast(job)
+            }
+            runNextHeavy()
+        }
     }
+
+    /** One query's state: answered already; moved past the first server. */
+    private class Race { var finished = false; var advanced = false }
+    private const val HEDGE_AFTER_MS = 4000L
+    /** 1.2.1: background fills, after every waiting query. */
+    private val backgroundQueue = ArrayDeque<HeavyJob>()
 
     private class HeavyJob(val isStale: (() -> Boolean)?, val skip: () -> Unit, val run: (finished: () -> Unit) -> Unit)
 
@@ -105,7 +133,10 @@ object OverpassClient {
     /** Main thread only. A watchdog frees a slot if its query never reports back (3 min). */
     private fun runNextHeavy() {
         while (heavyRunning.size < HEAVY_SLOTS) {
-            val job = heavyQueue.removeFirstOrNull() ?: return
+            // Background fills only on an idle client, one at a time (a slot stays free).
+            val job = heavyQueue.removeFirstOrNull()
+                ?: (if (heavyRunning.isEmpty()) backgroundQueue.removeFirstOrNull() else null)
+                ?: return
             if (job.isStale?.invoke() == true) { job.skip(); continue }
             val run = ++heavyRun
             heavyRunning.add(run)
@@ -117,19 +148,22 @@ object OverpassClient {
 
     private fun attempt(
         list: List<String>, index: Int, round: Int, maxRounds: Int, query: String, quick: Boolean,
-        lastFailure: Failure?, onSwitch: (() -> Unit)?, done: (String?, Failure?) -> Unit
+        lastFailure: Failure?, onSwitch: (() -> Unit)?, race: Race?, done: (String?, Failure?) -> Unit
     ) {
+        if (race?.finished == true) return // the other server answered first
         if (index >= list.size) {
             if (round + 1 < maxRounds) {
-                main.postDelayed({ attempt(list, 0, round + 1, maxRounds, query, quick, lastFailure, onSwitch, done) }, 3000L)
+                main.postDelayed({ attempt(list, 0, round + 1, maxRounds, query, quick, lastFailure, onSwitch, race, done) }, 3000L)
             } else {
                 main.post { done(null, lastFailure ?: Failure.OFFLINE) }
             }
             return
         }
         fun next(f: Failure) {
+            race?.advanced = true
+            if (race?.finished == true) return
             if (index + 1 < list.size && onSwitch != null) main.post { onSwitch() }
-            attempt(list, index + 1, round, maxRounds, query, quick, f, onSwitch, done)
+            attempt(list, index + 1, round, maxRounds, query, quick, f, onSwitch, race, done)
         }
         // First round: ask the status page first. Last round: just try.
         if (round + 1 < maxRounds || quick) {

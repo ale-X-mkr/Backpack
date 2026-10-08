@@ -77,12 +77,18 @@ object Places {
 
     /** 1.1.1: every service of each square in one request, each with its own
      *  cap (so restaurants can't crowd out toilets or pharmacies). */
-    fun servicesQuery(tiles: List<Tile>, perService: Int = PER_SERVICE): String {
+    fun servicesQuery(tiles: List<Tile>, perService: Int = PER_SERVICE, names: Collection<String>? = null): String {
+        // 1.2.1: only the services asked for ([names]; null = all).
+        val defs = if (names == null) SERVICES else SERVICES.filter { it.name in names }
         val parts = tiles.joinToString("\n") { t ->
-            SERVICES.joinToString("\n") { "nwr${t.bbox}${it.filter};out center tags $perService;" }
+            defs.joinToString("\n") { "nwr${t.bbox}${it.filter};out center tags $perService;" }
         }
         return "[out:json][timeout:25];\n$parts"
     }
+
+    /** 1.2.1: per service and square, the places of [service] among [places] (stored per service). */
+    fun ofService(places: List<PoiPlace>, service: String, tile: Tile): List<PoiPlace> =
+        places.filter { service in it.services && Tiles.of(it.point) == tile }
 
     /** Places per service and square at most. */
     const val PER_SERVICE = 40

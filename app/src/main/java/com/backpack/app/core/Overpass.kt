@@ -37,3 +37,27 @@ object OverpassCheck {
     fun statusUrl(interpreter: String): String? =
         if (interpreter.endsWith("/interpreter")) interpreter.removeSuffix("interpreter") + "status" else null
 }
+
+/**
+ * 1.2.1: faster Overpass servers that need your own key (Settings >
+ * Servers), tried before the free ones. The key is part of the address.
+ * Russian services (e.g. NextGIS, VK) are left out on purpose.
+ */
+object OverpassProviders {
+    class Provider(val id: String, val label: String, val note: String, private val template: String) {
+        fun url(key: String): String? {
+            val k = key.trim()
+            if (k.isEmpty() || !k.matches(Regex("[A-Za-z0-9._~-]+"))) return null
+            return template.replace("{key}", k)
+        }
+    }
+
+    val ALL = listOf(
+        Provider("fairwaymapper", "FairwayMapper", "free for active OpenStreetMap contributors", "https://api.fairwaymapper.com/k/{key}/api/interpreter"),
+        Provider("geofabrik", "Geofabrik", "paid", "https://overpass.geofabrik.de/{key}/api/interpreter"),
+        Provider("tracestrack", "Tracestrack", "paid", "https://api.tracestrack.com/overpass/{key}/interpreter")
+    )
+
+    fun byId(id: String?): Provider? = ALL.firstOrNull { it.id == id }
+}
+

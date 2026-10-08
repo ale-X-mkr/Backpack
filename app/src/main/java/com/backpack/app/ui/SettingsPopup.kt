@@ -320,8 +320,26 @@ object SettingsPopup {
             prefs.edit().putString(Settings.KEY_ORS_KEY, it).apply()
         }
         p.section("Places and speed limits (Overpass)")
-        urlField(p, prefs, "Own Overpass server, tried first (optional)", Settings.KEY_OVERPASS_URL, "https://.../api/interpreter")
-        p.text("Without it: overpass-api.de, then overpass.private.coffee. Each server's free capacity is checked before asking.", 11f)
+        // 1.2.1: a faster server with your own key, tried before everything else.
+        val none = "none" to "None"
+        val providers = listOf(none) + com.backpack.app.core.OverpassProviders.ALL.map { it.id to it.label }
+        p.text("Faster server with your own key (optional)", 12f)
+        p.choices(providers, { it.second }, {
+            val cur = prefs.getString(Settings.KEY_OVERPASS_PROVIDER, null)
+            providers.firstOrNull { it.first == cur } ?: none
+        }) { prefs.edit().putString(Settings.KEY_OVERPASS_PROVIDER, it.first).apply() }
+        var keyField: android.widget.EditText? = null
+        keyField = p.field("Your key for that server", prefs.getString(Settings.KEY_OVERPASS_KEY, "").orEmpty(),
+            "key", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) { text ->
+            if (text.isEmpty() || com.backpack.app.core.OverpassProviders.ALL.first().url(text) != null) {
+                prefs.edit().putString(Settings.KEY_OVERPASS_KEY, text.trim()).apply()
+                keyField?.error = null
+            } else keyField?.error = "Letters, digits, . _ ~ - only"
+        }
+        p.text(com.backpack.app.core.OverpassProviders.ALL.joinToString(" \u00b7 ") { "${it.label}: ${it.note}" } +
+            ". The key stays on this phone and only goes to that server.", 11f)
+        urlField(p, prefs, "Own Overpass server (optional, tried next)", Settings.KEY_OVERPASS_URL, "https://.../api/interpreter")
+        p.text("Then the free ones: overpass-api.de, then overpass.private.coffee. Each server's free capacity is checked before asking; a server slow to answer gets help from the next one.", 11f)
         p.section("Privacy")
         p.text("No account, no tracking. Routing gets the trip's points; places servers only the ~5 km squares looked at; " +
             "speed limits the road ahead. Search positions are rounded to ~1 km. Nothing about your trips is stored, except the places cache (Places page).", 11f)
