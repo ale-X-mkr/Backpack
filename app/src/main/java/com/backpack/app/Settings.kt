@@ -62,6 +62,8 @@ object Settings {
     /** 1.3.0: record the track while navigating (on this phone only). */
     const val KEY_RECORD_TRIPS = "record_trips"
     const val KEY_ALARM_SOUND = "speed_alarm_sound"
+    /** 1.4.0: fixed speed cameras (sound only), off by default. */
+    const val KEY_CAMERAS = "speed_cameras"
 
     const val DEFAULT_SIGHTS_MAX_PCT = 20
     const val DISPLAY_MODE_DAY = "day"

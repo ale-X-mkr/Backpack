@@ -56,6 +56,7 @@ object SpeedGuard {
         stopContinuous()
         try { buzzTrack?.release() } catch (e: Exception) { }
         buzzTrack = null
+        SpeedCameraWatch.release()
     }
 
     /** Car mode (the screen saves it on every change). */
@@ -64,10 +65,21 @@ object SpeedGuard {
 
     private fun onFix(location: Location) {
         val c = app ?: return
-        if (!driving(c)) return
+        if (!driving(c)) { stopContinuous(); SpeedCameraWatch.reset(); return }
         updateLimit(c, location)
         report(c, location)
+        // 1.4.0: fixed speed cameras (sound only, off by default).
+        val route = routeNow()
+        val along = route?.let { alongOn(it, location) }
+        SpeedCameraWatch.onFix(c, location, limit, route, along)
     }
+
+    private fun routeNow() = (if (NavigationEngine.isActive) NavigationEngine.route else null)
+        ?: TripState.plan?.routes?.getOrNull(TripState.selectedIndex)
+
+    private fun alongOn(route: com.backpack.app.core.RouteResult, location: Location): Double? =
+        (if (NavigationEngine.isActive && route === NavigationEngine.route) NavigationEngine.lastProgress?.alongM else null)
+            ?: route.line.snap(LatLon(location.latitude, location.longitude))?.alongM
 
     private fun report(c: Context, location: Location) {
         val kmh = (location.speed * 3.6).toInt()
@@ -163,12 +175,9 @@ object SpeedGuard {
     /** The route being followed (or chosen): its roads ahead are loaded in one go. */
     private fun updateLimit(c: Context, location: Location) {
         val now = System.currentTimeMillis()
-        val route = (if (NavigationEngine.isActive) NavigationEngine.route else null)
-            ?: TripState.plan?.routes?.getOrNull(TripState.selectedIndex)
+        val route = routeNow()
         if (route != null && route.points.size >= 2) {
-            val along = (if (NavigationEngine.isActive) NavigationEngine.lastProgress?.alongM else null)
-                ?: route.line.snap(LatLon(location.latitude, location.longitude))?.alongM ?: 0.0
-            SpeedLimitLookup.prepare(c, route, along)
+            SpeedLimitLookup.prepare(c, route, alongOn(route, location) ?: 0.0)
         }
         if (SpeedLimitLookup.covers(location)) {
             limit = SpeedLimitLookup.limitAt(location)

@@ -140,4 +140,5 @@ object Prefs {
         ?: com.backpack.app.core.VoiceText.defaultFor(java.util.Locale.getDefault().language)
 
     fun alarmSound(c: Context) = settings(c).getBoolean(Settings.KEY_ALARM_SOUND, true)
+    fun cameras(c: Context) = settings(c).getBoolean(Settings.KEY_CAMERAS, false)
 }

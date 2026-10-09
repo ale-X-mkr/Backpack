@@ -57,6 +57,8 @@ class VoiceText private constructor(val lang: String) {
         (if (lang == "de") second else lowerFirst(second))
 
     fun stopReached() = pick("You have reached your stop", "Llegó a su parada", "Vous êtes arrivé à votre étape", "Hai raggiunto la tappa", "Sie haben Ihren Zwischenstopp erreicht")
+    /** 1.4.0: France: a speed-check zone ahead (never the camera's spot). */
+    fun dangerZone() = pick("Danger zone", "Zona de peligro", "Zone de danger", "Zona di pericolo", "Gefahrenzone")
     fun arrived() = pick("You have arrived", "Llegó a su destino", "Vous êtes arrivé à destination", "Sei arrivato a destinazione", "Sie haben Ihr Ziel erreicht")
     fun recalculated() = pick("Route recalculated", "Ruta recalculada", "Itinéraire recalculé", "Percorso ricalcolato", "Route neu berechnet")
 

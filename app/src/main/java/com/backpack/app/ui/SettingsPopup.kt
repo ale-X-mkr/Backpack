@@ -227,9 +227,18 @@ object SettingsPopup {
         p.toggle("Alarm sound", { prefs.getBoolean(Settings.KEY_ALARM_SOUND, true) }) {
             prefs.edit().putBoolean(Settings.KEY_ALARM_SOUND, it).apply()
         }
-        p.text("Ring around your speed: green 5+ under the limit, yellow within 5 under, red up to 5 over, blinking red with a high beep beyond. " +
-            "On roads of 100+: blue with a low beep when 15+ under, red with a low beep when stopped. " +
+        p.text("The ring fills with your speed: blue, green (top = the limit's middle range), yellow near the limit, red over it. " +
+            "5+ over: blinking with a high beep; 20+ over: the beep without pause. " +
+            "On roads of 100+: blue with a low buzz below 70% of the limit, red with a low buzz when stopped. " +
             "Limits come from OpenStreetMap, loaded for the road ahead of your route.", 11f)
+        // 1.4.0: fixed speed cameras, off by default.
+        p.section("Speed cameras")
+        p.toggle("Fixed speed cameras (sound)", { prefs.getBoolean(Settings.KEY_CAMERAS, false) }) {
+            prefs.edit().putBoolean(Settings.KEY_CAMERAS, it).apply()
+        }
+        p.text("From OpenStreetMap, where mapped (not all are). A sonar blip that speeds up as you get closer. " +
+            "France: only \"Danger zone\" for the stretch, as the law requires. Germany, Switzerland, Cyprus, North Macedonia: silent (warnings are illegal there). " +
+            "Mobile checks and traffic are not covered.", 11f)
     }
 
     /**
