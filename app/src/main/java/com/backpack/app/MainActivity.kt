@@ -432,6 +432,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::urgencyButton.isInitialized) urgencyButton.removeCallbacks(urgencyApply)
         // Leaving the app (not a rebuild): a place still waiting for GPS is dropped,
         // it must not come back unasked at the next start.
         if (isFinishing) {
@@ -3321,6 +3322,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** The searches for the urgency mode chosen (0.6 s after the last tap). */
+    private val urgencyApply = Runnable {
+        touristModeChanged()
+        // 1.0.9: Emergency adds the emergency places on its own (your
+        // category stays); Weekend / Work change the detour allowed.
+        refreshServicesButton()
+        val start = resolveStartPoint()
+        val end = TripState.destination
+        if (start != null && end != null && currentMode == ModeUi.DRIVING && currentPreference == PreferenceUi.RECOMMENDED) {
+            showMessage("Finding route...")
+            requestBestRoute(start, end) // the new plan searches its places
+        } else {
+            queryPois(force = true)
+        }
+    }
+
     private fun setupUrgencyButton() {
         urgencyButton.setImageResource(urgencyMode.iconRes)
         urgencyButton.setOnClickListener {
@@ -3338,19 +3355,9 @@ class MainActivity : AppCompatActivity() {
                 }
             )
             saveToggleState()
-            touristModeChanged()
-            // 1.0.9: Emergency adds the emergency places on its own (your
-            // category stays); Weekend / Work change the detour allowed.
-                refreshServicesButton()
-
-            val start = resolveStartPoint()
-            val end = TripState.destination
-            if (start != null && end != null && currentMode == ModeUi.DRIVING && currentPreference == PreferenceUi.RECOMMENDED) {
-                showMessage("Finding route...")
-                requestBestRoute(start, end) // the new plan searches its places
-            } else {
-                queryPois(force = true)
-            }
+            // 1.4.0: tapping through the modes searches only for the one you stop on.
+            urgencyButton.removeCallbacks(urgencyApply)
+            urgencyButton.postDelayed(urgencyApply, 600L)
         }
         // Hold: list of well-known places (Weekend).
         urgencyButton.setOnLongClickListener {

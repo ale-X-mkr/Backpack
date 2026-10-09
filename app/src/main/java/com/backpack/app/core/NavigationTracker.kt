@@ -67,11 +67,16 @@ class NavigationTracker(
     var lastAlongM = 0.0
         private set
 
+    /** 1.4.0: during a phone call the short form is used, whatever the setting. */
+    var callShort: Boolean = false
+
+    private val isShort: Boolean get() = short || callShort
+
     /** Departure sentence, e.g. "Head north on Rue X". */
-    fun departureSpeech(): String? = if (short) null else route.steps.firstOrNull()?.instruction
+    fun departureSpeech(): String? = if (isShort) null else route.steps.firstOrNull()?.instruction
 
     /** What is said for [step]: ORS's full sentence, or the short form. */
-    private fun say(step: NavStep): String = if (short) text.short(step) else step.instruction
+    private fun say(step: NavStep): String = if (isShort) text.short(step) else step.instruction
 
     /** How many intermediate stops have been passed (ORS ends every leg
      *  with a "goal" step; the last one is the destination). Used so a
@@ -167,7 +172,7 @@ class NavigationTracker(
             val flags = announced[next] ?: 0
             val step = route.steps[next]
 
-            if (!short && stepAdvanced && distToNext > max(1000.0, earlyDist * 3) && flags and 1 == 0) {
+            if (!isShort && stepAdvanced && distToNext > max(1000.0, earlyDist * 3) && flags and 1 == 0) {
                 announced[next] = flags or 1
                 speech = text.continueFor(text.distance(distToNext, metric))
             } else if (distToNext <= nowDist && flags and 4 == 0) {

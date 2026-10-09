@@ -209,6 +209,7 @@ object NavigationEngine {
             if (location.hasAccuracy()) location.accuracy else null,
             location.time
         )
+        t.callShort = inCall()
         val p = t.update(fix)
         lastProgress = p
         lastSpeedMps = fix.speedMps?.toDouble()
@@ -355,7 +356,9 @@ object NavigationEngine {
         // Own id per utterance: a late report of a cut one is never taken for this one.
         val id = "$kind#${++utteranceSeq}"
         watchdogId = id
-        val r = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) ?: TextToSpeech.ERROR
+        // 1.4.0: during a phone call, 20% quieter.
+        val params = if (inCall()) android.os.Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 0.8f) } else null
+        val r = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, id) ?: TextToSpeech.ERROR
         if (r == TextToSpeech.ERROR) { main.post { said(id) }; return }
         main.postDelayed(watchdog, 20_000L + text.length * 120L)
     }
@@ -419,7 +422,8 @@ object NavigationEngine {
         if (voiceOn && !ttsReady) return // waits for the voice to start
         val s = voice.next(System.currentTimeMillis(), secondsToNext())
         if (s !is com.backpack.app.core.VoiceQueue.Say.Sentence) return
-        if (!voiceOn) {
+        // 1.4.0: in a phone call only instructions are said; a sight tip shows its message silently.
+        if (!voiceOn || inCall()) {
             // Readings need the voice; a heads-up still shows its message for a while.
             if (s.item.kind == com.backpack.app.core.VoiceQueue.Kind.READING) { voice.dropReadings(); pump(); return }
             main.removeCallbacks(silentDone)
@@ -428,6 +432,13 @@ object NavigationEngine {
         }
         requestFocus()
         say(s.text, UTTERANCE_INFO, s.item.lang)
+    }
+
+    /** 1.4.0: a phone (or VoIP) call is going on. No permission needed. */
+    fun inCall(): Boolean {
+        val c = app ?: return false
+        val am = c.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        return am.mode == AudioManager.MODE_IN_CALL || am.mode == AudioManager.MODE_IN_COMMUNICATION
     }
 
     /** Music and podcasts duck (get quieter) while an instruction plays. */
