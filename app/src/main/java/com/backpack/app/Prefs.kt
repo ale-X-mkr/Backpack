@@ -140,5 +140,6 @@ object Prefs {
         ?: com.backpack.app.core.VoiceText.defaultFor(java.util.Locale.getDefault().language)
 
     fun alarmSound(c: Context) = settings(c).getBoolean(Settings.KEY_ALARM_SOUND, true)
+    fun balanceExtra(c: Context): Int = settings(c).getInt(Settings.KEY_BALANCE_EXTRA, Settings.DEFAULT_BALANCE_EXTRA).coerceIn(0, 25)
     fun cameras(c: Context) = settings(c).getBoolean(Settings.KEY_CAMERAS, false)
 }

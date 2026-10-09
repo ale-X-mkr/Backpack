@@ -3594,7 +3594,9 @@ class MainActivity : AppCompatActivity() {
         avoidTolls = avoidTolls,
         options = routeOptions,
         valuePerMinute = currentValuePerMinute(),
-        tollRatePerKm = tollRatePerKm
+        tollRatePerKm = tollRatePerKm,
+        // 1.4.0: in Emergency only the fastest counts.
+        extraTimeFraction = if (urgencyMode == UrgencyMode.EMERGENCY) 0.0 else Prefs.balanceExtra(this) / 100.0
     )
 
     private fun requestBestRoute(from: LatLon, to: LatLon, stops: List<LatLon>? = null, onFailure: (() -> Unit)? = null) {

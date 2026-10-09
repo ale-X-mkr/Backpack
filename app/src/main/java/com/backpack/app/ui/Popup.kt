@@ -192,7 +192,6 @@ class Popup(private val context: Context, title: String) {
         body.addView(this)
     }
 
-    /** A small button inside the body (not in the bottom row). */
     /** 1.4.0: any view in the body, as tall as it needs. */
     fun custom(v: android.view.View) {
         body.addView(v, android.widget.LinearLayout.LayoutParams(
@@ -205,6 +204,7 @@ class Popup(private val context: Context, title: String) {
             android.widget.LinearLayout.LayoutParams.MATCH_PARENT, dp(heightDp)))
     }
 
+    /** A small button inside the body (not in the bottom row). */
     fun bodyButton(label: String, onClick: () -> Unit): TextView {
         val row = FlowRow(context)
         val b = TextView(context).apply {

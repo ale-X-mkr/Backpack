@@ -166,6 +166,23 @@ object SettingsPopup {
                     walkAvoidSteps = d.walkAvoidSteps, walkAvoidFerries = d.walkAvoidFerries)
             })
         }
+        // 1.4.0: Balanced accepts a little more time for a clearly shorter route.
+        p.section("Balanced: a little more time for a shorter route")
+        val pct = prefs.getInt(Settings.KEY_BALANCE_EXTRA, Settings.DEFAULT_BALANCE_EXTRA).coerceIn(0, 25)
+        val label = p.text(if (pct == 0) "Off: always the fastest" else "Up to $pct% more time", 12f)
+        p.custom(android.widget.SeekBar(c).apply {
+            max = 25
+            progress = pct
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: android.widget.SeekBar?, v: Int, fromUser: Boolean) {
+                    label.text = if (v == 0) "Off: always the fastest" else "Up to $v% more time"
+                    if (fromUser) prefs.edit().putInt(Settings.KEY_BALANCE_EXTRA, v).apply()
+                }
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
+            })
+        })
+        p.text("Takes a clearly shorter alternative (3%+, no more toll) when it costs at most this much extra time. Off in Emergency. Applies from the next route.", 11f)
         p.section("Value of your time (EUR / hour)")
         val num = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
         floatField(p, prefs, "Weekend", Settings.KEY_VALUE_WEEKEND, Settings.DEFAULT_VALUE_WEEKEND, num)

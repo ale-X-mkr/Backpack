@@ -176,6 +176,36 @@ object TollBalance {
     }
 }
 
+/**
+ * 1.4.0 Balanced: "a few minutes more could be a better route". Among the
+ * alternatives, the shortest one that costs at most [extraFraction] more
+ * time than the fastest and is clearly shorter (3 % and 500 m), with no
+ * more toll road. 0 = always the fastest (as before).
+ */
+object ShorterPick {
+    fun pick(routes: List<RouteResult>?, extraFraction: Double): Int {
+        if (routes == null || routes.size < 2 || extraFraction <= 0.0) return 0
+        val base = routes[0]
+        var best = 0
+        for (i in 1 until routes.size) {
+            val r = routes[i]
+            if (r.points.isEmpty()) continue
+            if (r.durationSeconds > base.durationSeconds * (1.0 + extraFraction)) continue
+            if (r.tollDistanceMeters > base.tollDistanceMeters + 100.0) continue
+            val saved = base.distanceMeters - r.distanceMeters
+            if (saved < 500.0 || saved < base.distanceMeters * 0.03) continue
+            if (r.distanceMeters < routes[best].distanceMeters) best = i
+        }
+        return best
+    }
+
+    fun note(fastest: RouteResult, chosen: RouteResult): String =
+        "Shorter: %.0f km less for %.0f min more".format(
+            (fastest.distanceMeters - chosen.distanceMeters) / 1000.0,
+            Math.max(1.0, (chosen.durationSeconds - fastest.durationSeconds) / 60.0)
+        )
+}
+
 /** "Prefer paved": ORS cannot avoid unpaved roads for car or bike, so
  *  among the returned alternatives pick the one with the least unpaved
  *  distance, unless it costs more than 25 % extra time. */

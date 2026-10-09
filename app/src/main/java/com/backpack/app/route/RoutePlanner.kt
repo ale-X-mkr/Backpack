@@ -12,6 +12,7 @@ import com.backpack.app.core.RoutePlan
 import com.backpack.app.core.RoutePreference
 import com.backpack.app.core.RouteRequest
 import com.backpack.app.core.RouteResult
+import com.backpack.app.core.ShorterPick
 import com.backpack.app.core.TollBalance
 import com.backpack.app.core.TravelMode
 import okhttp3.Call
@@ -96,7 +97,15 @@ class RoutePlanner(context: Context) {
             }
             val a = wt.routes?.firstOrNull()
             val b = wo.routes?.firstOrNull()
-            val plan = TollBalance.plan(a, b, req.valuePerMinute, req.tollRatePerKm)
+            val plan = TollBalance.plan(a, b, req.valuePerMinute, req.tollRatePerKm)?.let { tp ->
+                // 1.4.0: the toll choice stays as it was; then, on the chosen
+                // side, a clearly shorter way for a few minutes more.
+                val side = if (tp.routes[0] === a) wt.routes else wo.routes
+                val i = ShorterPick.pick(side, req.extraTimeFraction)
+                if (i == 0 || side == null) tp
+                else RoutePlan(listOf(side[i]) + tp.routes, 0,
+                    listOfNotNull(tp.note, ShorterPick.note(tp.routes[0], side[i])).joinToString(" · "), tp.tollDecision)
+            }
             if (plan == null) {
                 val code = wt.httpCode ?: wo.httpCode
                 cb.onResult(null, when {
@@ -110,13 +119,27 @@ class RoutePlanner(context: Context) {
         }
 
         // Both fired at once: they run in parallel on OkHttp's dispatcher.
-        fetch(req, req.preference, avoidTolls = false, alternatives = false) { o ->
+        // 1.4.0: with alternatives when a few minutes more are accepted
+        // (ORS gives them only between two points less than ~100 km apart).
+        val alts = req.extraTimeFraction > 0.0 && req.waypoints.isEmpty() &&
+            com.backpack.app.core.Geo.distance(req.from, req.to) <= 95_000.0
+        fetchAlt(req, avoidTolls = false, alts) { o ->
             synchronized(lock) { withTolls = o }
             tryFinish()
         }
-        fetch(req, req.preference, avoidTolls = true, alternatives = false) { o ->
+        fetchAlt(req, avoidTolls = true, alts) { o ->
             synchronized(lock) { withoutTolls = o }
             tryFinish()
+        }
+    }
+
+    /** With alternatives first; a refusal (not the key or the quota) -> once without. */
+    private fun fetchAlt(req: RouteRequest, avoidTolls: Boolean, alternatives: Boolean, done: (Outcome) -> Unit) {
+        fetch(req, req.preference, avoidTolls, alternatives) { o ->
+            val ok = o.routes != null && o.routes.isNotEmpty()
+            if (alternatives && !ok && !o.failed && o.httpCode != null && o.httpCode !in setOf(401, 403, 429))
+                fetch(req, req.preference, avoidTolls, false, done = done)
+            else done(o)
         }
     }
 
@@ -125,8 +148,12 @@ class RoutePlanner(context: Context) {
             val routes = o.routes
             when {
                 routes != null && routes.isNotEmpty() && routes[0].points.isNotEmpty() -> {
-                    val plan = if (req.options.preferPaved(req.mode)) RoutePicker.preferPaved(routes)
-                    else RoutePlan(routes, 0, null)
+                    val shorter = if (req.preference == RoutePreference.RECOMMENDED) ShorterPick.pick(routes, req.extraTimeFraction) else 0
+                    val plan = when {
+                        req.options.preferPaved(req.mode) -> RoutePicker.preferPaved(routes)
+                        shorter > 0 -> RoutePlan(routes, shorter, ShorterPick.note(routes[0], routes[shorter]))
+                        else -> RoutePlan(routes, 0, null)
+                    }
                     cb.onResult(plan, null)
                 }
                 alternatives && !o.failed && o.httpCode != null && o.httpCode !in setOf(401, 403, 429) ->

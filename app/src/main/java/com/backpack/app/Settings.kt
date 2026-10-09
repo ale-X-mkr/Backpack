@@ -64,6 +64,9 @@ object Settings {
     const val KEY_ALARM_SOUND = "speed_alarm_sound"
     /** 1.4.0: fixed speed cameras (sound only), off by default. */
     const val KEY_CAMERAS = "speed_cameras"
+    /** 1.4.0 Balanced: % more time accepted for a clearly shorter route (0..25). */
+    const val KEY_BALANCE_EXTRA = "balance_extra_pct"
+    const val DEFAULT_BALANCE_EXTRA = 5
 
     const val DEFAULT_SIGHTS_MAX_PCT = 20
     const val DISPLAY_MODE_DAY = "day"

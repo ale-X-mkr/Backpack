@@ -93,5 +93,7 @@ data class RouteRequest(
     val avoidTolls: Boolean,
     val options: RouteOptions,
     val valuePerMinute: Double,
-    val tollRatePerKm: Double
+    val tollRatePerKm: Double,
+    /** 1.4.0 Balanced: extra time accepted for a shorter route (0.05 = 5 %; 0 in Emergency). */
+    val extraTimeFraction: Double = 0.0
 )
