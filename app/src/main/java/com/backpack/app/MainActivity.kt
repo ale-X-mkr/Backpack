@@ -3446,8 +3446,8 @@ class MainActivity : AppCompatActivity() {
         speedSignText.text = if (location.hasSpeed()) shown.toString() else "--"
         speedUnitText.text = if (useMetric) "km/h" else "mph"
         speedLimitSign.visibility = View.GONE
-        (speedSign.background?.mutate() as? GradientDrawable)?.setStroke(dp(4), Color.parseColor("#9E9E9E"))
         stopBlinking()
+        findViewById<com.backpack.app.ui.SpeedGaugeView>(R.id.speed_gauge)?.show(location.speed * 3.6, null)
     }
 
     /** 1.3.0: the alarm itself runs in [com.backpack.app.speed.SpeedGuard] (also
@@ -3461,7 +3461,6 @@ class MainActivity : AppCompatActivity() {
     private fun drawSpeed(location: Location, limit: Int?, state: com.backpack.app.core.SpeedAlarm.State) {
         // Hidden only while the keyboard is open (search bar in its place).
         speedWidget.visibility = View.VISIBLE
-        val background = speedSign.background?.mutate() as? GradientDrawable
         // Circle = your speed; sign on top = the road's limit (OSM, km/h).
         val speedKmh = (location.speed * 3.6).toInt()
         val shown = if (useMetric) speedKmh else (location.speed * 2.23694).toInt()
@@ -3472,22 +3471,16 @@ class MainActivity : AppCompatActivity() {
             speedLimitSign.visibility = View.VISIBLE
             speedLimitSign.text = (if (useMetric) limit else Math.round(limit * 0.621371).toInt()).toString()
         }
-        if (state.ring == SpeedRing.BLINK_RED) { startBlinking(); return }
-        stopBlinking()
-        val color = when (state.ring) {
-            SpeedRing.GREEN -> "#2E7D32"
-            SpeedRing.YELLOW -> "#F1C40F"
-            SpeedRing.RED, SpeedRing.STOPPED_RED, SpeedRing.BLINK_RED -> "#C0392B"
-            SpeedRing.BLUE -> "#1565C0"
-            SpeedRing.GREY -> "#9E9E9E"
-        }
-        background?.setStroke(dp(4), Color.parseColor(color))
+        // 1.4.0: the ring is a gauge (speed against the limit); stopped on a fast road = red ring.
+        val gauge = findViewById<com.backpack.app.ui.SpeedGaugeView>(R.id.speed_gauge)
+        gauge?.show(location.speed * 3.6, limit, if (state.ring == SpeedRing.STOPPED_RED) 0xFFC0392B.toInt() else 0xFF9E9E9E.toInt())
+        if (state.ring == SpeedRing.STOPPED_RED) gauge?.show(location.speed * 3.6, null, 0xFFC0392B.toInt())
+        if (state.ring == SpeedRing.BLINK_RED) startBlinking() else stopBlinking()
     }
 
     private val blinkRunnable = object : Runnable {
         override fun run() {
-            val background = speedSign.background?.mutate() as? GradientDrawable
-            background?.setStroke(dp(4), if (blinkOn) Color.parseColor("#C0392B") else Color.WHITE)
+            findViewById<com.backpack.app.ui.SpeedGaugeView>(R.id.speed_gauge)?.blinkPhase = blinkOn
             blinkOn = !blinkOn
             handler.postDelayed(this, 400L)
         }
@@ -3503,6 +3496,7 @@ class MainActivity : AppCompatActivity() {
         if (!isBlinking) return
         isBlinking = false
         handler.removeCallbacks(blinkRunnable)
+        findViewById<com.backpack.app.ui.SpeedGaugeView>(R.id.speed_gauge)?.blinkPhase = null
     }
 
     // ---------- Map taps ----------

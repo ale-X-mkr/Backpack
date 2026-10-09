@@ -661,6 +661,11 @@
             android:layout_gravity="top|end"
             android:background="@drawable/speed_sign_background">
 
+            <com.backpack.app.ui.SpeedGaugeView
+                android:id="@+id/speed_gauge"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
             <TextView
                 android:id="@+id/speed_sign_text"
                 android:layout_width="wrap_content"

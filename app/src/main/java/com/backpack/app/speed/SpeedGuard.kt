@@ -53,6 +53,9 @@ object SpeedGuard {
         LocationHub.removeListener(fixListener)
         try { tone?.release() } catch (e: Exception) { }
         tone = null
+        stopContinuous()
+        try { buzzTrack?.release() } catch (e: Exception) { }
+        buzzTrack = null
     }
 
     /** Car mode (the screen saves it on every change). */
@@ -70,8 +73,91 @@ object SpeedGuard {
         val kmh = (location.speed * 3.6).toInt()
         val moving = location.hasSpeed() && kmh > 3
         val st = SpeedAlarm.state(kmh, moving, limit)
-        val beeped = st.beep != SpeedAlarm.Beep.NONE && beep(c, st.beep == SpeedAlarm.Beep.HIGH)
+        val beeped = when (st.beep) {
+            SpeedAlarm.Beep.NONE -> { stopContinuous(); false }
+            SpeedAlarm.Beep.HIGH -> { stopContinuous(); beep(c, true) }
+            SpeedAlarm.Beep.LOW -> { stopContinuous(); buzz(c) }
+            SpeedAlarm.Beep.CONTINUOUS -> { startContinuous(c); true }
+        }
         for (l in listeners.toList()) l.onSpeed(location, limit, st, beeped)
+    }
+
+    // ---------- 1.4.0: the "priiip" repeated without pause (20+ over), the low buzz ----------
+
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private var continuousUntilMs = 0L
+    private var continuousOn = false
+    private val continuous = object : Runnable {
+        override fun run() {
+            val c = app ?: return
+            // A fix every second keeps it going; GPS lost -> it stops by itself.
+            if (System.currentTimeMillis() > continuousUntilMs || !Prefs.alarmSound(c)) { continuousOn = false; return }
+            playHigh()
+            main.postDelayed(this, 450L)
+        }
+    }
+
+    private fun startContinuous(c: Context) {
+        continuousUntilMs = System.currentTimeMillis() + 2500L
+        if (continuousOn || !Prefs.alarmSound(c)) return
+        continuousOn = true
+        main.post(continuous)
+    }
+
+    private fun stopContinuous() {
+        continuousUntilMs = 0L
+        if (continuousOn) { continuousOn = false; main.removeCallbacks(continuous) }
+    }
+
+    private fun playHigh() {
+        try {
+            if (tone == null) tone = ToneGenerator(AudioManager.STREAM_ALARM, 80)
+            tone?.startTone(ToneGenerator.TONE_CDMA_HIGH_L, 200)
+        } catch (e: Exception) { }
+    }
+
+    private var lastBuzzAtMs = 0L
+    private var buzzTrack: android.media.AudioTrack? = null
+
+    /** Low-speed / stopped warning: a real low buzz (~250 Hz), at most every 3 s. */
+    private fun buzz(c: Context): Boolean {
+        if (!Prefs.alarmSound(c)) return false
+        val now = System.currentTimeMillis()
+        if (now - lastBuzzAtMs < 3000L) return false
+        lastBuzzAtMs = now
+        return try {
+            val t = buzzTrack ?: makeBuzz().also { buzzTrack = it }
+            t.stop()
+            t.reloadStaticData()
+            t.play()
+            true
+        } catch (e: Exception) { false }
+    }
+
+    /** 350 ms at 250 Hz with a little 500 Hz (heard on phone speakers too), soft edges. */
+    private fun makeBuzz(): android.media.AudioTrack {
+        val rate = 22050
+        val n = rate * 35 / 100
+        val pcm = ShortArray(n)
+        for (i in 0 until n) {
+            val t = i.toDouble() / rate
+            val edge = minOf(1.0, minOf(i, n - i) / (rate * 0.02))
+            val v = (0.75 * Math.sin(2 * Math.PI * 250 * t) + 0.25 * Math.sin(2 * Math.PI * 500 * t)) * edge
+            pcm[i] = (v * 0.8 * Short.MAX_VALUE).toInt().toShort()
+        }
+        val track = android.media.AudioTrack.Builder()
+            .setAudioAttributes(android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            .setAudioFormat(android.media.AudioFormat.Builder()
+                .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(rate)
+                .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
+            .setTransferMode(android.media.AudioTrack.MODE_STATIC)
+            .setBufferSizeInBytes(n * 2)
+            .build()
+        track.write(pcm, 0, n)
+        return track
     }
 
     /** The route being followed (or chosen): its roads ahead are loaded in one go. */
@@ -101,16 +187,13 @@ object SpeedGuard {
         }
     }
 
-    /** Settings > Speed > Alarm sound; at most every 3 s. True when it sounded. */
+    /** Settings > Speed > Alarm sound; the high "priiip" at most every 3 s. True when it sounded. */
     private fun beep(c: Context, high: Boolean): Boolean {
         if (!Prefs.alarmSound(c)) return false
         val now = System.currentTimeMillis()
         if (now - lastBeepAtMs < 3000L) return false
         lastBeepAtMs = now
-        return try {
-            if (tone == null) tone = ToneGenerator(AudioManager.STREAM_ALARM, 80)
-            tone?.startTone(if (high) ToneGenerator.TONE_CDMA_HIGH_L else ToneGenerator.TONE_CDMA_LOW_L, 200)
-            true
-        } catch (e: Exception) { false }
+        if (high) playHigh()
+        return true
     }
 }
