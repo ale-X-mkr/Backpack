@@ -193,6 +193,12 @@ class Popup(private val context: Context, title: String) {
     }
 
     /** A small button inside the body (not in the bottom row). */
+    /** 1.4.0: any view in the body, as tall as it needs. */
+    fun custom(v: android.view.View) {
+        body.addView(v, android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT))
+    }
+
     /** 1.3.0: any view in the body (e.g. the height profile), [heightDp] tall. */
     fun view(v: android.view.View, heightDp: Int) {
         body.addView(v, android.widget.LinearLayout.LayoutParams(

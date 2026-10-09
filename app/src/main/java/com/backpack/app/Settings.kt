@@ -35,7 +35,10 @@ object Settings {
     /** Sights: the camera next to Weekend (default on); KEY_SIGHTS_WORK unused since 1.2.0; kinds; voice heads-up. */
     const val KEY_SIGHTS_WEEKEND = "sights_weekend_on"
     const val KEY_SIGHTS_WORK = "sights_work_on"
-    const val KEY_SIGHT_GROUPS = "sight_groups"
+    /** 1.4.0: "sight_groups2" (Prehistory added, on by default for everyone). */
+    const val KEY_SIGHT_GROUPS = "sight_groups2"
+    /** 1.4.0: priority order of the kinds ("PREHISTORY,NATURE,..."). */
+    const val KEY_SIGHT_ORDER = "sight_order"
     const val KEY_SIGHT_HEADSUP = "sight_headsup"
     /** 1.2.0: heads-up this many minutes before the sight (route's average speed). */
     const val KEY_SIGHT_HEADSUP_MIN = "sight_headsup_minutes"

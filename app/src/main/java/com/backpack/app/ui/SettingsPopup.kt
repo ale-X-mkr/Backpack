@@ -68,7 +68,7 @@ object SettingsPopup {
                 Page.ROUTE -> routePage(c, p, host.travelMode, { o }, { o = it; Prefs.saveRouteOptions(c, it) }, prefs)
                 Page.NAVIGATION -> navigationPage(p, prefs, host)
                 Page.SPEED -> speedPage(p, prefs)
-                Page.SIGHTS -> sightsPage(p, prefs)
+                Page.SIGHTS -> sightsPage(c, p, prefs)
                 Page.PLACES -> placesPage(c, p, prefs, host)
                 Page.MAP -> mapPage(p, prefs)
                 Page.SERVERS -> serversPage(p, prefs)
@@ -236,7 +236,7 @@ object SettingsPopup {
      * 1.2.0: everything about sights in one page. All values are times: the
      * travel mode turns them into distances.
      */
-    private fun sightsPage(p: Popup, prefs: android.content.SharedPreferences) {
+    private fun sightsPage(c: Context, p: Popup, prefs: android.content.SharedPreferences) {
         p.text("Sights are shown in Weekend mode: the small camera next to the Weekend button turns them on or off (hold it for the list).", 12f)
         p.section("Kinds")
         for (g in com.backpack.app.core.SightGroup.values()) {
@@ -246,6 +246,32 @@ object SettingsPopup {
                 prefs.edit().putString(Settings.KEY_SIGHT_GROUPS, com.backpack.app.core.SightGroup.save(now)).apply()
             }
         }
+        // 1.4.0: priority of the kinds (first = most wanted; tap ↑ to move one up).
+        p.section("Priority (first = most wanted)")
+        val list = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        fun fill() {
+            list.removeAllViews()
+            val order = com.backpack.app.core.SightGroup.parseOrder(prefs.getString(Settings.KEY_SIGHT_ORDER, null))
+            for ((i, g) in order.withIndex()) {
+                val row = android.widget.TextView(c).apply {
+                    text = "${i + 1}.  ${g.label.substringBefore(" (")}" + if (i > 0) "      \u2191" else ""
+                    textSize = 14f
+                    val d = c.resources.displayMetrics.density
+                    setPadding(0, (7 * d).toInt(), 0, (7 * d).toInt())
+                    if (i > 0) setOnClickListener {
+                        val m = order.toMutableList()
+                        m.removeAt(i); m.add(i - 1, g)
+                        prefs.edit().putString(Settings.KEY_SIGHT_ORDER, com.backpack.app.core.SightGroup.saveOrder(m)).apply()
+                        com.backpack.app.core.Tourist.order = m
+                        fill()
+                    }
+                }
+                list.addView(row)
+            }
+        }
+        fill()
+        p.custom(list)
+        p.text("Places of the kinds at the top are proposed first, even when less famous.", 11f)
         p.section("No destination: around the map centre")
         val reach = com.backpack.app.core.Reach.MINUTES.map { it to (if (it < 60) "$it min" else "${it / 60} h") }
         p.choices(reach, { it.second }, {

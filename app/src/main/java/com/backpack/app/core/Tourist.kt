@@ -5,6 +5,8 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 enum class TouristCategory(val label: String) {
+    /** 1.4.0: decorated caves, rock shelters, dolmens, archaeological sites. */
+    PREHISTORY("Prehistory / cave"),
     SIGHT("Sight"),
     MUSEUM("Museum"),
     HISTORIC("Historic"),
@@ -60,6 +62,7 @@ data class TouristPoi(
 
 /** 1.2.0: kinds of sights (Settings > Sights), each a set of categories. */
 enum class SightGroup(val label: String, val kinds: Set<TouristCategory>) {
+    PREHISTORY("Prehistory & caves (decorated caves, rock shelters, dolmens, archaeology)", setOf(TouristCategory.PREHISTORY)),
     HISTORIC("Historic (castles, ruins, monuments, UNESCO)", setOf(TouristCategory.HISTORIC, TouristCategory.HERITAGE)),
     NATURE("Nature (waterfalls, springs, caves, peaks, viewpoints)", setOf(TouristCategory.NATURE, TouristCategory.WATER, TouristCategory.VIEWPOINT)),
     PARKS("Parks (national parks, reserves)", setOf(TouristCategory.PARK)),
@@ -70,6 +73,16 @@ enum class SightGroup(val label: String, val kinds: Set<TouristCategory>) {
         fun parse(saved: String?): Set<SightGroup> =
             saved?.split(',')?.mapNotNull { n -> values().firstOrNull { it.name == n } }?.toSet() ?: values().toSet()
         fun save(groups: Set<SightGroup>): String = groups.joinToString(",") { it.name }
+
+        /** 1.4.0 default priority: prehistory first (Alex). */
+        val DEFAULT_ORDER = listOf(PREHISTORY, NATURE, HISTORIC, CULTURE, PARKS)
+
+        /** Saved order "NATURE,PREHISTORY,..." (missing groups appended in default order). */
+        fun parseOrder(saved: String?): List<SightGroup> {
+            val got = saved?.split(',')?.mapNotNull { n -> values().firstOrNull { it.name == n } }?.distinct().orEmpty()
+            return got + DEFAULT_ORDER.filter { it !in got }
+        }
+        fun saveOrder(order: List<SightGroup>): String = order.joinToString(",") { it.name }
     }
 }
 
@@ -81,6 +94,23 @@ enum class SightGroup(val label: String, val kinds: Set<TouristCategory>) {
  * have an article about them.
  */
 object Tourist {
+
+    /** 1.4.0: your order of kinds (Settings > Sights), first = most wanted. */
+    @Volatile var order: List<SightGroup> = SightGroup.DEFAULT_ORDER
+
+    /** Bonus of a kind by its place in [order]: 8, 6, 4, 2, 0 (one step = about 7x more articles). */
+    private fun bonus(c: TouristCategory): Double {
+        val i = order.indexOfFirst { c in it.kinds }
+        if (i < 0) return 0.0
+        return 2.0 * (order.size - 1 - i)
+    }
+
+    /**
+     * 1.4.0 ranking: how widely a place is written about (log scale) plus
+     * your kind order -- with prehistory first and castles third, a cave
+     * written about in 3 Wikipedias comes before a castle in 200.
+     */
+    fun score(p: TouristPoi): Double = Math.log(1.0 + p.sitelinks) + bonus(p.category)
 
     /**
      * 1.2.0 voice heads-up: how far ahead (m) a sight is announced, from the
@@ -136,7 +166,7 @@ object Tourist {
      *  Parks only as points / ways ("nw:"): their big boundary relations are
      *  what made the servers slow. */
     private val EXTRA = listOf(
-        "[\"historic\"~\"^(citywalls|aqueduct)$\"][\"wikidata\"]",
+        "[\"historic\"~\"^(citywalls|aqueduct|megalith|rock_shelter)$\"][\"wikidata\"]",
         "[\"natural\"~\"^(spring|hot_spring|geyser)$\"][\"wikidata\"]",
         "[\"waterway\"=\"waterfall\"][\"wikidata\"]",
         "[\"man_made\"=\"lighthouse\"][\"wikidata\"]",
@@ -284,6 +314,9 @@ object Tourist {
         val natural = tags.optString("natural", "")
         val boundary = tags.optString("boundary", "")
         return when {
+            // 1.4.0: caves and archaeology first (also when UNESCO, like the Vézère valley).
+            natural == "cave_entrance" || historic in setOf("archaeological_site", "megalith", "rock_shelter") ||
+                tags.optString("historic:civilization", "").contains("prehistor") -> TouristCategory.PREHISTORY
             tags.optString("heritage:operator", "") == "whc" -> TouristCategory.HERITAGE
             boundary == "national_park" || boundary == "protected_area" || tags.optString("leisure", "") == "nature_reserve" -> TouristCategory.PARK
             natural in setOf("waterfall", "spring", "hot_spring", "geyser") || tags.optString("waterway", "") == "waterfall" -> TouristCategory.WATER
@@ -396,7 +429,8 @@ object Tourist {
             "&ggscoord=%.5f%%7C%.5f".format(java.util.Locale.ROOT, center.lat, center.lon) +
             "&ggsradius=${radiusM.coerceIn(10, 10000)}&ggslimit=50&prop=coordinates%7Cpageprops&ppprop=wikibase_item"
 
-    data class WikiHit(val wikidata: String, val title: String, val point: LatLon)
+    /** [description]: 1.4.0 the short description ("Paleolithic decorated cave in Dordogne"). */
+    data class WikiHit(val wikidata: String, val title: String, val point: LatLon, val description: String? = null)
 
     fun parseWikiNearby(body: String): List<WikiHit> {
         val pages = JSONObject(body).optJSONObject("query")?.optJSONObject("pages") ?: return emptyList()
@@ -407,7 +441,8 @@ object Tourist {
             val q = p.optJSONObject("pageprops")?.optString("wikibase_item", "").orEmpty()
             val c = p.optJSONArray("coordinates")?.optJSONObject(0) ?: continue
             if (!q.matches(Regex("Q[0-9]+"))) continue
-            out.add(WikiHit(q, p.optString("title", ""), LatLon(c.optDouble("lat"), c.optDouble("lon"))))
+            out.add(WikiHit(q, p.optString("title", ""), LatLon(c.optDouble("lat"), c.optDouble("lon")),
+                p.optString("description", "").ifBlank { null }))
         }
         return out
     }
@@ -415,12 +450,12 @@ object Tourist {
     /** Kinds of Wikidata items (P31, direct) that count as places to visit. */
     val WIKIDATA_KINDS: Map<String, TouristCategory> = mapOf(
         "Q570116" to TouristCategory.SIGHT, "Q4989906" to TouristCategory.HISTORIC, "Q23413" to TouristCategory.HISTORIC,
-        "Q16560" to TouristCategory.HISTORIC, "Q57821" to TouristCategory.HISTORIC, "Q839954" to TouristCategory.HISTORIC,
+        "Q16560" to TouristCategory.HISTORIC, "Q57821" to TouristCategory.HISTORIC, "Q839954" to TouristCategory.PREHISTORY,
         "Q109607" to TouristCategory.HISTORIC, "Q44613" to TouristCategory.HISTORIC, "Q160742" to TouristCategory.HISTORIC,
         "Q2977" to TouristCategory.HISTORIC, "Q16970" to TouristCategory.HISTORIC, "Q39715" to TouristCategory.HISTORIC,
         "Q12518" to TouristCategory.HISTORIC, "Q33506" to TouristCategory.MUSEUM, "Q207694" to TouristCategory.MUSEUM,
         "Q34038" to TouristCategory.WATER, "Q124714" to TouristCategory.WATER, "Q177380" to TouristCategory.WATER,
-        "Q8502" to TouristCategory.NATURE, "Q35509" to TouristCategory.NATURE, "Q40080" to TouristCategory.NATURE,
+        "Q8502" to TouristCategory.NATURE, "Q35509" to TouristCategory.PREHISTORY, "Q40080" to TouristCategory.NATURE,
         "Q8072" to TouristCategory.NATURE, "Q46169" to TouristCategory.PARK, "Q179049" to TouristCategory.PARK,
         "Q6017969" to TouristCategory.VIEWPOINT, "Q9259" to TouristCategory.HERITAGE,
         // 1.2.1 (Wikipedia as main source): a few more common kinds.
@@ -478,34 +513,65 @@ object Tourist {
         val c = wikiCellCenter(t)
         return "https://en.wikipedia.org/w/api.php?action=query&format=json&generator=geosearch" +
             "&ggscoord=%.5f%%7C%.5f".format(java.util.Locale.ROOT, c.lat, c.lon) +
-            "&ggsradius=$WIKI_RADIUS_M&ggslimit=500&prop=coordinates%7Cpageprops&colimit=max&ppprop=wikibase_item"
+            "&ggsradius=$WIKI_RADIUS_M&ggslimit=500&prop=coordinates%7Cpageprops%7Cdescription&colimit=max&ppprop=wikibase_item"
     }
 
     /** SPARQL: direct kinds (P31) and number of Wikimedia articles of [ids] (sent by POST). */
     fun kindsLinksQuery(ids: List<String>): String =
         "SELECT ?item ?kind ?links WHERE { VALUES ?item { " + ids.joinToString(" ") { "wd:$it" } +
-            " } ?item wdt:P31 ?kind . ?item wikibase:sitelinks ?links . }"
+            " } ?item wikibase:sitelinks ?links . OPTIONAL { ?item wdt:P31 ?kind } }"
 
-    /** id -> (category, sitelinks), only for the kinds above (heritage wins). */
-    fun parseKindsLinks(body: String): Map<String, Pair<TouristCategory, Int>> {
+    /** 1.4.0: what Wikidata says of an item: its known kinds (direct P31) and articles count. */
+    data class KindInfo(val kinds: Set<TouristCategory>, val links: Int)
+
+    /** id -> kinds found among [WIKIDATA_KINDS] (maybe none) and sitelinks, for every item answered. */
+    fun parseKindsLinks(body: String): Map<String, KindInfo> {
         val rows = JSONObject(body).optJSONObject("results")?.optJSONArray("bindings") ?: return emptyMap()
-        val out = HashMap<String, Pair<TouristCategory, Int>>()
+        val kinds = HashMap<String, MutableSet<TouristCategory>>()
+        val links = HashMap<String, Int>()
         for (i in 0 until rows.length()) {
             val r = rows.getJSONObject(i)
             val item = r.optJSONObject("item")?.optString("value", "").orEmpty().substringAfterLast('/')
+            if (item.isEmpty()) continue
+            links[item] = r.optJSONObject("links")?.optString("value", "0")?.toIntOrNull() ?: 0
             val kind = r.optJSONObject("kind")?.optString("value", "").orEmpty().substringAfterLast('/')
-            val cat = WIKIDATA_KINDS[kind] ?: continue
-            val links = r.optJSONObject("links")?.optString("value", "0")?.toIntOrNull() ?: 0
-            if (out[item] == null || cat == TouristCategory.HERITAGE) out[item] = cat to links
+            val set = kinds.getOrPut(item) { HashSet() }
+            WIKIDATA_KINDS[kind]?.let { set.add(it) }
         }
-        return out
+        return links.mapValues { (id, n) -> KindInfo(kinds[id].orEmpty(), n) }
     }
 
-    /** Wikipedia hits of one cell (only those inside it) + their kinds -> places. */
-    fun wikiPlaces(cell: Tile, hits: List<WikiHit>, kinds: Map<String, Pair<TouristCategory, Int>>): List<TouristPoi> =
+    private val PREHISTORY_WORDS = Regex("\\b(cave|caves|grotto|grotte|cavern|rock shelter|abri|prehistoric|pre-historic|paleolithic|palaeolithic|neolithic|mesolithic|upper paleolithic|dolmen|menhir|megalith\\w*|cromlech|stone circle|tumulus|cairn|petroglyph\\w*|rock art|cave painting\\w*|archaeological|archeological|excavation|oppidum|hillfort)\\b")
+    private val KEYWORD_KINDS = listOf(
+        Regex("\\b(museum|gallery|ecomuseum)\\b") to TouristCategory.MUSEUM,
+        Regex("\\b(castle|château|chateau|fortress|citadel|fortified|abbey|monastery|priory|cathedral|basilica|palace|ruins|ruined|aqueduct|city walls|bastide|manor|keep|lighthouse|roman (theatre|amphitheatre|bridge|villa))\\b") to TouristCategory.HISTORIC,
+        Regex("\\b(waterfall|cascade|hot spring|geyser)\\b") to TouristCategory.WATER,
+        Regex("\\b(gorge|canyon|glacier|volcano|natural arch|cliffs?|peak|summit|viewpoint|belvedere)\\b") to TouristCategory.NATURE,
+        Regex("\\b(national park|nature reserve|regional (natural )?park|botanical garden|arboretum)\\b") to TouristCategory.PARK,
+        Regex("\\b(zoo|aquarium|amusement park|theme park|wildlife park)\\b") to TouristCategory.SIGHT
+    )
+
+    /**
+     * 1.4.0: one kind from what Wikidata says (direct types) and the short
+     * description (catches sub-types: "decorated cave", "rock shelter",
+     * "megalithic site"...). Prehistory words win; null = not a place to visit.
+     */
+    fun categorize(kinds: Set<TouristCategory>, description: String?): TouristCategory? {
+        val d = description?.lowercase().orEmpty()
+        if (PREHISTORY_WORDS.containsMatchIn(d) || TouristCategory.PREHISTORY in kinds) return TouristCategory.PREHISTORY
+        if (TouristCategory.HERITAGE in kinds) return TouristCategory.HERITAGE
+        val order = listOf(TouristCategory.MUSEUM, TouristCategory.HISTORIC, TouristCategory.WATER, TouristCategory.NATURE,
+            TouristCategory.PARK, TouristCategory.VIEWPOINT, TouristCategory.SIGHT)
+        order.firstOrNull { it in kinds }?.let { return it }
+        return KEYWORD_KINDS.firstOrNull { it.first.containsMatchIn(d) }?.second
+    }
+
+    /** Wikipedia hits of one cell (only those inside it) + Wikidata -> places. */
+    fun wikiPlaces(cell: Tile, hits: List<WikiHit>, kinds: Map<String, KindInfo>): List<TouristPoi> =
         hits.filter { wikiCellOf(it.point) == cell }.distinctBy { it.wikidata }.mapNotNull { h ->
-            val (cat, links) = kinds[h.wikidata] ?: return@mapNotNull null
-            TouristPoi("q" + h.wikidata, h.title, h.point, cat, h.wikidata, "en:${h.title}", sitelinks = links)
+            val k = kinds[h.wikidata] ?: return@mapNotNull null
+            val cat = categorize(k.kinds, h.description) ?: return@mapNotNull null
+            TouristPoi("q" + h.wikidata, h.title, h.point, cat, h.wikidata, "en:${h.title}", sitelinks = k.links)
         }
 
     /**
@@ -517,7 +583,7 @@ object Tourist {
         val limit = (base + 3 * (routeLengthM / segmentM).toInt()).coerceAtMost(max)
         if (pois.size <= limit) return rank(pois, limit)
         val groups = pois.groupBy { (it.alongM / segmentM).toInt() }.toSortedMap()
-            .values.map { g -> g.sortedByDescending { it.sitelinks } }
+            .values.map { g -> g.sortedByDescending { score(it) } }
         val out = ArrayList<TouristPoi>()
         var round = 0
         while (out.size < limit) {
@@ -528,7 +594,7 @@ object Tourist {
             if (!any) break
             round++
         }
-        return out.sortedWith(compareByDescending<TouristPoi> { it.sitelinks }.thenBy { it.alongM })
+        return out.sortedWith(compareByDescending<TouristPoi> { score(it) }.thenBy { it.alongM })
     }
 
     /** 1.1.0: Nominatim reverse (town level) -> (name, Wikidata id) for the destination's travel guide. */
@@ -553,7 +619,7 @@ object Tourist {
 
     /** Best known first; ties keep the order along the route. */
     fun rank(pois: List<TouristPoi>, limit: Int): List<TouristPoi> =
-        pois.sortedWith(compareByDescending<TouristPoi> { it.sitelinks }.thenBy { it.alongM }).take(limit)
+        pois.sortedWith(compareByDescending<TouristPoi> { score(it) }.thenBy { it.alongM }).take(limit)
 
     /** Rough extra time to visit and come back to the route: there and
      *  back, roads ~30 % longer than straight. Exact value comes from the

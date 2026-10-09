@@ -347,6 +347,8 @@ class MainActivity : AppCompatActivity() {
         LocationHub.addListener(uiFixListener)
         NavigationEngine.addListener(navListener)
         if (LocationHub.hasPermission(this)) LocationHub.acquire(this, LocationHub.LEASE_UI)
+        // 1.4.0: your order of kinds ranks the sights.
+        Tourist.order = com.backpack.app.core.SightGroup.parseOrder(sightsPrefs().getString(Settings.KEY_SIGHT_ORDER, null))
         // 1.3.0: open until expressly exited; the service keeps the rest going in the background.
         com.backpack.app.speed.SpeedGuard.start(this)
         com.backpack.app.speed.SpeedGuard.addListener(speedListener)

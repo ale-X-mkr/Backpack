@@ -36,8 +36,8 @@ class WikiSightsTest {
             {"item":{"value":"http://www.wikidata.org/entity/Q2"},"kind":{"value":"http://www.wikidata.org/entity/Q5"},"links":{"value":"9"}},
             {"item":{"value":"http://www.wikidata.org/entity/Q3"},"kind":{"value":"http://www.wikidata.org/entity/Q34038"},"links":{"value":"3"}}]}}"""
         val k = Tourist.parseKindsLinks(body)
-        assertEquals(TouristCategory.HERITAGE to 42, k["Q1"])
-        assertEquals(null, k["Q2"])
+        assertEquals(Tourist.KindInfo(setOf(TouristCategory.HISTORIC, TouristCategory.HERITAGE), 42), k["Q1"])
+        assertEquals(Tourist.KindInfo(emptySet(), 9), k["Q2"]) // answered, but no kind of ours
         val cell = Tile(61, 462)
         val hits = listOf(
             Tourist.WikiHit("Q1", "Castle", LatLon(46.21, 6.12)),

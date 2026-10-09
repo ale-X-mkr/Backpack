@@ -75,8 +75,12 @@ class TouristSearchSunTest {
         assertEquals(1, links["Q19675"])
         assertNull(links["Q583"])
         val pois = Tourist.parseOverpass(overpass).map { it.copy(sitelinks = links[it.wikidata] ?: 0) }
+        // 1.4.0: your kind order counts too (culture first here; default puts nature before).
+        Tourist.order = listOf(SightGroup.CULTURE, SightGroup.PREHISTORY, SightGroup.NATURE, SightGroup.HISTORIC, SightGroup.PARKS)
         val ranked = Tourist.rank(pois, 2)
         assertEquals(listOf("Tour Eiffel", "Louvre"), ranked.map { it.name })
+        Tourist.order = SightGroup.DEFAULT_ORDER
+        assertEquals("Mont Blanc", Tourist.rank(pois, 1)[0].name)
         assertEquals(1, ranked[0].stars)
         assertTrue(Tourist.wikidataUrl(listOf("Q1", "Q2")).endsWith("ids=Q1%7CQ2"))
     }

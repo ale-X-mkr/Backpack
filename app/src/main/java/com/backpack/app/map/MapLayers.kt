@@ -405,6 +405,8 @@ class MapLayers(private val context: Context) {
         private const val LAYER_TOUR_LABEL = "bp-tourist-labels"
 
         val CAT_COLORS = mapOf(
+            // 1.4.0: ochre, like the cave paintings.
+            TouristCategory.PREHISTORY to 0xFFD2691E.toInt(),
             TouristCategory.SIGHT to 0xFF8A0000.toInt(),
             TouristCategory.MUSEUM to 0xFF6A1B9A.toInt(),
             TouristCategory.HISTORIC to 0xFF8D5524.toInt(),

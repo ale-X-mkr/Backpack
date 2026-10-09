@@ -61,6 +61,7 @@ class VoiceText private constructor(val lang: String) {
     fun recalculated() = pick("Route recalculated", "Ruta recalculada", "Itinéraire recalculé", "Percorso ricalcolato", "Route neu berechnet")
 
     fun category(c: TouristCategory): String = when (c) {
+        TouristCategory.PREHISTORY -> pick("prehistoric site or cave", "sitio prehistórico o cueva", "site préhistorique ou grotte", "sito preistorico o grotta", "prähistorische Stätte oder Höhle")
         TouristCategory.SIGHT -> pick("sight", "atracción", "site touristique", "attrazione", "Sehenswürdigkeit")
         TouristCategory.MUSEUM -> pick("museum", "museo", "musée", "museo", "Museum")
         TouristCategory.HISTORIC -> pick("historic site", "sitio histórico", "site historique", "luogo storico", "historischer Ort")

@@ -51,10 +51,11 @@ class TouristFinder(context: Context) {
     private val main = Handler(Looper.getMainLooper())
     // 1.1.1: the squares saved before are used again ("sights"); the new
     // kinds come in their own small cache on top ("sights_x").
-    private val cache = TileCache.of(app, "sights", 14L * DAY_MS)
-    private val cacheX = TileCache.of(app, "sights_x", 14L * DAY_MS)
+    // 1.4.0: caves / archaeology / megaliths classified anew -> fresh caches.
+    private val cache = TileCache.of(app, "sights2", 14L * DAY_MS)
+    private val cacheX = TileCache.of(app, "sights_x2", 14L * DAY_MS)
     /** 1.2.1: Wikipedia cells (0.1°), a month. */
-    private val wikiCache = TileCache.of(app, "wiki10", 30L * DAY_MS)
+    private val wikiCache = TileCache.of(app, "wiki11", 30L * DAY_MS)
 
     /** A square to fetch: everything, or only the new kinds. */
     private data class Need(val tile: Tile, val extras: Boolean)
@@ -353,8 +354,8 @@ class TouristFinder(context: Context) {
     } catch (e: Exception) { null }
 
     /** Kinds + popularity for [ids] (Wikidata Query Service, POST, 400 at a time); null on failure. */
-    private fun wikiKinds(ids: List<String>): Map<String, Pair<com.backpack.app.core.TouristCategory, Int>>? {
-        val out = HashMap<String, Pair<com.backpack.app.core.TouristCategory, Int>>()
+    private fun wikiKinds(ids: List<String>): Map<String, Tourist.KindInfo>? {
+        val out = HashMap<String, Tourist.KindInfo>()
         for (chunk in ids.chunked(400)) {
             val body = try {
                 val form = okhttp3.FormBody.Builder().add("query", Tourist.kindsLinksQuery(chunk)).build()

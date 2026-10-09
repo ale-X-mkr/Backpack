@@ -37,6 +37,7 @@ object SightHeadsUp {
         if (!prefs.getBoolean(Settings.KEY_SIGHTS_WEEKEND, true)) return
         if (SightGroup.parse(prefs.getString(Settings.KEY_SIGHT_GROUPS, null)).isEmpty()) return
         if (!prefs.getBoolean(Settings.KEY_SIGHT_HEADSUP, true)) return
+        Tourist.order = SightGroup.parseOrder(prefs.getString(Settings.KEY_SIGHT_ORDER, null))
         // At most two waiting: more would be stale by the time a gap comes.
         if (NavigationEngine.pendingInfo(VoiceQueue.Kind.HEADS_UP) >= 2) return
         val mode = when (toggles.getString("mode", null)) {
@@ -53,7 +54,7 @@ object SightHeadsUp {
             .filter { it.key !in dim && it.key !in said && it.sitelinks >= 1 }
             .filter { (it.alongM - p.alongM) in 0.0..lead }
             .filter { Tourist.estimateDetourSeconds(it.offsetM, mode) <= maxDetour }
-            .maxByOrNull { it.sitelinks } ?: return
+            .maxByOrNull { Tourist.score(it) } ?: return
         said.add(poi.key)
         val detour = Tourist.estimateDetourSeconds(poi.offsetM, mode)
         val mins = Tourist.minutesLabel(detour)
