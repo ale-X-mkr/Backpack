@@ -84,6 +84,30 @@ class VoiceText private constructor(val lang: String) {
         }
     }
 
+    /** 1.4.0: three or more sights in the next minutes, said once. */
+    fun severalNear(n: Int) = pick(
+        "Several sights near you, $n. Take a look at the map at your next break.",
+        "Varios sitios de interés cerca, $n. Mírelos en el mapa en su próxima pausa.",
+        "Plusieurs sites à voir tout près, $n. Regardez la carte à votre prochaine pause.",
+        "Diversi luoghi da vedere qui vicino, $n. Guarda la mappa alla prossima sosta.",
+        "Mehrere Sehenswürdigkeiten in der Nähe, $n. Schauen Sie bei der nächsten Pause auf die Karte.")
+
+    /** 1.4.0: the sights near the start (not announced one by one). */
+    fun startSummary(n: Int) = pick(
+        "$n sights around your starting point. See them on the map.",
+        "$n sitios de interés cerca del punto de partida. Véalos en el mapa.",
+        "$n sites à voir autour de votre départ. Voyez-les sur la carte.",
+        "$n luoghi da vedere intorno alla partenza. Guardali sulla mappa.",
+        "$n Sehenswürdigkeiten rund um Ihren Startpunkt. Sie sehen sie auf der Karte.")
+
+    /** 1.4.0: the sights near the destination (not announced one by one). */
+    fun destinationSummary(n: Int) = pick(
+        "$n sights around your destination. See them on the map when you arrive.",
+        "$n sitios de interés cerca de su destino. Véalos en el mapa al llegar.",
+        "$n sites à voir autour de votre destination. Voyez-les sur la carte à l'arrivée.",
+        "$n luoghi da vedere intorno alla destinazione. Guardali sulla mappa all'arrivo.",
+        "$n Sehenswürdigkeiten rund um Ihr Ziel. Sie sehen sie bei der Ankunft auf der Karte.")
+
     private fun minutes(n: Int): String = "$n " + if (n == 1) pick("minute", "minuto", "minute", "minuto", "Minute")
         else pick("minutes", "minutos", "minutes", "minuti", "Minuten")
     private fun minutesDative(n: Int): String = "$n " + if (n == 1) "Minute" else "Minuten"

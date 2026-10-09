@@ -275,6 +275,71 @@
 
     </LinearLayout>
 
+    <!-- 1.4.0: card of the sight being announced (top in portrait, left in
+         landscape; placed in code), closes by itself after 10 s. -->
+    <LinearLayout
+        android:id="@+id/sight_card"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:background="@drawable/message_bubble_background"
+        android:elevation="10dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="10dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/sight_card_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textColor="@color/backpack_ink"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/sight_card_detail"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="@color/backpack_ink"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/sight_card_go"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/route_pill_background"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="7dp"
+                android:text="Go there"
+                android:textColor="@color/backpack_ink"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/sight_card_read"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:background="@drawable/route_pill_background"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="7dp"
+                android:text="▶ Read aloud"
+                android:textColor="@color/backpack_ink"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
     <!-- ===== ZONE: right column ===== -->
 
     <!-- 2: center on my location -->
@@ -461,22 +526,6 @@
                 android:textSize="12sp" />
 
         </LinearLayout>
-
-        <!-- 1.3.0: after a sight heads-up, 5 s: tap to hear the guide. -->
-        <TextView
-            android:id="@+id/listen_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:alpha="0.75"
-            android:background="@drawable/message_bubble_background"
-            android:paddingHorizontal="14dp"
-            android:paddingVertical="6dp"
-            android:text="▶  Listen"
-            android:textColor="@color/backpack_ink"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:visibility="gone" />
 
         <TextView
             android:id="@+id/error_bubble"

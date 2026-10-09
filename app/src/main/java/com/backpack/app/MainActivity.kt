@@ -1473,27 +1473,88 @@ class MainActivity : AppCompatActivity() {
     // ---------- 1.1.1 Weekend voice heads-up ----------
 
     /** 1.3.0: sight heads-ups run with the navigation ([com.backpack.app.tourist.SightHeadsUp]);
-     *  while the map is shown, its message and the Listen button appear here. */
-    private val headsUpUi = com.backpack.app.tourist.SightHeadsUp.Ui { poi, mins ->
-        if (isDestroyed) return@Ui
-        showMessage("${poi.name} \u00b7 ${poi.category.label} \u00b7 \u2248 +$mins \u00b7 tap to hear about it",
-            onTap = { showSightGuide(poi) }, showMs = 8000L)
-        showListenButton(poi)
+     *  while the map is shown, 1.4.0: a card + the map showing the detour. */
+    private val headsUpUi = object : com.backpack.app.tourist.SightHeadsUp.Ui {
+        override fun onHeadsUp(poi: TouristPoi, detourLabel: String) {
+            if (isDestroyed) return
+            wakeDisplay()
+            showSightCard(poi, detourLabel)
+            showSightOnMap(poi)
+        }
+        override fun onSeveral(pois: List<TouristPoi>) {
+            if (isDestroyed) return
+            showMessage("${pois.size} sights near you \u00b7 see the map at your next break", showMs = 8000L)
+        }
     }
 
-    /** 1.3.0: faint "Listen" for 5 s after a heads-up: one tap, the guide reads (no popup). */
-    private val hideListen = Runnable { findViewById<View>(R.id.listen_button)?.visibility = View.GONE }
+    private val hideSightCard = Runnable { findViewById<View>(R.id.sight_card)?.visibility = View.GONE }
 
-    private fun showListenButton(poi: TouristPoi) {
-        val b = findViewById<TextView>(R.id.listen_button) ?: return
-        b.visibility = View.VISIBLE
-        b.setOnClickListener {
-            handler.removeCallbacks(hideListen)
-            b.visibility = View.GONE
+    /** 1.4.0: name, kind, extra time; Go there / Read aloud. Top in portrait,
+     *  left in landscape (the road ahead stays visible); 10 s. */
+    private fun showSightCard(poi: TouristPoi, detourLabel: String) {
+        val card = findViewById<View>(R.id.sight_card) ?: return
+        findViewById<TextView>(R.id.sight_card_title).text = poi.name
+        findViewById<TextView>(R.id.sight_card_detail).text = "${poi.category.label} \u00b7 \u2248 +$detourLabel"
+        findViewById<View>(R.id.sight_card_go).setOnClickListener {
+            hideSightCard.run(); handler.removeCallbacks(hideSightCard)
+            addStopFlow(poi.point, poi.name)
+        }
+        findViewById<View>(R.id.sight_card_read).setOnClickListener {
+            hideSightCard.run(); handler.removeCallbacks(hideSightCard)
             readAloud(poi)
         }
-        handler.removeCallbacks(hideListen)
-        handler.postDelayed(hideListen, 5000L)
+        val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        val lp = card.layoutParams as FrameLayout.LayoutParams
+        val screenW = findViewById<View>(android.R.id.content).width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        if (land) {
+            lp.gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
+            lp.setMargins(dp(12), 0, 0, 0)
+            lp.width = (screenW * 0.36).toInt()
+        } else {
+            lp.gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            val boxBottom = if (navBox.visibility == View.VISIBLE) navBox.bottom else dp(60)
+            lp.setMargins(dp(10), boxBottom + dp(8), 0, 0)
+            lp.width = FrameLayout.LayoutParams.WRAP_CONTENT
+        }
+        card.layoutParams = lp
+        card.visibility = View.VISIBLE
+        handler.removeCallbacks(hideSightCard)
+        handler.postDelayed(hideSightCard, 10_000L)
+    }
+
+    /** 1.4.0: zoom out to you + the sight (blinking ring) for 10 s, then back to driving. */
+    private var focusBlinks = 0
+    private val focusBlink = object : Runnable {
+        override fun run() {
+            if (focusBlinks <= 0) { layers.setFocus(null); return }
+            layers.setFocusVisible(focusBlinks % 2 == 0)
+            focusBlinks--
+            handler.postDelayed(this, 400L)
+        }
+    }
+
+    private fun showSightOnMap(poi: TouristPoi) {
+        layers.setFocus(poi.point)
+        focusBlinks = 25
+        handler.removeCallbacks(focusBlink)
+        handler.post(focusBlink)
+        val m = map ?: return
+        if (!navUiActive || overviewOn) return
+        val here = currentPosition() ?: return
+        overviewOn = true
+        setOverviewButton(true)
+        if (puckActive()) m.locationComponent.cameraMode = CameraMode.NONE
+        try {
+            val bounds = LatLngBounds.Builder().include(LatLng(here.lat, here.lon)).include(LatLng(poi.point.lat, poi.point.lon)).build()
+            m.cameraPosition = CameraPosition.Builder().target(m.cameraPosition.target).zoom(m.cameraPosition.zoom)
+                .bearing(0.0).tilt(0.0).padding(0.0, 0.0, 0.0, 0.0).build()
+            val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            // Room for the card (top in portrait, left in landscape).
+            m.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds,
+                if (land) dp(260) else dp(60), if (land) dp(80) else dp(230), dp(60), dp(150)), 700)
+        } catch (e: Exception) { }
+        handler.removeCallbacks(overviewReturnRunnable)
+        handler.postDelayed(overviewReturnRunnable, 10_000L)
     }
 
     /** The place's Wikipedia summary, read aloud (queued like every reading). */
@@ -1930,6 +1991,8 @@ class MainActivity : AppCompatActivity() {
         wakeDisplay()
         findViewById<ImageButton>(R.id.nav_go_button).setImageResource(R.drawable.ic_navigation_stop)
         setNavigationDeclutter(true)
+        // 1.4.0: the sights of the route followed stay on the map while navigating.
+        if (touristOn) showTouristFor(NavigationEngine.route ?: selectedRoute())
         findViewById<View>(R.id.overview_button).visibility = View.VISIBLE
         navInstructionBar.visibility = View.VISIBLE
         refreshNavBox()
