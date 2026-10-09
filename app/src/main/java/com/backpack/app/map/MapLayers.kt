@@ -253,7 +253,7 @@ class MapLayers(private val context: Context) {
 
     /** Before the fraction: [before] (faint or invisible); from it on: [after]. */
     private fun gradient(after: Int, before: Int, frac: Double): Expression =
-        if (frac <= 0.0) Expression.step(Expression.lineProgress(), Expression.color(after))
+        if (frac <= 0.0) Expression.step(Expression.lineProgress(), Expression.color(after), *emptyArray<Expression.Stop>())
         else Expression.step(Expression.lineProgress(), Expression.color(before), Expression.stop(frac, Expression.color(after)))
 
     private fun pushFade() {
