@@ -104,7 +104,7 @@ class RoutePlanner(context: Context) {
                 val i = ShorterPick.pick(side, req.extraTimeFraction)
                 if (i == 0 || side == null) tp
                 else RoutePlan(listOf(side[i]) + tp.routes, 0,
-                    listOfNotNull(tp.note, ShorterPick.note(tp.routes[0], side[i])).joinToString(" · "), tp.tollDecision)
+                    listOfNotNull(tp.note, ShorterPick.note(tp.routes[0], side[i], Prefs.useMetric(app))).joinToString(" · "), tp.tollDecision)
             }
             if (plan == null) {
                 val code = wt.httpCode ?: wo.httpCode
@@ -151,7 +151,7 @@ class RoutePlanner(context: Context) {
                     val shorter = if (req.preference == RoutePreference.RECOMMENDED) ShorterPick.pick(routes, req.extraTimeFraction) else 0
                     val plan = when {
                         req.options.preferPaved(req.mode) -> RoutePicker.preferPaved(routes)
-                        shorter > 0 -> RoutePlan(routes, shorter, ShorterPick.note(routes[0], routes[shorter]))
+                        shorter > 0 -> RoutePlan(routes, shorter, ShorterPick.note(routes[0], routes[shorter], Prefs.useMetric(app)))
                         else -> RoutePlan(routes, 0, null)
                     }
                     cb.onResult(plan, null)

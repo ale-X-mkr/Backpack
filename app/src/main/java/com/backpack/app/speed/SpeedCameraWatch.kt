@@ -25,7 +25,7 @@ object SpeedCameraWatch {
 
     private const val SECTION_M = 20_000.0
     private const val REFILL_M = 8_000.0
-    private const val POINT_RADIUS_M = 3000
+    private const val POINT_RADIUS_M = 10_000
     private const val ON_ROUTE_M = 40.0
 
     private val main = Handler(Looper.getMainLooper())
@@ -46,6 +46,7 @@ object SpeedCameraWatch {
     // Loading without a route.
     private var pointCenter: LatLon? = null
     private var pointAtMs = 0L
+    private var pointInFlight = false
 
     // The blips.
     private var app: Context? = null
@@ -153,19 +154,20 @@ object SpeedCameraWatch {
         }
     }
 
+    /** No route: 10 km around you, again only near the edge (6 km away from the last centre). */
     private fun loadAround(c: Context, me: LatLon) {
-        if (inFlight) return
+        if (pointInFlight) return
         val now = System.currentTimeMillis()
         val center = pointCenter
-        if (center != null && Geo.distance(center, me) < 1000.0) return
-        if (now - pointAtMs < 30_000L) return
+        if (center != null && Geo.distance(center, me) < POINT_RADIUS_M * 0.6) return
+        if (now - pointAtMs < 60_000L) return
         pointAtMs = now
-        inFlight = true
+        pointInFlight = true
         OverpassClient.query(c.applicationContext, SpeedCameras.pointQuery(me, POINT_RADIUS_M), background = true) { body, _ ->
             worker.execute {
                 val found = body?.let { try { SpeedCameras.parse(it) } catch (e: Exception) { null } }
                 main.post {
-                    inFlight = false
+                    pointInFlight = false
                     if (found != null) { pointCenter = me; keep(found) }
                 }
             }
@@ -198,7 +200,13 @@ object SpeedCameraWatch {
 
     private fun warnZone(c: Context) {
         play(false)
-        if (NavigationEngine.isActive) NavigationEngine.speak(VoiceText.forLanguage(Prefs.voiceLanguage(c)).dangerZone())
+        // Queued between instructions (never cuts one); the chime is at once.
+        if (!NavigationEngine.isActive) return
+        val until = System.currentTimeMillis() + 60_000L
+        NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
+            com.backpack.app.core.VoiceQueue.Kind.HEADS_UP,
+            VoiceText.forLanguage(Prefs.voiceLanguage(c)).dangerZone().let { t -> { t } },
+            { NavigationEngine.isActive && System.currentTimeMillis() < until }))
     }
 
     private fun play(single: Boolean) {

@@ -72,6 +72,9 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 
+/** 1.4.0: urgency searches still to run (kept over a screen rebuild). */
+private var urgencyApplyPending = false
+
 /**
  * Backpack map screen (1.0.0: one button style, POI dropdown, fixed message
  * band, lettered routes, settings popup by category, place popups with
@@ -89,6 +92,7 @@ import org.maplibre.android.maps.Style
  * NavigationService), maneuver icons from the route data, route options,
  * trip kept across rotation / day-night switch, OSM credit on screen.
  */
+
 class MainActivity : AppCompatActivity() {
 
     private enum class ModeUi(val mode: TravelMode, val iconRes: Int, val label: String) {
@@ -312,6 +316,8 @@ class MainActivity : AppCompatActivity() {
         setupPreferenceRow()
         setupTollToggle()
         setupUrgencyButton()
+        // A turn of the phone right after an urgency tap: its searches still run.
+        if (urgencyApplyPending) urgencyButton.postDelayed(urgencyApply, 1000L)
         setupRouteOptionsButton()
         setupAltRouteButton()
         styleBottomButtons()
@@ -1899,9 +1905,6 @@ class MainActivity : AppCompatActivity() {
         placeLayout()
     }
 
-    /** Start the route right after it arrives (Resume navigation). */
-    private var autoStartNavigation = false
-
     /** 1.4.0: the navigation stopped before arriving: same destination, the
      *  stops not yet visited, same travel mode; navigation starts by itself. */
     private fun resumeLastTrip() {
@@ -1914,9 +1917,8 @@ class MainActivity : AppCompatActivity() {
         refreshPins()
         val start = resolveStartPoint() ?: run { TripState.restore(before); refreshPins(); showError("Waiting for GPS"); return }
         showMessage("Resuming navigation\u2026")
-        autoStartNavigation = true
         TripState.changePending = true
-        requestBestRoute(start, t.destination, t.stops, onFailure = { autoStartNavigation = false; restoreCommitted(before) })
+        requestBestRoute(start, t.destination, t.stops, onFailure = { restoreCommitted(before) }, autoStart = true)
     }
 
     // ---------- Stops (waypoints) ----------
@@ -3324,6 +3326,7 @@ class MainActivity : AppCompatActivity() {
 
     /** The searches for the urgency mode chosen (0.6 s after the last tap). */
     private val urgencyApply = Runnable {
+        urgencyApplyPending = false
         touristModeChanged()
         // 1.0.9: Emergency adds the emergency places on its own (your
         // category stays); Weekend / Work change the detour allowed.
@@ -3356,6 +3359,7 @@ class MainActivity : AppCompatActivity() {
             )
             saveToggleState()
             // 1.4.0: tapping through the modes searches only for the one you stop on.
+            urgencyApplyPending = true
             urgencyButton.removeCallbacks(urgencyApply)
             urgencyButton.postDelayed(urgencyApply, 600L)
         }
@@ -3606,7 +3610,8 @@ class MainActivity : AppCompatActivity() {
         extraTimeFraction = if (urgencyMode == UrgencyMode.EMERGENCY) 0.0 else Prefs.balanceExtra(this) / 100.0
     )
 
-    private fun requestBestRoute(from: LatLon, to: LatLon, stops: List<LatLon>? = null, onFailure: (() -> Unit)? = null) {
+    /** [autoStart]: navigation starts when this plan arrives (Resume); a newer request drops it. */
+    private fun requestBestRoute(from: LatLon, to: LatLon, stops: List<LatLon>? = null, onFailure: (() -> Unit)? = null, autoStart: Boolean = false) {
         val navigating = NavigationEngine.isActive
         // Mid-trip changes (preference, urgency) start from where you are now.
         val request = buildRequest(if (navigating) currentPosition() ?: from else from, to, stops)
@@ -3626,7 +3631,7 @@ class MainActivity : AppCompatActivity() {
             TripState.selectedIndex = plan.primaryIndex
             drawPlan(plan, plan.primaryIndex, fit = !navigating, note = plan.note)
             if (navigating && NavigationEngine.isActive) NavigationEngine.switchRoute(plan, plan.primaryIndex, request)
-            else if (autoStartNavigation) { autoStartNavigation = false; refreshResumeButton(); startNavigation() }
+            else if (autoStart && !NavigationEngine.isActive) { refreshResumeButton(); startNavigation() }
         }
     }
 

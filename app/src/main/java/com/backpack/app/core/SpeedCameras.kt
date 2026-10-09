@@ -6,9 +6,10 @@ import org.json.JSONObject
  * 1.4.0: fixed speed cameras from OpenStreetMap (highway=speed_camera),
  * with the country each one stands in, and what the law there allows:
  *  - EXACT: a sonar blip that speeds up as you get closer;
- *  - ZONE (France, and when the country is unknown): only a "danger zone"
- *    of a few km that contains the camera somewhere, never its spot;
- *  - NONE (Germany, Switzerland, Cyprus, North Macedonia): nothing at all.
+ *  - ZONE (France): only a "danger zone" of a few km that contains the
+ *    camera somewhere, never its spot;
+ *  - NONE (Germany, Switzerland, Cyprus, North Macedonia, and when the
+ *    server could not tell the country): nothing at all.
  * Plain JVM (tested).
  */
 object SpeedCameras {
@@ -21,7 +22,7 @@ object SpeedCameras {
     private val ZONE_ONLY = setOf("FR")
 
     fun rule(country: String?): Rule = when {
-        country == null -> Rule.ZONE
+        country == null -> Rule.NONE
         country.uppercase() in FORBIDDEN -> Rule.NONE
         country.uppercase() in ZONE_ONLY -> Rule.ZONE
         else -> Rule.EXACT

@@ -24,7 +24,7 @@ class SpeedCamerasTest {
 
     @Test fun countryRules() {
         assertEquals(SpeedCameras.Rule.ZONE, SpeedCameras.rule("FR"))
-        assertEquals(SpeedCameras.Rule.ZONE, SpeedCameras.rule(null))
+        assertEquals(SpeedCameras.Rule.NONE, SpeedCameras.rule(null))
         for (c in listOf("DE", "CH", "CY", "MK")) assertEquals(SpeedCameras.Rule.NONE, SpeedCameras.rule(c))
         assertEquals(SpeedCameras.Rule.EXACT, SpeedCameras.rule("ES"))
     }

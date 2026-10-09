@@ -254,7 +254,7 @@ object SettingsPopup {
             prefs.edit().putBoolean(Settings.KEY_CAMERAS, it).apply()
         }
         p.text("From OpenStreetMap, where mapped (not all are). A sonar blip that speeds up as you get closer. " +
-            "France: only \"Danger zone\" for the stretch, as the law requires. Germany, Switzerland, Cyprus, North Macedonia: silent (warnings are illegal there). " +
+            "France: only \"Danger zone\" for the stretch, as the law requires. Germany, Switzerland, Cyprus, North Macedonia: silent (warnings are illegal there), and silent when the country is unknown. " +
             "Mobile checks and traffic are not covered.", 11f)
     }
 

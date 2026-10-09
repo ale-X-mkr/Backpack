@@ -83,7 +83,8 @@ object SightHeadsUp {
         // Destination: one summary when the last 10 minutes begin.
         if (!destinationDone && toEndM < quietM) {
             destinationDone = true
-            val near = all.filter { length - it.alongM < quietM && it.alongM > p.alongM - 200.0 }
+            // Short trip: the start summary may already have named them.
+            val near = all.filter { it.key !in said && length - it.alongM < quietM && it.alongM > p.alongM - 200.0 }
             near.forEach { said.add(it.key) }
             if (near.isNotEmpty()) say(words.destinationSummary(near.size)) { ui?.onSeveral(near) }
         }

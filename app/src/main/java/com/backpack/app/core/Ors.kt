@@ -199,9 +199,10 @@ object ShorterPick {
         return best
     }
 
-    fun note(fastest: RouteResult, chosen: RouteResult): String =
-        "Shorter: %.0f km less for %.0f min more".format(
-            (fastest.distanceMeters - chosen.distanceMeters) / 1000.0,
+    fun note(fastest: RouteResult, chosen: RouteResult, metric: Boolean = true): String =
+        "Shorter: %.0f %s less for %.0f min more".format(
+            (fastest.distanceMeters - chosen.distanceMeters) / (if (metric) 1000.0 else 1609.344),
+            if (metric) "km" else "mi",
             Math.max(1.0, (chosen.durationSeconds - fastest.durationSeconds) / 60.0)
         )
 }
