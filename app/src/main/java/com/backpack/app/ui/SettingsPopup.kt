@@ -23,7 +23,7 @@ import com.backpack.app.net.TileCache
 object SettingsPopup {
 
     enum class Page(val label: String) {
-        ROUTE("Route"), NAVIGATION("Navigation"), SPEED("Speed"), SIGHTS("Sights"), PLACES("Places"), MAP("Map"), SERVERS("Servers"), CREDITS("Credits")
+        ROUTE("Route"), NAVIGATION("Navigation"), SPEED("Speed"), SIGHTS("Sights"), PLACES("Places"), MAP("Map"), SERVERS("Advanced"), CREDITS("Credits")
     }
 
     interface Host {
@@ -71,7 +71,7 @@ object SettingsPopup {
                 Page.SIGHTS -> sightsPage(c, p, prefs)
                 Page.PLACES -> placesPage(c, p, prefs, host)
                 Page.MAP -> mapPage(p, prefs)
-                Page.SERVERS -> serversPage(p, prefs)
+                Page.SERVERS -> serversPage(c, p, prefs)
                 Page.CREDITS -> creditsPage(p)
             }
             p.fit()
@@ -390,38 +390,75 @@ object SettingsPopup {
         p.text("OpenFreeMap and VersaTiles: free, no account, no key. VersaTiles (Colorful, Graybeard, Eclipse) has no uptime guarantee.", 11f)
     }
 
-    private fun serversPage(p: Popup, prefs: android.content.SharedPreferences) {
-        p.section("Routing (openrouteservice)")
-        urlField(p, prefs, "Routing server (empty = api.openrouteservice.org)", Settings.KEY_ORS_URL, "https://...")
-        p.field("Own openrouteservice key (free at openrouteservice.org)", prefs.getString(Settings.KEY_ORS_KEY, "").orEmpty(),
-            "key", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) {
-            prefs.edit().putString(Settings.KEY_ORS_KEY, it).apply()
-        }
-        p.section("Places and speed limits (Overpass)")
-        // 1.2.1: a faster server with your own key, tried before everything else.
-        val none = "none" to "None"
-        val providers = listOf(none) + com.backpack.app.core.OverpassProviders.ALL.map { it.id to it.label }
-        p.text("Faster server with your own key (optional)", 12f)
-        p.choices(providers, { it.second }, {
-            val cur = prefs.getString(Settings.KEY_OVERPASS_PROVIDER, null)
-            providers.firstOrNull { it.first == cur } ?: none
-        }) { prefs.edit().putString(Settings.KEY_OVERPASS_PROVIDER, it.first).apply() }
-        var keyField: android.widget.EditText? = null
-        keyField = p.field("Your key for that server", prefs.getString(Settings.KEY_OVERPASS_KEY, "").orEmpty(),
-            "key", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) { text ->
-            if (text.isEmpty() || com.backpack.app.core.OverpassProviders.ALL.first().url(text) != null) {
-                prefs.edit().putString(Settings.KEY_OVERPASS_KEY, text.trim()).apply()
-                keyField?.error = null
-            } else keyField?.error = "Letters, digits, . _ ~ - only"
-        }
-        p.text(com.backpack.app.core.OverpassProviders.ALL.joinToString(" \u00b7 ") { "${it.label}: ${it.note}" } +
-            ". The key stays on this phone and only goes to that server.", 11f)
-        urlField(p, prefs, "Own Overpass server (optional, tried next)", Settings.KEY_OVERPASS_URL, "https://.../api/interpreter")
-        p.text("Then the free ones: overpass-api.de, then overpass.private.coffee. Each server's free capacity is checked before asking; a server slow to answer gets help from the next one.", 11f)
+    /**
+     * 1.4.0 "Advanced": Backpack works without touching any of this. Privacy
+     * in plain view; servers, keys and an own map style folded away, each
+     * with a short line and a "?" for the details.
+     */
+    private fun serversPage(c: Context, p: Popup, prefs: android.content.SharedPreferences) {
         p.section("Privacy")
-        p.text("No account, no tracking. Routing gets the trip's points; places servers only the ~5 km squares looked at; " +
-            "speed limits the road ahead. Search positions are rounded to ~1 km. Nothing about your trips is stored, except the places cache (Places page).", 11f)
+        p.text("No account, no tracking. Servers only get what they need: the trip's points (routing), " +
+            "~5 km squares (places), the road ahead (speed limits). Searches are rounded to ~1 km. Recorded trips stay on this phone.", 11f)
         p.link("Map data © OpenStreetMap contributors (ODbL)", "https://www.openstreetmap.org/copyright")
+
+        p.section("Servers and keys")
+        p.text("Optional. Backpack works without any of this.", 11f)
+        val folded = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.VERTICAL; visibility = android.view.View.GONE }
+        val opener = p.bodyButton("Show") {}
+        opener.setOnClickListener {
+            val open = folded.visibility != android.view.View.VISIBLE
+            folded.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            opener.text = if (open) "Hide" else "Show"
+            p.fit()
+        }
+        p.custom(folded)
+        p.into(folded) {
+            p.section("Routing")
+            urlField(p, prefs, "Routing server (empty = openrouteservice.org)", Settings.KEY_ORS_URL, "https://...")
+            p.field("Own openrouteservice key", prefs.getString(Settings.KEY_ORS_KEY, "").orEmpty(),
+                "key", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) {
+                prefs.edit().putString(Settings.KEY_ORS_KEY, it).apply()
+            }
+            help(c, p, "Free key at openrouteservice.org (2,000 routes a day). Useful when the shared keys are busy. Your own server: its address, without /v2.")
+
+            p.section("Places, sights, speed limits")
+            val none = "none" to "None"
+            val providers = listOf(none) + com.backpack.app.core.OverpassProviders.ALL.map { it.id to it.label }
+            p.text("Faster server (own key)", 12f)
+            p.choices(providers, { it.second }, {
+                val cur = prefs.getString(Settings.KEY_OVERPASS_PROVIDER, null)
+                providers.firstOrNull { it.first == cur } ?: none
+            }) { prefs.edit().putString(Settings.KEY_OVERPASS_PROVIDER, it.first).apply() }
+            var keyField: android.widget.EditText? = null
+            keyField = p.field("Key for that server", prefs.getString(Settings.KEY_OVERPASS_KEY, "").orEmpty(),
+                "key", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) { text ->
+                if (text.isEmpty() || com.backpack.app.core.OverpassProviders.ALL.first().url(text) != null) {
+                    prefs.edit().putString(Settings.KEY_OVERPASS_KEY, text.trim()).apply()
+                    keyField?.error = null
+                } else keyField?.error = "Letters, digits, . _ ~ - only"
+            }
+            urlField(p, prefs, "Own Overpass server (tried next)", Settings.KEY_OVERPASS_URL, "https://.../api/interpreter")
+            help(c, p, com.backpack.app.core.OverpassProviders.ALL.joinToString(" \u00b7 ") { "${it.label}: ${it.note}" } +
+                ". The key stays on this phone and only goes to that server. Order: that server, your own, then the free " +
+                "overpass-api.de and overpass.private.coffee; a slow one gets help from the next.")
+
+            p.section("Own map style")
+            urlField(p, prefs, "Style URL (day map; empty = Map page)", Settings.KEY_CUSTOM_STYLE, "https://.../style.json")
+            help(c, p, "Any MapLibre style.json (e.g. from your own tile server). Used by day; the night style stays the one chosen on the Map page.")
+        }
+    }
+
+    /** A "?" that unfolds a longer explanation. */
+    private fun help(c: Context, p: Popup, text: String) {
+        val q = p.text("?  More", 11f)
+        val more = p.text(text, 11f).apply { visibility = android.view.View.GONE }
+        q.setTextColor(androidx.core.content.ContextCompat.getColor(c, com.backpack.app.R.color.rg_active))
+        q.setOnClickListener {
+            val open = more.visibility != android.view.View.VISIBLE
+            more.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            q.text = if (open) "?  Less" else "?  More"
+            p.fit()
+        }
     }
 
     // ---------- Fields ----------

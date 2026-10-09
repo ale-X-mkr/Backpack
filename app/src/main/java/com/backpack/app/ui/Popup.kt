@@ -75,7 +75,7 @@ class Popup(private val context: Context, title: String) {
     }
 
     fun section(text: String) {
-        body.addView(TextView(context).apply {
+        target.addView(TextView(context).apply {
             this.text = text.uppercase()
             textSize = 11f
             letterSpacing = 0.08f
@@ -89,7 +89,7 @@ class Popup(private val context: Context, title: String) {
         textSize = sizeSp
         setTextColor(color(R.color.rg_text))
         setPadding(0, dp(2), 0, dp(2))
-        body.addView(this)
+        target.addView(this)
     }
 
     /** A row of one-tap choices; returns a setter to refresh the highlight. */
@@ -111,7 +111,7 @@ class Popup(private val context: Context, title: String) {
         }
         refreshers.add(refresh)
         refresh()
-        body.addView(row)
+        target.addView(row)
         return refresh
     }
 
@@ -128,7 +128,7 @@ class Popup(private val context: Context, title: String) {
         val refresh = { styleChip(chip, isOn()) }
         refreshers.add(refresh)
         refresh()
-        body.addView(row)
+        target.addView(row)
     }
 
     /** Several on/off chips on one wrapping row. */
@@ -146,12 +146,12 @@ class Popup(private val context: Context, title: String) {
             refreshers.add(refresh)
             refresh()
         }
-        body.addView(row)
+        target.addView(row)
     }
 
     /** A text field with a small label; [onChange] gets the trimmed text on every edit. */
     fun field(label: String, value: String, hint: String = "", inputType: Int = android.text.InputType.TYPE_CLASS_TEXT, onChange: (String) -> Unit): android.widget.EditText {
-        body.addView(TextView(context).apply {
+        target.addView(TextView(context).apply {
             text = label
             textSize = 12f
             setTextColor(color(R.color.rg_text_secondary))
@@ -172,7 +172,7 @@ class Popup(private val context: Context, title: String) {
                 override fun afterTextChanged(s: android.text.Editable?) = onChange(s?.toString()?.trim().orEmpty())
             })
         }
-        body.addView(e)
+        target.addView(e)
         return e
     }
 
@@ -189,18 +189,18 @@ class Popup(private val context: Context, title: String) {
                 context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
             } catch (e: Exception) { }
         }
-        body.addView(this)
+        target.addView(this)
     }
 
     /** 1.4.0: any view in the body, as tall as it needs. */
     fun custom(v: android.view.View) {
-        body.addView(v, android.widget.LinearLayout.LayoutParams(
+        target.addView(v, android.widget.LinearLayout.LayoutParams(
             android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT))
     }
 
     /** 1.3.0: any view in the body (e.g. the height profile), [heightDp] tall. */
     fun view(v: android.view.View, heightDp: Int) {
-        body.addView(v, android.widget.LinearLayout.LayoutParams(
+        target.addView(v, android.widget.LinearLayout.LayoutParams(
             android.widget.LinearLayout.LayoutParams.MATCH_PARENT, dp(heightDp)))
     }
 
@@ -221,12 +221,23 @@ class Popup(private val context: Context, title: String) {
             setOnClickListener { onClick(); refreshAll() }
         }
         row.addView(b)
-        body.addView(row)
+        target.addView(row)
         return b
+    }
+
+    /** 1.4.0: where the next rows go (the body, or a group inside it: [into]). */
+    private var target: android.view.ViewGroup = body
+
+    /** Rows added in [build] go into [group] (e.g. a folded section). */
+    fun into(group: android.view.ViewGroup, build: () -> Unit) {
+        val before = target
+        target = group
+        try { build() } finally { target = before }
     }
 
     /** Empties the body (multipage popups rebuild it per page). */
     fun clearBody() {
+        target = body
         body.removeAllViews()
         refreshers.clear()
     }

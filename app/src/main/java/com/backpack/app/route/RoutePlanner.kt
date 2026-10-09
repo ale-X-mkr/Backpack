@@ -274,7 +274,7 @@ class RoutePlanner(context: Context) {
     }
 
     companion object {
-        const val NO_KEY = "No routing key -- add your free openrouteservice key in Settings > Servers"
+        const val NO_KEY = "No routing key -- add your free openrouteservice key in Settings > Advanced"
 
         val http: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
