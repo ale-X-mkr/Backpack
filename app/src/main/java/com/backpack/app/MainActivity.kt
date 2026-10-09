@@ -525,6 +525,7 @@ class MainActivity : AppCompatActivity() {
         val url = Prefs.mapStyleUrl(this)
         loadedStyleUrl = url
         m.setStyle(Style.Builder().fromUri(url)) { style ->
+            layers.labelFont = if (url.contains("versatiles")) "noto_sans_regular" else "Noto Sans Regular"
             layers.install(style)
             if (LocationHub.hasPermission(this)) activateLocationPuck(style)
             restoreTripOnMap()
@@ -654,6 +655,7 @@ class MainActivity : AppCompatActivity() {
             val following = m.locationComponent.cameraMode != CameraMode.NONE
             if (following) northUp = !northUp
             followPosition(null)
+            refreshNorthMark()
             showMessage(if (northUp) "North up" else "Your direction up")
             return
         }
@@ -698,6 +700,20 @@ class MainActivity : AppCompatActivity() {
     private fun setPlanFollow(f: PlanFollow) {
         planFollow = f
         findViewById<ImageButton>(R.id.locate_button)?.let { setIconActive(it, f != PlanFollow.OFF) }
+        refreshNorthMark()
+    }
+
+    /** 1.4.0: a small N on the centre button while the map is north up. */
+    private fun refreshNorthMark() {
+        val north = if (navUiActive) northUp else planFollow == PlanFollow.NORTH
+        val b = findViewById<ImageButton>(R.id.locate_button) ?: return
+        val icon = if (north) R.drawable.ic_location_north else R.drawable.ic_location_marker
+        if (b.tag != icon) {
+            b.tag = icon
+            val tint = b.imageTintList
+            b.setImageResource(icon)
+            b.imageTintList = tint
+        }
     }
 
     /** Searching the map, choosing routes or places: no more following. */
@@ -1932,6 +1948,7 @@ class MainActivity : AppCompatActivity() {
     private var northUp = false
 
     private fun followPosition(zoom: Double?) {
+        refreshNorthMark()
         val lc = map?.locationComponent ?: return
         if (zoom != null) lastTrackingZoom = zoom
         // Settings > Navigation: 3D tilt (Auto = 45° driving, 25° otherwise).
@@ -1959,6 +1976,8 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.overview_button).visibility = View.GONE
         navUiActive = false
+        nextTurnKey = null
+        layers.setNextTurn(null)
         statusStrip.maxLines = 2
         setPlanFollow(PlanFollow.OFF)
         // Outside navigation the map stays flat: no tilting by accident.
@@ -2028,6 +2047,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** 1.4.0: the next maneuver drawn brighter (150 m before it to 50 m after), arrowhead at its end. */
+    private var nextTurnKey: Any? = null
+
+    private fun showNextTurn(p: Progress, route: RouteResult) {
+        val step = route.steps.getOrNull(p.nextStepIndex)
+        if (step == null || step.maneuver == com.backpack.app.core.Maneuver.GOAL || p.offRoute) {
+            if (nextTurnKey != null) { nextTurnKey = null; layers.setNextTurn(null) }
+            return
+        }
+        val key = System.identityHashCode(route) to p.nextStepIndex
+        if (key == nextTurnKey) return
+        nextTurnKey = key
+        val at = route.line.alongAt(step.wayStart)
+        val from = (at - 150.0).coerceAtLeast(0.0)
+        layers.setNextTurn(com.backpack.app.core.SpeedLimits.section(route.line, from, at + 50.0 - from))
+    }
+
     private fun onNavProgress(p: Progress, route: RouteResult) {
         if (!navUiActive) startNavigationUi()
         if (p.arrived) return
@@ -2056,6 +2092,7 @@ class MainActivity : AppCompatActivity() {
         if (overviewOn && p.anticipation) leaveOverview() // back to the drive view before a turn
         extendTouristIfNeeded(p, route)
         layers.setProgress(p.alongM, route) // driven part darker
+        showNextTurn(p, route)
         queryPois() // the stretch ahead, every 40 % of it
         // Live remaining distance and arrival time.
         routeInfoDist.text = navInfo("Dist:", navDistance(p.remainingM), " \u00b7")
@@ -2102,7 +2139,13 @@ class MainActivity : AppCompatActivity() {
             lastTrackingZoom = zoom
             lc.zoomWhileTracking(zoom, 1200L)
         }
+        // 1.4.0 adaptive 3D: 30° slow, up to 50° fast (not in north-up, which is flat).
+        if (!northUp && lc.cameraMode == CameraMode.TRACKING_GPS) Prefs.navTiltAt(this, location.speed * 3.6)?.let { t ->
+            if (Math.abs(t - lastTrackingTilt) >= 2.0) { lastTrackingTilt = t; lc.tiltWhileTracking(t) }
+        }
     }
+
+    private var lastTrackingTilt = 30.0
 
     // ---------- Drive view / Overview (while navigating) ----------
 
@@ -2333,6 +2376,9 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener { p.dismiss(); showTrip(t) }
             }
         }
+        if (trackShown) p.bodyButton("Hide the trip shown on the map") {
+            layers.setTrack(null); trackShown = false; p.dismiss()
+        }
         if (trips.isNotEmpty()) p.bodyButton("Delete all trips") {
             com.backpack.app.track.TripRecorder.deleteAll(this)
             p.dismiss()
@@ -2342,10 +2388,28 @@ class MainActivity : AppCompatActivity() {
         p.show()
     }
 
+    private var trackShown = false
+
+    private fun showTrackOnMap(t: com.backpack.app.track.TripRecorder.Trip) {
+        val pts = t.points.map { LatLon(it.lat, it.lon) }
+        if (pts.size < 2) { showMessage("Nothing recorded on this trip"); return }
+        layers.setTrack(pts)
+        trackShown = true
+        stopPlanFollow()
+        val m = map ?: return
+        try {
+            val bounds = LatLngBounds.Builder().includes(pts.map { LatLng(it.lat, it.lon) }).build()
+            m.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, dp(48), dp(130), dp(48), dp(150)), 800)
+        } catch (e: Exception) { }
+        showMessage("${tripTitle(t)} \u00b7 hide it in My trips")
+    }
+
     private fun showTrip(t: com.backpack.app.track.TripRecorder.Trip) {
         val p = Popup(this, tripTitle(t))
         p.text("${t.points.size} points \u00b7 ${distanceLabel(com.backpack.app.core.Gpx.length(t.points))}. GPX opens in any map or hiking app.")
         p.button("Delete") { com.backpack.app.track.TripRecorder.delete(t); p.dismiss(); showMessage("Trip deleted") }
+        // 1.4.0: the track on the map, framed whole.
+        p.button("Show on map") { p.dismiss(); showTrackOnMap(t) }
         p.button("Save as GPX", primary = true) {
             p.dismiss()
             tripToSave = t

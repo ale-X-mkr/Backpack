@@ -23,6 +23,21 @@ object Prefs {
     const val STYLE_BRIGHT = "https://tiles.openfreemap.org/styles/bright"
     const val STYLE_POSITRON = "https://tiles.openfreemap.org/styles/positron"
     const val STYLE_DARK = "https://tiles.openfreemap.org/styles/dark"
+    /** 1.4.0: more free styles (no key): OpenFreeMap Fiord (night), VersaTiles (rate-limited, no guarantee). */
+    const val STYLE_FIORD = "https://tiles.openfreemap.org/styles/fiord"
+    const val STYLE_VT_COLORFUL = "https://tiles.versatiles.org/assets/styles/colorful/style.json"
+    const val STYLE_VT_GRAYBEARD = "https://tiles.versatiles.org/assets/styles/graybeard/style.json"
+    const val STYLE_VT_ECLIPSE = "https://tiles.versatiles.org/assets/styles/eclipse/style.json"
+
+    /** Day styles: id -> (label, URL). */
+    val DAY_STYLES = listOf(
+        "liberty" to ("Liberty" to STYLE_LIBERTY), "bright" to ("Bright" to STYLE_BRIGHT),
+        "positron" to ("Light grey" to STYLE_POSITRON), "vt_colorful" to ("Colorful" to STYLE_VT_COLORFUL),
+        "vt_graybeard" to ("Graybeard" to STYLE_VT_GRAYBEARD)
+    )
+    val NIGHT_STYLES = listOf(
+        "dark" to ("Dark" to STYLE_DARK), "fiord" to ("Fiord" to STYLE_FIORD), "vt_eclipse" to ("Eclipse" to STYLE_VT_ECLIPSE)
+    )
 
     private fun settings(c: Context) = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
     private fun toggles(c: Context) = c.getSharedPreferences(TOGGLES, Context.MODE_PRIVATE)
@@ -56,12 +71,12 @@ object Prefs {
     fun mapStyleUrl(c: Context): String {
         val custom = settings(c).getString(Settings.KEY_CUSTOM_STYLE, "")?.trim().orEmpty()
         if (custom.isNotEmpty() && !isNight(c)) return custom
-        if (isNight(c)) return STYLE_DARK
-        return when (settings(c).getString(Settings.KEY_MAP_STYLE, "liberty")) {
-            "bright" -> STYLE_BRIGHT
-            "positron" -> STYLE_POSITRON
-            else -> STYLE_LIBERTY
+        if (isNight(c)) {
+            val id = settings(c).getString(Settings.KEY_NIGHT_STYLE, "dark")
+            return NIGHT_STYLES.firstOrNull { it.first == id }?.second?.second ?: STYLE_DARK
         }
+        val id = settings(c).getString(Settings.KEY_MAP_STYLE, "liberty")
+        return DAY_STYLES.firstOrNull { it.first == id }?.second?.second ?: STYLE_LIBERTY
     }
 
     fun orsBaseUrl(c: Context): String =
@@ -108,8 +123,13 @@ object Prefs {
     /** Navigation tilt in degrees for [driving]; Auto = 45° driving, 25° otherwise. */
     fun navTilt(c: Context, driving: Boolean): Double {
         val t = settings(c).getInt(Settings.KEY_NAV_TILT, -1)
-        return if (t < 0) (if (driving) 45.0 else 25.0) else t.coerceIn(0, 60).toDouble()
+        // 1.4.0 Auto = adaptive: 30° when starting, then by speed (navTiltAt).
+        return if (t < 0) 30.0 else t.coerceIn(0, 60).toDouble()
     }
+
+    /** 1.4.0: the tilt for a speed; null = a fixed angle is set (no change with speed). */
+    fun navTiltAt(c: Context, speedKmh: Double): Double? =
+        if (settings(c).getInt(Settings.KEY_NAV_TILT, -1) < 0) com.backpack.app.core.NavTilt.auto(speedKmh) else null
 
     /** Zoom levels added to the navigation zoom (+1 closer, -1 farther). */
     fun navZoomOffset(c: Context): Double = settings(c).getInt(Settings.KEY_NAV_ZOOM, 0).coerceIn(-2, 2).toDouble()

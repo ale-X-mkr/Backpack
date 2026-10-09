@@ -15,6 +15,8 @@ object Settings {
     const val KEY_DISPLAY_MODE = "display_mode"
     const val KEY_DEFAULT_POI = "default_poi_category"
     const val KEY_MAP_STYLE = "map_style"
+    /** 1.4.0: night map style (dark, fiord, vt_eclipse). */
+    const val KEY_NIGHT_STYLE = "night_style"
     const val KEY_CUSTOM_STYLE = "custom_style_url"
     const val KEY_ORS_URL = "ors_url"
     const val KEY_ORS_KEY = "ors_key"

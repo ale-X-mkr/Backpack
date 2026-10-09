@@ -39,6 +39,8 @@ class MapLayers(private val context: Context) {
     data class Pin(val id: String, val point: LatLon, val icon: String, val dim: Boolean = false)
 
     private var style: Style? = null
+    /** Font of the place names: from the map style's own font set. */
+    var labelFont = "Noto Sans Regular"
     private var routes: List<RouteResult> = emptyList()
     private var selected = 0
     /** A / B / C letters on the lines (only while choosing between routes). */
@@ -54,6 +56,7 @@ class MapLayers(private val context: Context) {
         ICON_DEST to R.drawable.ic_marker_destination,
         ICON_STOP to R.drawable.ic_marker_waypoint,
         ICON_WARN to R.drawable.ic_gps_warning,
+        ICON_TURN to R.drawable.ic_turn_head,
         "poi_fuel" to R.drawable.ic_poi_fuel,
         "poi_food" to R.drawable.ic_poi_food,
         "poi_lodging" to R.drawable.ic_poi_lodging,
@@ -84,7 +87,11 @@ class MapLayers(private val context: Context) {
         val alt = ContextCompat.getColor(context, R.color.route_alt)
 
         style.addSource(GeoJsonSource(SRC_ALT))
-        style.addSource(GeoJsonSource(SRC_ROUTE))
+        // 1.4.0: line metrics, so the part behind the arrow fades exactly at it (gradient).
+        style.addSource(GeoJsonSource(SRC_ROUTE, org.maplibre.android.style.sources.GeoJsonOptions().withLineMetrics(true)))
+        style.addSource(GeoJsonSource(SRC_TRACK))
+        style.addSource(GeoJsonSource(SRC_NEXT))
+        style.addSource(GeoJsonSource(SRC_FOCUS))
         style.addSource(GeoJsonSource(SRC_DONE))
         style.addSource(GeoJsonSource(SRC_POI))
         style.addSource(GeoJsonSource(SRC_PINS))
@@ -94,7 +101,8 @@ class MapLayers(private val context: Context) {
 
         // Keep everything under the position arrow: after a style change
         // MapLibre has already put its location layers back before we get here.
-        val firstLocationLayer = style.layers.firstOrNull { it.id.startsWith("mapbox-location-") }?.id
+        // 1.4.0: any naming of MapLibre's location layers ("mapbox-location-..." / "maplibre-location-...").
+        val firstLocationLayer = style.layers.firstOrNull { it.id.contains("-location-") }?.id
         fun add(layer: Layer) {
             if (firstLocationLayer != null) style.addLayerBelow(layer, firstLocationLayer) else style.addLayer(layer)
         }
@@ -104,26 +112,49 @@ class MapLayers(private val context: Context) {
             Expression.exponential(1.5f), Expression.zoom(),
             Expression.stop(8, base * 0.5f), Expression.stop(14, base), Expression.stop(18, base * 2.2f)
         )
+        routeColor = primary
+        casingColor = casing
+        doneColor = (ContextCompat.getColor(context, R.color.route_done) and 0x00FFFFFF) or 0x4D000000 // 30 %
+        // 1.4.0: a recorded trip shown from My trips (purple, under the route).
+        add(LineLayer(LAYER_TRACK, SRC_TRACK).withProperties(
+            PropertyFactory.lineColor(0xFF7B1FA2.toInt()), PropertyFactory.lineWidth(width(4f)), PropertyFactory.lineOpacity(0.85f),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
+        ))
+        // 1.4.0: all route lines 15 % wider.
         add(LineLayer(LAYER_ALT_CASING, SRC_ALT).withProperties(
-            PropertyFactory.lineColor(casing), PropertyFactory.lineWidth(width(6f)),
+            PropertyFactory.lineColor(casing), PropertyFactory.lineWidth(width(6.9f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             PropertyFactory.lineOpacity(0.8f)
         ))
         add(LineLayer(LAYER_ALT, SRC_ALT).withProperties(
-            PropertyFactory.lineColor(alt), PropertyFactory.lineWidth(width(4f)),
+            PropertyFactory.lineColor(alt), PropertyFactory.lineWidth(width(4.6f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
         add(LineLayer(LAYER_ROUTE_CASING, SRC_ROUTE).withProperties(
-            PropertyFactory.lineColor(casing), PropertyFactory.lineWidth(width(8f)),
-            PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
+            PropertyFactory.lineColor(casing), PropertyFactory.lineWidth(width(9.2f)),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            PropertyFactory.lineGradient(gradient(casing, 0x00000000, doneFraction()))
         ))
         add(LineLayer(LAYER_ROUTE, SRC_ROUTE).withProperties(
-            PropertyFactory.lineColor(primary), PropertyFactory.lineWidth(width(5f)),
+            PropertyFactory.lineColor(primary), PropertyFactory.lineWidth(width(5.75f)),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            PropertyFactory.lineGradient(gradient(primary, doneColor, doneFraction()))
+        ))
+        // 1.4.0: the next turn, brighter, with an arrowhead.
+        add(LineLayer(LAYER_NEXT, SRC_NEXT).withProperties(
+            PropertyFactory.lineColor(0xFFFFFFFF.toInt()), PropertyFactory.lineWidth(width(3.2f)), PropertyFactory.lineOpacity(0.95f),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
+        ))
+        add(SymbolLayer(LAYER_NEXT_HEAD, SRC_NEXT).withProperties(
+            PropertyFactory.iconImage(Expression.get("icon")),
+            PropertyFactory.iconRotate(Expression.toNumber(Expression.get("bearing"))),
+            PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+            PropertyFactory.iconAllowOverlap(true),
+            PropertyFactory.iconIgnorePlacement(true)
         ))
         // 1.1.0: the stretch already driven, darker and half transparent.
         add(LineLayer(LAYER_DONE, SRC_DONE).withProperties(
-            PropertyFactory.lineColor(ContextCompat.getColor(context, R.color.route_done)), PropertyFactory.lineWidth(width(5f)),
+            PropertyFactory.lineColor(ContextCompat.getColor(context, R.color.route_done)), PropertyFactory.lineWidth(width(5.75f)),
             PropertyFactory.lineOpacity(0.3f),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
@@ -160,7 +191,8 @@ class MapLayers(private val context: Context) {
                 ),
                 Expression.stop(13, Expression.get("name"))
             )),
-            PropertyFactory.textFont(arrayOf("Noto Sans Regular")),
+            // 1.4.0: VersaTiles styles name their fonts differently.
+            PropertyFactory.textFont(arrayOf(labelFont)),
             PropertyFactory.textSize(11f),
             PropertyFactory.textOpacity(dimmed()),
             PropertyFactory.textAnchor(Property.TEXT_ANCHOR_TOP),
@@ -191,7 +223,93 @@ class MapLayers(private val context: Context) {
             PropertyFactory.iconAllowOverlap(true),
             PropertyFactory.iconIgnorePlacement(true)
         ))
+        // 1.4.0: the sight being announced: a blinking red ring.
+        add(CircleLayer(LAYER_FOCUS, SRC_FOCUS).withProperties(
+            PropertyFactory.circleRadius(16f),
+            PropertyFactory.circleColor(0x00000000),
+            PropertyFactory.circleStrokeColor(0xFFE51401.toInt()),
+            PropertyFactory.circleStrokeWidth(3.5f),
+            PropertyFactory.circleStrokeOpacity(1f)
+        ))
         pushAll()
+        pushExtras()
+    }
+
+    // ---------- 1.4.0: fade at the arrow, next turn, focus, recorded trip ----------
+
+    private var routeColor = 0
+    private var casingColor = 0
+    private var doneColor = 0
+    /** Mercator lengths of the selected route (for line-progress). */
+    private var merc: DoubleArray? = null
+    private var mercRoute: RouteResult? = null
+
+    private fun doneFraction(): Double {
+        val r = routes.getOrNull(selected) ?: return 0.0
+        val d = doneM ?: return 0.0
+        if (mercRoute !== r) { merc = com.backpack.app.core.LineProgress.mercatorCumulative(r.points); mercRoute = r }
+        return com.backpack.app.core.LineProgress.fraction(r.line, merc ?: return 0.0, d)
+    }
+
+    /** Before the fraction: [before] (faint or invisible); from it on: [after]. */
+    private fun gradient(after: Int, before: Int, frac: Double): Expression =
+        if (frac <= 0.0) Expression.step(Expression.lineProgress(), Expression.color(after))
+        else Expression.step(Expression.lineProgress(), Expression.color(before), Expression.stop(frac, Expression.color(after)))
+
+    private fun pushFade() {
+        val s = style ?: return
+        if (!s.isFullyLoaded) return
+        val f = doneFraction()
+        s.getLayer(LAYER_ROUTE)?.setProperties(PropertyFactory.lineGradient(gradient(routeColor, doneColor, f)))
+        s.getLayer(LAYER_ROUTE_CASING)?.setProperties(PropertyFactory.lineGradient(gradient(casingColor, 0x00000000, f)))
+    }
+
+    private var nextTurn: List<LatLon>? = null
+    private var focus: LatLon? = null
+    private var track: List<LatLon>? = null
+
+    /** The stretch around the next maneuver (null = none). */
+    fun setNextTurn(points: List<LatLon>?) {
+        if (points == nextTurn) return
+        nextTurn = points
+        pushExtras()
+    }
+
+    fun setFocus(p: LatLon?) {
+        focus = p
+        pushExtras()
+    }
+
+    /** Blink: the ring shown / hidden. */
+    fun setFocusVisible(on: Boolean) {
+        style?.takeIf { it.isFullyLoaded }?.getLayer(LAYER_FOCUS)?.setProperties(PropertyFactory.circleStrokeOpacity(if (on) 1f else 0f))
+    }
+
+    fun setTrack(points: List<LatLon>?) {
+        track = points
+        pushExtras()
+    }
+
+    private fun pushExtras() {
+        val s = style ?: return
+        if (!s.isFullyLoaded) return
+        fun ls(p: List<LatLon>) = LineString.fromLngLats(p.map { Point.fromLngLat(it.lon, it.lat) })
+        val n = nextTurn
+        val nextFeatures = if (n == null || n.size < 2) emptyList() else {
+            val a = n[n.size - 2]
+            val b = n.last()
+            listOf(Feature.fromGeometry(ls(n)), Feature.fromGeometry(Point.fromLngLat(b.lon, b.lat)).also {
+                it.addStringProperty("icon", ICON_TURN)
+                it.addNumberProperty("bearing", com.backpack.app.core.Geo.bearing(a, b))
+            })
+        }
+        s.getSourceAs<GeoJsonSource>(SRC_NEXT)?.setGeoJson(FeatureCollection.fromFeatures(nextFeatures))
+        val f = focus
+        s.getSourceAs<GeoJsonSource>(SRC_FOCUS)?.setGeoJson(FeatureCollection.fromFeatures(
+            if (f == null) emptyList() else listOf(Feature.fromGeometry(Point.fromLngLat(f.lon, f.lat)))))
+        val t = track
+        s.getSourceAs<GeoJsonSource>(SRC_TRACK)?.setGeoJson(FeatureCollection.fromFeatures(
+            if (t == null || t.size < 2) emptyList() else listOf(Feature.fromGeometry(ls(t)))))
     }
 
     /** Metres of the selected route already driven (navigation), or null. */
@@ -204,9 +322,10 @@ class MapLayers(private val context: Context) {
         if (alongM != null && onRoute !== routes.getOrNull(selected)) return
         val old = doneM
         if (alongM == null && old == null) return
-        if (alongM != null && old != null && Math.abs(alongM - old) < 60.0) return
+        // 1.4.0: only a colour change now (cheap): every 5 m, right at the arrow.
+        if (alongM != null && old != null && Math.abs(alongM - old) < 5.0) return
         doneM = alongM
-        pushRouteLine()
+        pushFade()
     }
 
     fun setRoutes(routes: List<RouteResult>, selectedIndex: Int, letters: Boolean = routes.size > 1) {
@@ -306,23 +425,13 @@ class MapLayers(private val context: Context) {
         val s = style ?: return
         if (!s.isFullyLoaded) return
         val primary = routes.getOrNull(selected)
-        val done = doneM
-        val ahead: List<LatLon>?
-        val behind: List<LatLon>?
-        if (primary != null && done != null && done > 1.0 && primary.points.size >= 2) {
-            behind = com.backpack.app.core.SpeedLimits.section(primary.line, 0.0, done)
-            ahead = com.backpack.app.core.SpeedLimits.section(primary.line, done, primary.line.length)
-        } else {
-            behind = null
-            ahead = primary?.points
-        }
         fun ls(p: List<LatLon>) = LineString.fromLngLats(p.map { Point.fromLngLat(it.lon, it.lat) })
+        // 1.4.0: the whole line; the part behind you fades through the gradient.
         s.getSourceAs<GeoJsonSource>(SRC_ROUTE)?.setGeoJson(
-            FeatureCollection.fromFeatures(if (ahead == null || ahead.size < 2) emptyList() else listOf(Feature.fromGeometry(ls(ahead))))
+            FeatureCollection.fromFeatures(if (primary == null || primary.points.size < 2) emptyList() else listOf(Feature.fromGeometry(ls(primary.points))))
         )
-        s.getSourceAs<GeoJsonSource>(SRC_DONE)?.setGeoJson(
-            FeatureCollection.fromFeatures(if (behind == null || behind.size < 2) emptyList() else listOf(Feature.fromGeometry(ls(behind))))
-        )
+        s.getSourceAs<GeoJsonSource>(SRC_DONE)?.setGeoJson(FeatureCollection.fromFeatures(emptyList()))
+        pushFade()
     }
 
     private fun pushRoutes() {
@@ -390,6 +499,14 @@ class MapLayers(private val context: Context) {
         const val ICON_DEST = "pin_dest"
         const val ICON_STOP = "pin_stop"
         const val ICON_WARN = "gps_warn"
+        const val ICON_TURN = "turn_head"
+        private const val SRC_TRACK = "bp-track"
+        private const val LAYER_TRACK = "bp-track-layer"
+        private const val SRC_NEXT = "bp-next-turn"
+        private const val LAYER_NEXT = "bp-next-turn-line"
+        private const val LAYER_NEXT_HEAD = "bp-next-turn-head"
+        private const val SRC_FOCUS = "bp-focus"
+        private const val LAYER_FOCUS = "bp-focus-ring"
 
         private const val SRC_ALT = "bp-alt-routes"
         private const val SRC_ROUTE = "bp-route"

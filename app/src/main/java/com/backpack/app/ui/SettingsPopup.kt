@@ -178,11 +178,11 @@ object SettingsPopup {
 
     private fun navigationPage(p: Popup, prefs: android.content.SharedPreferences, host: Host) {
         p.section("3D view while navigating")
-        val tilts = listOf(-1 to "Auto", 0 to "Flat", 30 to "30°", 45 to "45°", 60 to "60°")
+        val tilts = listOf(-1 to "Adaptive", 0 to "Flat", 30 to "30°", 45 to "45°", 60 to "60°")
         p.choices(tilts, { it.second }, { tilts.firstOrNull { t -> t.first == prefs.getInt(Settings.KEY_NAV_TILT, -1) } ?: tilts[0] }) {
             prefs.edit().putInt(Settings.KEY_NAV_TILT, it.first).apply()
         }
-        p.text("Auto: 45° driving, 25° walking and cycling. North up is always flat.", 11f)
+        p.text("Adaptive: 30° when slow, up to 50° at motorway speed. North up is flat.", 11f)
         p.section("Zoom while navigating")
         val zooms = listOf(1 to "Closer", 0 to "Normal", -1 to "Farther")
         p.choices(zooms, { it.second }, { zooms.firstOrNull { z -> z.first == prefs.getInt(Settings.KEY_NAV_ZOOM, 0) } ?: zooms[1] }) {
@@ -349,14 +349,19 @@ object SettingsPopup {
             modes.firstOrNull { it.first == cur } ?: modes[2]
         }) { prefs.edit().putString(Settings.KEY_DISPLAY_MODE, it.first).apply() }
         p.text("Sunset: night map from sunset to sunrise where you are. Night always uses the dark map.", 11f)
-        p.section("Map style (day)")
-        val styles = listOf("liberty" to "Liberty", "bright" to "Bright", "positron" to "Light grey")
-        p.choices(styles, { it.second }, {
+        p.section("Map style")
+        val day = Prefs.DAY_STYLES
+        p.choices(day, { it.second.first }, {
             val cur = prefs.getString(Settings.KEY_MAP_STYLE, "liberty")
-            styles.firstOrNull { it.first == cur } ?: styles[0]
+            day.firstOrNull { it.first == cur } ?: day[0]
         }) { prefs.edit().putString(Settings.KEY_MAP_STYLE, it.first).apply() }
-        urlField(p, prefs, "Own map style (URL, optional)", Settings.KEY_CUSTOM_STYLE, "https://...")
-        p.text("Maps by OpenFreeMap: no account, no key, no cookies.", 11f)
+        p.section("Night style")
+        val night = Prefs.NIGHT_STYLES
+        p.choices(night, { it.second.first }, {
+            val cur = prefs.getString(Settings.KEY_NIGHT_STYLE, "dark")
+            night.firstOrNull { it.first == cur } ?: night[0]
+        }) { prefs.edit().putString(Settings.KEY_NIGHT_STYLE, it.first).apply() }
+        p.text("OpenFreeMap and VersaTiles: free, no account, no key. VersaTiles (Colorful, Graybeard, Eclipse) has no uptime guarantee.", 11f)
     }
 
     private fun serversPage(p: Popup, prefs: android.content.SharedPreferences) {
