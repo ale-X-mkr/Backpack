@@ -290,7 +290,16 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<ImageButton>(R.id.resume_button).apply {
             setIconActive(this, false)
-            setOnClickListener { resumePreviousRoute() }
+            // Previous route (after a detour / Go here) first; else 1.4.0 the navigation you stopped.
+            setOnClickListener { if (TripState.previous != null) resumePreviousRoute() else resumeLastTrip() }
+            setOnLongClickListener {
+                if (TripState.previous == null && com.backpack.app.nav.LastTrip.load(this@MainActivity) != null) {
+                    com.backpack.app.nav.LastTrip.clear(this@MainActivity)
+                    refreshResumeButton()
+                    showMessage("Last navigation forgotten")
+                }
+                true
+            }
         }
         findViewById<TextView>(R.id.credit_text).setOnClickListener { SettingsPopup.show(this, settingsHost, SettingsPopup.Page.CREDITS) }
 
@@ -868,12 +877,12 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    /** Go / Stop: the main action, RedGRPS "Start sharing" look (dark red,
-     *  white icon). Clear: standard grey button. */
+    /** 1.4.0: Go / Stop / Clear / Resume in our own button style: the grey
+     *  round backdrop, a simple red shape (Clear: grey), a little bigger. */
     private fun styleBottomButtons() {
         findViewById<ImageButton>(R.id.nav_go_button).apply {
-            background = ContextCompat.getDrawable(this@MainActivity, R.drawable.go_backdrop)
-            imageTintList = ColorStateList.valueOf(Color.WHITE)
+            background = ContextCompat.getDrawable(this@MainActivity, R.drawable.icon_backdrop)
+            imageTintList = ColorStateList.valueOf(activeColor)
         }
         setIconActive(findViewById(R.id.clear_route_button), false)
     }
@@ -1883,8 +1892,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshResumeButton() {
-        findViewById<View>(R.id.resume_button).visibility = if (TripState.previous != null) View.VISIBLE else View.GONE
+        // 1.4.0: also the navigation stopped before arriving (when nothing else is planned).
+        val last = TripState.plan == null && !NavigationEngine.isActive && com.backpack.app.nav.LastTrip.load(this) != null
+        findViewById<View>(R.id.resume_button).visibility = if (TripState.previous != null || last) View.VISIBLE else View.GONE
         placeLayout()
+    }
+
+    /** Start the route right after it arrives (Resume navigation). */
+    private var autoStartNavigation = false
+
+    /** 1.4.0: the navigation stopped before arriving: same destination, the
+     *  stops not yet visited, same travel mode; navigation starts by itself. */
+    private fun resumeLastTrip() {
+        val t = com.backpack.app.nav.LastTrip.load(this) ?: return
+        enumValues<ModeUi>().firstOrNull { it.mode.name == t.mode }?.let { setModeQuietly(it) }
+        val before = TripState.copy()
+        TripState.destination = t.destination
+        TripState.waypoints.clear()
+        TripState.waypoints.addAll(t.stops)
+        refreshPins()
+        val start = resolveStartPoint() ?: run { TripState.restore(before); refreshPins(); showError("Waiting for GPS"); return }
+        showMessage("Resuming navigation\u2026")
+        autoStartNavigation = true
+        TripState.changePending = true
+        requestBestRoute(start, t.destination, t.stops, onFailure = { autoStartNavigation = false; restoreCommitted(before) })
     }
 
     // ---------- Stops (waypoints) ----------
@@ -1989,7 +2020,7 @@ class MainActivity : AppCompatActivity() {
         map?.uiSettings?.isTiltGesturesEnabled = true
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         wakeDisplay()
-        findViewById<ImageButton>(R.id.nav_go_button).setImageResource(R.drawable.ic_navigation_stop)
+        findViewById<ImageButton>(R.id.nav_go_button).setImageResource(R.drawable.ic_btn_stop)
         setNavigationDeclutter(true)
         // 1.4.0: the sights of the route followed stay on the map while navigating.
         if (touristOn) showTouristFor(NavigationEngine.route ?: selectedRoute())
@@ -2052,7 +2083,7 @@ class MainActivity : AppCompatActivity() {
         params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         window.attributes = params
         isDisplayDimmed = false
-        findViewById<ImageButton>(R.id.nav_go_button).setImageResource(R.drawable.ic_navigation_go)
+        findViewById<ImageButton>(R.id.nav_go_button).setImageResource(R.drawable.ic_btn_go)
         setNavigationDeclutter(false)
         statusStrip.text = ""
         navDistanceText.text = ""
@@ -2107,6 +2138,7 @@ class MainActivity : AppCompatActivity() {
         override fun onStopped() {
             if (altChoiceOpen) closeAltChoice(restore = true)
             if (navUiActive) stopNavigationUi()
+            handler.post { if (!isDestroyed) refreshResumeButton() }
         }
     }
 
@@ -2965,13 +2997,11 @@ class MainActivity : AppCompatActivity() {
         val b = findViewById<ImageButton>(R.id.sights_toggle)
         val v = if (urgencyMode == UrgencyMode.WEEKEND) View.VISIBLE else View.GONE
         if (b.visibility != v) b.visibility = v
-        if (touristOn) {
-            b.imageTintList = ColorStateList.valueOf(0xFF4B1F6F.toInt())
-            setStatusRing(b, touristResults.isNotEmpty())
-        } else {
-            setIconActive(b, false)
-            setStatusRing(b, false)
-        }
+        // 1.4.0: photo aperture: open and red = sights on, closed and dark grey = off.
+        val icon = if (touristOn) R.drawable.ic_aperture_open else R.drawable.ic_aperture_closed
+        if (b.tag != icon) { b.tag = icon; b.setImageResource(icon) }
+        b.imageTintList = ColorStateList.valueOf(if (touristOn) 0xFFC62828.toInt() else 0xFF424242.toInt())
+        setStatusRing(b, touristOn && touristResults.isNotEmpty())
     }
 
     private fun setupSightsButton() {
@@ -3593,6 +3623,7 @@ class MainActivity : AppCompatActivity() {
             TripState.selectedIndex = plan.primaryIndex
             drawPlan(plan, plan.primaryIndex, fit = !navigating, note = plan.note)
             if (navigating && NavigationEngine.isActive) NavigationEngine.switchRoute(plan, plan.primaryIndex, request)
+            else if (autoStartNavigation) { autoStartNavigation = false; refreshResumeButton(); startNavigation() }
         }
     }
 

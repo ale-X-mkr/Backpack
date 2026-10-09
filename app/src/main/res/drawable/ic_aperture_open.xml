@@ -1,0 +1,8 @@
+<!-- 1.4.0: sights on: photo aperture open (tinted red in code) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.8" android:fillColor="#00000000"
+        android:pathData="M12,12m-9.5,0a9.5,9.5 0 1,0 19,0a9.5,9.5 0 1,0 -19,0" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.5" android:strokeLineCap="round" android:fillColor="#00000000"
+        android:pathData="M15.98,9.70 L2.54,1.94 M15.98,14.30 L15.98,-1.22 M12.00,16.60 L25.44,8.84 M8.02,14.30 L21.46,22.06 M8.02,9.70 L8.02,25.22 M12.00,7.40 L-1.44,15.16" />
+</vector>

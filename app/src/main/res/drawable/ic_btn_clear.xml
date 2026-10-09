@@ -1,0 +1,5 @@
+<!-- 1.4.0: Clear the route (our button style: simple shape on the grey round backdrop). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="#FF555555"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="@android:color/white" android:strokeWidth="2.6" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M7,7 L17,17 M17,7 L7,17" />
+</vector>

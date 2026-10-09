@@ -90,6 +90,7 @@ object NavigationEngine {
         // A new trip only (not an alternative started mid-trip): heads-ups said
         // stay said, and the track goes on in the same recording.
         if (!isActive) {
+            LastTrip.clear(c)
             com.backpack.app.tourist.SightHeadsUp.reset()
             // 1.3.0: your track, on this phone only (Settings > Navigation).
             com.backpack.app.track.TripRecorder.start(c, null)
@@ -123,6 +124,13 @@ object NavigationEngine {
 
     fun stop() {
         if (!isActive) return
+        // 1.4.0: stopped before arriving -> "Resume navigation" can pick it up again.
+        val c0 = app
+        val req0 = request
+        if (c0 != null && req0 != null) {
+            if (arrived) LastTrip.clear(c0)
+            else LastTrip.save(c0, LastTrip.Trip(req0.to, remainingStops() ?: req0.waypoints, req0.mode.name))
+        }
         isActive = false
         planner?.cancel()
         com.backpack.app.track.TripRecorder.stop()
