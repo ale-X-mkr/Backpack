@@ -151,7 +151,7 @@ class MapLayers(private val context: Context) {
         val turnFill = if (darkMap) 0xFFFFFFFF.toInt() else 0xFFB71C1C.toInt()
         val turnEdge = if (darkMap) 0xFFD32F2F.toInt() else 0xFF000000.toInt()
         add(LineLayer(LAYER_NEXT_EDGE, SRC_NEXT).withProperties(
-            PropertyFactory.lineColor(turnEdge), PropertyFactory.lineWidth(width(4.4f)),
+            PropertyFactory.lineColor(turnEdge), PropertyFactory.lineWidth(width(5.0f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
         add(LineLayer(LAYER_NEXT, SRC_NEXT).withProperties(

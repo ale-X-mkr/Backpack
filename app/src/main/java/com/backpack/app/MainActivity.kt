@@ -1318,7 +1318,10 @@ class MainActivity : AppCompatActivity() {
     private fun voiceHandlerName(): String? {
         val ri = try { packageManager.resolveActivity(voiceIntent(), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY) } catch (e: Exception) { null }
         val pkg = ri?.activityInfo?.packageName ?: return getString(R.string.voice_handler_unknown)
-        if (pkg == "android" || pkg.endsWith(".resolver")) return null
+        // The "choose an app" screen (android, or com.android.intentresolver on newer phones).
+        val all = try { packageManager.queryIntentActivities(voiceIntent(), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY) } catch (e: Exception) { emptyList() }
+        if (pkg == "android" || pkg.contains("resolver", ignoreCase = true) ||
+            ri.activityInfo.name.contains("Resolver") || (all.size > 1 && all.none { it.activityInfo.packageName == pkg })) return null
         return try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() } catch (e: Exception) { pkg }
     }
 
