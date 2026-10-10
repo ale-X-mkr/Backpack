@@ -1622,14 +1622,22 @@ class MainActivity : AppCompatActivity() {
     /** The place's Wikipedia summary, read aloud (queued like every reading). */
     private fun readAloud(poi: TouristPoi) {
         if (!Prefs.voiceOn(this)) { showMessage("Voice is off (Settings > Navigation)"); return }
+        if (!readingsAllowed()) return
         showMessage("Looking up ${poi.name}\u2026")
         val lang = Prefs.voiceLanguage(this)
         com.backpack.app.tourist.WikiSummary.forPoi(poi, lang) { text, textLang ->
             if (isDestroyed) return@forPoi
             if (text == null) { showMessage("No Wikipedia article to read for ${poi.name}"); return@forPoi }
             NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
-                com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text", textLang.takeIf { it != lang }))
+                com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text", textLang.takeIf { it != lang }), this)
         }
+    }
+
+    /** 1.4.1: while navigating, readings only in the "Full" sound mode. */
+    private fun readingsAllowed(): Boolean {
+        if (Prefs.soundMode(this) == Prefs.SoundMode.FULL || !NavigationEngine.isActive) return true
+        showMessage("Readings need sound mode Full (bottom right button)")
+        return false
     }
 
     /**
@@ -1656,8 +1664,8 @@ class MainActivity : AppCompatActivity() {
             p.fit()
             if (!Prefs.voiceOn(this)) showMessage("Voice is off (Settings > Navigation)")
             // Queued: after the heads-up being said, cut by instructions and resumed.
-            else NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
-                com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text", textLang.takeIf { it != lang }))
+            else if (readingsAllowed()) NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
+                com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text", textLang.takeIf { it != lang }), this)
         }
     }
 

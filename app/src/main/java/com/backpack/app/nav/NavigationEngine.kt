@@ -399,11 +399,15 @@ object NavigationEngine {
     /** 1.4.1: the sound button changed the mode: below "Full" no readings go on. */
     fun soundModeChanged() {
         val c = app ?: return
-        if (Prefs.soundMode(c) != Prefs.SoundMode.FULL) stopReading()
+        if (Prefs.soundMode(c) == Prefs.SoundMode.FULL) return
+        if (voice.dropHeadsUps()) { tts?.stop(); main.removeCallbacks(watchdog); watchdogId = null }
+        stopReading()
     }
 
     /** Queues a heads-up or a reading (said between instructions, one at a time). */
-    fun speakInfo(item: com.backpack.app.core.VoiceQueue.Item) {
+    fun speakInfo(item: com.backpack.app.core.VoiceQueue.Item, c: Context? = null) {
+        // 1.4.1: from the map screen also without navigation (the voice starts here then).
+        if (c != null) { if (app == null) app = c.applicationContext; initTts(c.applicationContext) }
         voice.add(item)
         pump()
     }
@@ -447,6 +451,9 @@ object NavigationEngine {
         if (tts != null && !ttsReady && !ttsFailed) return // waits for the voice to start
         val s = voice.next(System.currentTimeMillis(), secondsToNext())
         if (s !is com.backpack.app.core.VoiceQueue.Say.Sentence) return
+        // 1.4.1: while navigating, readings only in the "Full" sound mode (Read aloud outside navigation works).
+        if (s.item.kind == com.backpack.app.core.VoiceQueue.Kind.READING && isActive &&
+            app?.let { Prefs.soundMode(it) } != Prefs.SoundMode.FULL) { voice.dropReadings(); pump(); return }
         // 1.4.1: dangers are always said (also in a call, also with instructions off).
         val danger = s.item.kind == com.backpack.app.core.VoiceQueue.Kind.DANGER
         // 1.4.0: in a phone call only instructions are said; a sight tip shows its message silently.

@@ -85,6 +85,14 @@ class VoiceQueue {
         return false
     }
 
+    /** 1.4.1: drops waiting / current sight heads-ups (dangers stay); true if one was being said. */
+    fun dropHeadsUps(): Boolean {
+        queue.removeAll { it.kind == Kind.HEADS_UP }
+        val c = current
+        if (c != null && c.kind == Kind.HEADS_UP) { current = null; val was = infoSpeaking; infoSpeaking = false; return was }
+        return false
+    }
+
     fun clear() { queue.clear(); current = null; infoSpeaking = false; navSpeaking = false }
 
     /**
