@@ -2727,7 +2727,9 @@ class MainActivity : AppCompatActivity() {
         val boxShown = navBox.visibility == View.VISIBLE && navBox.height > 0
         // 1.2.1: the columns never move, so the box keeps above them: a long
         // street name gets one line instead of two when it would reach them.
-        if (navUiActive && boxShown && navBox.bottom / density > COLUMNS_TOP_DP - 4 && statusStrip.maxLines > 1) {
+        // 1.4.2: the turn row is at least the circle's 64 dp: two lines fit in it,
+        // so only a row grown past that (large font) is cut to one line.
+        if (navUiActive && boxShown && navInstructionBar.height > dp(66) && navBox.bottom / density > COLUMNS_TOP_DP - 4 && statusStrip.maxLines > 1) {
             statusStrip.maxLines = 1
         }
 

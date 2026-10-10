@@ -110,7 +110,8 @@
             android:paddingTop="2dp"
             android:visibility="gone">
 
-            <!-- 1.4.1: the time now (navigating only; the phone's 12 / 24 h setting). -->
+            <!-- 1.4.1: the time now (navigating only; the phone's 12 / 24 h setting).
+                 This line in dp, not sp: a fixed height keeps the box above the columns. -->
             <TextView
                 android:id="@+id/route_info_clock"
                 android:layout_width="wrap_content"
@@ -118,7 +119,7 @@
                 android:layout_marginEnd="12dp"
                 android:text=""
                 android:textColor="#FFFFFFFF"
-                android:textSize="13sp"
+                android:textSize="13dp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-condensed"
                 android:visibility="gone" />
@@ -130,7 +131,7 @@
                 android:layout_marginEnd="12dp"
                 android:text=""
                 android:textColor="@color/eta_line_text"
-                android:textSize="13sp"
+                android:textSize="13dp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-condensed" />
 
@@ -141,7 +142,7 @@
                 android:layout_marginEnd="12dp"
                 android:text=""
                 android:textColor="@color/eta_line_text"
-                android:textSize="13sp"
+                android:textSize="13dp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-condensed" />
 
@@ -151,7 +152,7 @@
                 android:layout_height="wrap_content"
                 android:text=""
                 android:textColor="@color/eta_line_text"
-                android:textSize="13sp"
+                android:textSize="13dp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-condensed" />
 
