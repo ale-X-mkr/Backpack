@@ -416,7 +416,7 @@ class MainActivity : AppCompatActivity() {
         com.backpack.app.ui.KeyGuide.show(this) {
             // A destination was waiting for a route: ask again with the new key.
             val end = TripState.destination
-            if (!isFinishing && end != null && TripState.plan == null && !NavigationEngine.isActive) {
+            if (!isFinishing && !isDestroyed && end != null && TripState.plan == null && !NavigationEngine.isActive) {
                 resolveStartPoint()?.let { requestBestRoute(it, end) }
             }
         }
@@ -473,6 +473,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         if (::urgencyButton.isInitialized) urgencyButton.removeCallbacks(urgencyApply)
+        com.backpack.app.ui.KeyGuide.close()
         actionFades.values.forEach { it.cancel() }
         actionFades.clear()
         handler.removeCallbacks(clockRunnable)

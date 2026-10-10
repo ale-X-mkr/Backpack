@@ -72,6 +72,13 @@ object KeyGuide {
         main.postDelayed({ lookAtClipboard(c) }, 400L)
     }
 
+    /** The map screen is going away (turned, closed): no guide state survives it. */
+    fun close() {
+        try { popup?.dismiss() } catch (e: Exception) { }
+        popup = null; field = null; status = null; onSaved = null; checking = false
+        main.removeCallbacksAndMessages(null)
+    }
+
     /** The screen got the focus back (e.g. from the browser): a key copied there? */
     fun lookAtClipboard(c: Context) {
         if (!isOpen || checking) return
@@ -92,7 +99,8 @@ object KeyGuide {
         checking = true
         setStatus("Checking the key…")
         val app = c.applicationContext
-        val url = "${Prefs.DEFAULT_ORS_URL}/v2/directions/driving-car?start=8.681495,49.41461&end=8.687872,49.420318"
+        // The routing server in use (own server: its own key is tested there).
+        val url = "${Prefs.orsBaseUrl(app)}/v2/directions/driving-car?start=8.681495,49.41461&end=8.687872,49.420318"
         val req = Request.Builder().url(url).addHeader("Authorization", key)
             .addHeader("Accept", "application/json, application/geo+json").build()
         RoutePlanner.http.newCall(req).enqueue(object : Callback {
