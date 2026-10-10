@@ -23,8 +23,8 @@ android {
         applicationId = "com.backpack.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 29
-        versionName = "1.4.4"
+        versionCode = 30
+        versionName = "1.5.0"
         buildConfigField("String", "ORS_KEY_1", "\"${localProp("ors.key1")}\"")
         buildConfigField("String", "ORS_KEY_2", "\"${localProp("ors.key2")}\"")
     }
@@ -59,6 +59,15 @@ android {
             isMinifyEnabled = false
             isDebuggable = false
             if (releaseStore.isNotEmpty()) signingConfig = signingConfigs.getByName("release")
+        }
+        // 1.5.0: the APK you give to others: like release, but WITHOUT your
+        // openrouteservice keys inside (each person gets their own free key
+        // with the in-app guide). Android Studio: Build Variants -> "share".
+        create("share") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            buildConfigField("String", "ORS_KEY_1", "\"\"")
+            buildConfigField("String", "ORS_KEY_2", "\"\"")
         }
     }
 

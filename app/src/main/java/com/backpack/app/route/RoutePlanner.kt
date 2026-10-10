@@ -238,7 +238,9 @@ class RoutePlanner(context: Context) {
             "&focus.point.lat=%.2f&focus.point.lon=%.2f".format(java.util.Locale.ROOT, it.lat, it.lon)
         } ?: ""
         val keyPart = keys.getOrNull(keyIndex)?.let { "&api_key=$it" } ?: ""
-        val url = "${Prefs.orsBaseUrl(app)}/geocode/search?text=$encoded&size=1$focusPart$keyPart"
+        val base = Prefs.orsBaseUrl(app)
+        val search = if (base == Prefs.DEFAULT_ORS_URL) "${Prefs.ORS_GEOCODE_URL}/search" else "$base/geocode/search"
+        val url = "$search?text=$encoded&size=1$focusPart$keyPart"
         http.newCall(Request.Builder().url(url).build()).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 main.post { callback.onResult(null, null, "Search failed -- check the connection") }
@@ -274,7 +276,7 @@ class RoutePlanner(context: Context) {
     }
 
     companion object {
-        const val NO_KEY = "No routing key -- add your free openrouteservice key in Settings > Advanced"
+        const val NO_KEY = "No routing key yet -- get your free openrouteservice key (2 min)"
 
         val http: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)

@@ -22,7 +22,7 @@ jobs:
       - name: Build and test
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug testDebugUnitTest
+          ./gradlew --no-daemon assembleDebug assembleShare testDebugUnitTest
       - name: Test report (on failure)
         if: failure()
         uses: actions/upload-artifact@v4

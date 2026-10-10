@@ -16,7 +16,18 @@ object Prefs {
     private const val KEY_CAM_LON = "cam_lon"
     private const val KEY_CAM_ZOOM = "cam_zoom"
 
-    const val DEFAULT_ORS_URL = "https://api.openrouteservice.org"
+    /** 1.5.0: openrouteservice moved to api.heigit.org (the old
+     *  api.openrouteservice.org gets 10 % of the quota since 27 Aug 2026 and
+     *  shuts down 2-6 Nov 2026). Directions / isochrones: this + /v2/... */
+    const val DEFAULT_ORS_URL = "https://api.heigit.org/openrouteservice"
+    /** The old address, still in some saved settings: read as the default. */
+    const val OLD_ORS_URL = "https://api.openrouteservice.org"
+    /** POIs moved to their own service. */
+    const val ORS_POIS_URL = "https://api.heigit.org/openpoiservice/v0/pois"
+    /** Geocoding (Pelias). */
+    const val ORS_GEOCODE_URL = "https://api.heigit.org/pelias/v1"
+    /** Where a free key is made (HeiGIT account, openrouteservice's home). */
+    const val ORS_SIGNUP_URL = "https://account.heigit.org"
 
     /** OpenFreeMap: no key, no registration, no cookies. */
     const val STYLE_LIBERTY = "https://tiles.openfreemap.org/styles/liberty"
@@ -39,7 +50,7 @@ object Prefs {
         "dark" to ("Dark" to STYLE_DARK), "fiord" to ("Fiord" to STYLE_FIORD), "vt_eclipse" to ("Eclipse" to STYLE_VT_ECLIPSE)
     )
 
-    private fun settings(c: Context) = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
+    fun settings(c: Context) = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
     private fun toggles(c: Context) = c.getSharedPreferences(TOGGLES, Context.MODE_PRIVATE)
 
     /**
@@ -79,9 +90,14 @@ object Prefs {
         return DAY_STYLES.firstOrNull { it.first == id }?.second?.second ?: STYLE_LIBERTY
     }
 
-    fun orsBaseUrl(c: Context): String =
-        settings(c).getString(Settings.KEY_ORS_URL, "")?.trim()?.trimEnd('/')
-            ?.ifEmpty { null } ?: DEFAULT_ORS_URL
+    fun orsBaseUrl(c: Context): String {
+        val v = settings(c).getString(Settings.KEY_ORS_URL, "")?.trim()?.trimEnd('/').orEmpty()
+        // Empty, or the old openrouteservice address typed in by hand: the current one.
+        return if (v.isEmpty() || v.equals(OLD_ORS_URL, ignoreCase = true)) DEFAULT_ORS_URL else v
+    }
+
+    /** 1.5.0: an own key is set (Settings ▸ Advanced or the first-start guide). */
+    fun hasOwnOrsKey(c: Context): Boolean = !settings(c).getString(Settings.KEY_ORS_KEY, "").isNullOrBlank()
 
     /** Own key from Settings first, then the two built-in keys. The
      *  built-in keys are only ever sent to openrouteservice.org itself,

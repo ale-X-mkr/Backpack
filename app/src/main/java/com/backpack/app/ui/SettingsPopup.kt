@@ -40,6 +40,8 @@ object SettingsPopup {
         fun onExitApp()
         /** 1.3.0: the recorded trips. */
         fun onShowTrips()
+        /** 1.5.0: the "get your free key" guide. */
+        fun onKeyGuide()
     }
 
     fun show(c: Context, host: Host, start: Page = Page.ROUTE) {
@@ -71,7 +73,7 @@ object SettingsPopup {
                 Page.SIGHTS -> sightsPage(c, p, prefs)
                 Page.PLACES -> placesPage(c, p, prefs, host)
                 Page.MAP -> mapPage(p, prefs)
-                Page.SERVERS -> serversPage(c, p, prefs)
+                Page.SERVERS -> serversPage(c, p, prefs, host)
                 Page.CREDITS -> creditsPage(p)
             }
             p.fit()
@@ -397,7 +399,7 @@ object SettingsPopup {
      * in plain view; servers, keys and an own map style folded away, each
      * with a short line and a "?" for the details.
      */
-    private fun serversPage(c: Context, p: Popup, prefs: android.content.SharedPreferences) {
+    private fun serversPage(c: Context, p: Popup, prefs: android.content.SharedPreferences, host: Host) {
         p.section("Privacy")
         p.text("No account, no tracking. Servers only get what they need: the trip's points (routing), " +
             "~5 km squares (places), the road ahead (speed limits). Searches are rounded to ~1 km. Recorded trips stay on this phone.", 11f)
@@ -416,12 +418,13 @@ object SettingsPopup {
         p.custom(folded)
         p.into(folded) {
             p.section("Routing")
-            urlField(p, prefs, "Routing server (empty = openrouteservice.org)", Settings.KEY_ORS_URL, "https://...")
+            urlField(p, prefs, "Routing server (empty = openrouteservice)", Settings.KEY_ORS_URL, "https://...")
             p.field("Own openrouteservice key", prefs.getString(Settings.KEY_ORS_KEY, "").orEmpty(),
                 "key", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) {
                 prefs.edit().putString(Settings.KEY_ORS_KEY, it).apply()
             }
-            help(c, p, "Free key at openrouteservice.org (2,000 routes a day). Useful when the shared keys are busy. Your own server: its address, without /v2.")
+            p.bodyButton("Get a free key (guide)") { host.onKeyGuide() }
+            help(c, p, "Routes come from openrouteservice (HeiGIT, non-profit). Your own free key keeps your routes on your own account, with your own daily quota. Your own server: its address, without /v2.")
 
             p.section("Places, sights, speed limits")
             val none = "none" to "None"

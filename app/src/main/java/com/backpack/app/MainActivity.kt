@@ -314,6 +314,15 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.credit_text).setOnClickListener { SettingsPopup.show(this, settingsHost, SettingsPopup.Page.CREDITS) }
 
         setupAddressSearch()
+        // 1.5.0: first start without any routing key: the key guide, once.
+        if (Prefs.orsKeys(this).isEmpty() && !Prefs.settings(this).getBoolean(KEY_GUIDE_SHOWN, false)) {
+            handler.postDelayed({
+                if (!isFinishing && Prefs.orsKeys(this).isEmpty()) {
+                    Prefs.settings(this).edit().putBoolean(KEY_GUIDE_SHOWN, true).apply()
+                    showKeyGuide()
+                }
+            }, 1500L)
+        }
         setupWaypointToggle()
         setupNavigationButton()
         setupPoiToggle()
@@ -392,6 +401,24 @@ class MainActivity : AppCompatActivity() {
         override fun run() {
             if (!settingsOpen) Prefs.applyNightMode(this@MainActivity)
             handler.postDelayed(this, 60_000L)
+        }
+    }
+
+    /** 1.5.0: back from the browser with a key copied: the guide picks it up. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) com.backpack.app.ui.KeyGuide.lookAtClipboard(this)
+    }
+
+    private val KEY_GUIDE_SHOWN = "ors_key_guide_shown"
+
+    private fun showKeyGuide() {
+        com.backpack.app.ui.KeyGuide.show(this) {
+            // A destination was waiting for a route: ask again with the new key.
+            val end = TripState.destination
+            if (!isFinishing && end != null && TripState.plan == null && !NavigationEngine.isActive) {
+                resolveStartPoint()?.let { requestBestRoute(it, end) }
+            }
         }
     }
 
@@ -3584,6 +3611,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         override fun onShowTrips() = showTrips()
+        override fun onKeyGuide() = showKeyGuide()
         override fun onExitApp() {
             com.backpack.app.nav.NavigationService.exitApp(this@MainActivity)
             finishAndRemoveTask()
@@ -3786,6 +3814,8 @@ class MainActivity : AppCompatActivity() {
             if (plan == null) {
                 onFailure?.invoke()
                 showError(error ?: "Route request failed")
+                // 1.5.0: no key yet: the guide to get one (then the route is asked again).
+                if (error == RoutePlanner.NO_KEY) showKeyGuide()
                 return@plan
             }
             // From now on, a detour missing from the remaining stops means "visited".

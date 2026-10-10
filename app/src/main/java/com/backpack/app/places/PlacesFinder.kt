@@ -270,7 +270,7 @@ class PlacesFinder(context: Context) {
         if (System.currentTimeMillis() - orsFailedAtMs < 10 * 60_000L) { done(null); return }
         fun attempt(k: Int) {
             val body = Places.orsBody(center, bufferM, category.orsIds.keys.toList(), MAX_SHOWN).toString()
-            val req = Request.Builder().url("${Prefs.DEFAULT_ORS_URL}/pois")
+            val req = Request.Builder().url(Prefs.ORS_POIS_URL)
                 .addHeader("Authorization", keys[k])
                 .addHeader("Accept", "application/json, application/geo+json")
                 .post(body.toRequestBody("application/json".toMediaType()))
