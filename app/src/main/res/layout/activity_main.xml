@@ -46,11 +46,11 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:orientation="vertical"
         android:background="@drawable/nav_bar_background"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="5dp"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="4dp"
         android:clickable="true"
         android:visibility="gone">
 
@@ -109,6 +109,19 @@
             android:orientation="horizontal"
             android:paddingTop="2dp"
             android:visibility="gone">
+
+            <!-- 1.4.1: the time now (navigating only; the phone's 12 / 24 h setting). -->
+            <TextView
+                android:id="@+id/route_info_clock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:text=""
+                android:textColor="#FFFFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:fontFamily="sans-serif-condensed"
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/route_info_dist"
@@ -557,12 +570,13 @@
 
     <!-- ===== ZONE: bottom bar = the navigation actions only (1.4.1, Alex):
          left Cancel / Resume (they swap), centre Go / Stop, right the sound
-         mode. 3 equal slots, 55 dp buttons (the circle fills the backdrop),
-         centres 14 + 28 = 42 dp above the bottom; empty slots keep their place. ===== -->
+         mode. 3 equal slots, 50 dp buttons (the circle fills the backdrop),
+         just over the credit line (14..64 dp); empty slots keep their place.
+         At rest faint grey, the active colour for a moment when tapped. ===== -->
     <LinearLayout
         android:id="@+id/bottom_bar"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="50dp"
         android:layout_gravity="bottom"
         android:layout_marginBottom="14dp"
         android:clipChildren="false"
@@ -578,8 +592,8 @@
             <ImageButton
                 android:id="@+id/clear_route_button"
                 android:scaleType="fitCenter"
-                android:layout_width="55dp"
-                android:layout_height="55dp"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_clear"
                 android:background="@drawable/icon_backdrop"
@@ -592,8 +606,8 @@
             <ImageButton
                 android:id="@+id/resume_button"
                 android:scaleType="fitCenter"
-                android:layout_width="55dp"
-                android:layout_height="55dp"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_resume"
                 android:background="@drawable/icon_backdrop"
@@ -614,8 +628,8 @@
             <ImageButton
                 android:id="@+id/nav_go_button"
                 android:scaleType="fitCenter"
-                android:layout_width="55dp"
-                android:layout_height="55dp"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_go"
                 android:background="@drawable/icon_backdrop"
@@ -636,8 +650,8 @@
             <ImageButton
                 android:id="@+id/sound_button"
                 android:scaleType="fitCenter"
-                android:layout_width="55dp"
-                android:layout_height="55dp"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_sound_alerts"
                 android:background="@drawable/icon_backdrop"
@@ -645,7 +659,7 @@
                 android:contentDescription="Sound mode"
                 android:elevation="0dp"
                 android:stateListAnimator="@null"
-                android:visibility="visible" />
+                android:visibility="gone" />
 
         </FrameLayout>
 
@@ -653,12 +667,13 @@
 
     <!-- Current speed circle at the top right: inside the instruction bar
          while navigating (right end, centred on its background), same spot
-         otherwise. Ring colour = speed vs limit (rules unchanged); the road's
-         limit sign at the circle's bottom-left, touching its ring. -->
+         otherwise. Ring colour = speed vs limit; 1.4.1: the road's limit sign
+         to the circle's left, a little above its middle (ring and the
+         box's last line stay free). -->
     <FrameLayout
         android:id="@+id/speed_widget"
-        android:layout_width="84dp"
-        android:layout_height="84dp"
+        android:layout_width="102dp"
+        android:layout_height="64dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="12dp"
         android:layout_marginEnd="14dp"
@@ -707,8 +722,8 @@
             android:layout_width="36dp"
             android:layout_height="36dp"
             android:layout_gravity="top|start"
-            android:layout_marginStart="11dp"
-            android:layout_marginTop="37dp"
+            android:layout_marginStart="0dp"
+            android:layout_marginTop="8dp"
             android:background="@drawable/speed_limit_background"
             android:elevation="2dp"
             android:gravity="center"

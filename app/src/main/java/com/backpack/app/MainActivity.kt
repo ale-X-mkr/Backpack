@@ -446,6 +446,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         if (::urgencyButton.isInitialized) urgencyButton.removeCallbacks(urgencyApply)
+        actionFades.values.forEach { it.cancel() }
+        actionFades.clear()
+        handler.removeCallbacks(clockRunnable)
         // Leaving the app (not a rebuild): a place still waiting for GPS is dropped,
         // it must not come back unasked at the next start.
         if (isFinishing) {
@@ -921,6 +924,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshSoundButton() {
         val b = findViewById<ImageButton>(R.id.sound_button) ?: return
+        // Without navigation Alerts only is simply how it is: no button.
+        b.visibility = if (NavigationEngine.isActive) View.VISIBLE else View.GONE
         val icon = when (Prefs.soundMode(this)) {
             Prefs.SoundMode.FULL -> R.drawable.ic_sound_full
             Prefs.SoundMode.NAV -> R.drawable.ic_sound_nav
@@ -935,8 +940,51 @@ class MainActivity : AppCompatActivity() {
         for (id in listOf(R.id.nav_go_button, R.id.clear_route_button, R.id.resume_button, R.id.sound_button)) {
             findViewById<ImageButton>(id).apply {
                 background = ContextCompat.getDrawable(this@MainActivity, R.drawable.icon_backdrop)
-                imageTintList = ColorStateList.valueOf(iconOn)
+                // At rest: faint ("standby", waiting for the next action).
+                imageTintList = ColorStateList.valueOf(iconOff)
+                // Touched: the active colour 1 s, then 1 s back to faint (taps and holds alike).
+                setOnTouchListener { v, e ->
+                    if (e.action == android.view.MotionEvent.ACTION_DOWN) flashAction(v as ImageButton)
+                    false
+                }
             }
+        }
+    }
+
+    private val actionFades = HashMap<Int, android.animation.ValueAnimator>()
+
+    private fun flashAction(b: ImageButton) {
+        actionFades.remove(b.id)?.cancel()
+        b.imageTintList = ColorStateList.valueOf(iconOn)
+        val a = android.animation.ValueAnimator.ofObject(android.animation.ArgbEvaluator(), iconOn, iconOff).apply {
+            startDelay = 1000L
+            duration = 1000L
+            addUpdateListener { b.imageTintList = ColorStateList.valueOf(it.animatedValue as Int) }
+        }
+        actionFades[b.id] = a
+        a.start()
+    }
+
+    /** 1.4.1: the time now in the box's last line, updated on the minute. */
+    private val clockRunnable = object : Runnable {
+        override fun run() {
+            val tv = findViewById<TextView>(R.id.route_info_clock) ?: return
+            if (!navUiActive) { tv.visibility = View.GONE; return }
+            tv.text = android.text.format.DateFormat.getTimeFormat(this@MainActivity).format(java.util.Date())
+            if (tv.visibility != View.VISIBLE) tv.visibility = View.VISIBLE
+            val now = System.currentTimeMillis()
+            handler.postDelayed(this, 60_000L - now % 60_000L + 50L)
+        }
+    }
+
+    /** 1.4.1: Android's status and navigation bars hidden while navigating (a swipe shows them for a moment). */
+    private fun setFullScreen(on: Boolean) {
+        val c = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+        if (on) {
+            c.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            c.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        } else {
+            c.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
         }
     }
 
@@ -2101,6 +2149,10 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.overview_button).visibility = View.VISIBLE
         navInstructionBar.visibility = View.VISIBLE
         refreshNavBox()
+        // 1.4.1: full screen while navigating, the time in the box's last line.
+        setFullScreen(true)
+        handler.removeCallbacks(clockRunnable)
+        clockRunnable.run()
         lastRealLocationAtMs = System.currentTimeMillis()
         handler.removeCallbacks(deadReckoningRunnable)
         handler.postDelayed(deadReckoningRunnable, 1000L)
@@ -2164,6 +2216,9 @@ class MainActivity : AppCompatActivity() {
         navDistanceText.text = ""
         navInstructionIcon.visibility = View.GONE
         navInstructionBar.visibility = View.GONE
+        setFullScreen(false)
+        handler.removeCallbacks(clockRunnable)
+        findViewById<View>(R.id.route_info_clock).visibility = View.GONE
         updateNavBarProximityColor(Double.MAX_VALUE) // planning: plain blue frame
         layers.setProgress(null)
         if (currentMode != ModeUi.DRIVING) speedWidget.visibility = View.GONE
@@ -2439,7 +2494,7 @@ class MainActivity : AppCompatActivity() {
         )
         if (navUiActive) {
             routeInfo.background = null
-            routeInfo.setPadding(0, dp(2), 0, 0)
+            routeInfo.setPadding(0, 0, 0, 0)
         } else {
             lp.topMargin = dp(4)
             lp.gravity = android.view.Gravity.CENTER_HORIZONTAL
@@ -2654,15 +2709,21 @@ class MainActivity : AppCompatActivity() {
         // planning: as wide as its one line.
         val boxLp = navBox.layoutParams
         // Portrait: full width; landscape: 80 %.
-        val boxW = if (navUiActive) ((screenW - dp(16)) * (if (land) 0.8f else 1f)).toInt() else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+        // 1.4.1: 4 dp from the screen edges (half the old 8).
+        val boxW = if (navUiActive) ((screenW - dp(8)) * (if (land) 0.8f else 1f)).toInt() else android.view.ViewGroup.LayoutParams.WRAP_CONTENT
         if (boxLp.width != boxW) { boxLp.width = boxW; navBox.layoutParams = boxLp }
         // Room for the speed circle at the box's right end (driving, navigating).
         val circleInBox = navUiActive // 1.1.0: speed shown in every mode while navigating
-        navBox.setPadding(dp(14), dp(5), if (circleInBox) dp(80) else dp(14), dp(5))
+        navBox.setPadding(dp(12), dp(4), dp(12), dp(4))
+        // 1.4.1: the circle (and the limit sign left of it, driving) sits beside
+        // the turn row only; the last line (time, distance, arrival, cost)
+        // takes the box's full width under them.
+        navInstructionBar.setPadding(0, 0, if (!circleInBox) 0 else if (driving) dp(99) else dp(61), 0)
+        navInstructionBar.minimumHeight = if (circleInBox) dp(64) else 0
         // Planning while driving: box and chips centred left of the speed
         // circle (top right), never under it.
         val circleTopRight = driving && !circleInBox
-        setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) 96 else 0)
+        setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) 120 else 0)
         val boxShown = navBox.visibility == View.VISIBLE && navBox.height > 0
         // 1.2.1: the columns never move, so the box keeps above them: a long
         // street name gets one line instead of two when it would reach them.
@@ -2675,8 +2736,8 @@ class MainActivity : AppCompatActivity() {
         if (circleInBox && boxShown) {
             val endInset = ((screenW - boxW) / 2 / density).toInt()
             val boxTop = (navBox.top / density).toInt()
-            val boxH = (navBox.height / density).toInt()
-            setMargins(R.id.speed_widget, top = maxOf(boxTop, boxTop + (boxH - 64) / 2), end = endInset + 6)
+            // 1.4.1: level with the turn row, inside the frame.
+            setMargins(R.id.speed_widget, top = boxTop + 4, end = endInset + 7)
         } else {
             setMargins(R.id.speed_widget, top = 12, end = 14)
         }
@@ -2736,14 +2797,14 @@ class MainActivity : AppCompatActivity() {
             hiddenForKeyboard.clear()
         }
 
-        // Bottom: the action row (14..70) -> messages (72). The floating search
+        // Bottom: the action row (14..64) -> messages (68). The floating search
         // box sits in the messages' place (just over the keyboard while
         // typing), the messages and suggestions over it.
-        val searchBottom = if (keyboardOpen) 8 else 72
+        val searchBottom = if (keyboardOpen) 8 else 68
         setMargins(R.id.search_input, bottom = searchBottom, start = 8, end = 8)
         setMargins(R.id.search_mic, bottom = searchBottom, end = 10)
         setMargins(R.id.search_results_scroll, bottom = searchBottom + 33, start = 8, end = 8)
-        val bandBottom = if (searchOpen) searchBottom + 33 else 72
+        val bandBottom = if (searchOpen) searchBottom + 33 else 68
         // Landscape: bottom-left, never over the position arrow (screen centre).
         moveTo(R.id.message_band, android.view.Gravity.BOTTOM or if (land) android.view.Gravity.START else android.view.Gravity.CENTER_HORIZONTAL)
         shapeMessageBand(land)
@@ -2848,7 +2909,7 @@ class MainActivity : AppCompatActivity() {
         val r = (from[0] + (to[0] - from[0]) * localFraction).toInt()
         val g = (from[1] + (to[1] - from[1]) * localFraction).toInt()
         val b = (from[2] + (to[2] - from[2]) * localFraction).toInt()
-        background.setStroke(dp(5), Color.rgb(r, g, b))
+        background.setStroke(dp(4), Color.rgb(r, g, b))
     }
 
     /** During a GPS gap (3-15 s), keeps the arrow and camera moving with the
