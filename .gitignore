@@ -5,3 +5,7 @@ local.properties
 .idea/caches/
 .idea/workspace.xml
 *.iml
+*.jks
+*.keystore
+*.p12
+app/release/
