@@ -200,13 +200,8 @@ object SpeedCameraWatch {
 
     private fun warnZone(c: Context) {
         play(false)
-        // Queued between instructions (never cuts one); the chime is at once.
-        if (!NavigationEngine.isActive) return
-        val until = System.currentTimeMillis() + 60_000L
-        NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
-            com.backpack.app.core.VoiceQueue.Kind.HEADS_UP,
-            VoiceText.forLanguage(Prefs.voiceLanguage(c)).dangerZone().let { t -> { t } },
-            { NavigationEngine.isActive && System.currentTimeMillis() < until }))
+        // 1.4.1: said in every sound mode, with or without navigation (queued, never cuts an instruction).
+        NavigationEngine.speakDanger(c, VoiceText.forLanguage(Prefs.voiceLanguage(c)).dangerZone())
     }
 
     private fun play(single: Boolean) {

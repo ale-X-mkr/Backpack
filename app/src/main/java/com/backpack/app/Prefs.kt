@@ -141,5 +141,19 @@ object Prefs {
 
     fun alarmSound(c: Context) = settings(c).getBoolean(Settings.KEY_ALARM_SOUND, true)
     fun balanceExtra(c: Context): Int = settings(c).getInt(Settings.KEY_BALANCE_EXTRA, Settings.DEFAULT_BALANCE_EXTRA).coerceIn(0, 25)
+    /** 1.4.1 sound button: Full (instructions, sight tips, readings), Navigation
+     *  (instructions), Alerts only (dangers). Dangers are heard in all three. */
+    enum class SoundMode { FULL, NAV, ALERTS }
+
+    /** The mode chosen for navigating (Full until changed). */
+    fun navSoundMode(c: Context): SoundMode =
+        settings(c).getString(Settings.KEY_SOUND_MODE, null)?.let { v -> SoundMode.values().firstOrNull { it.name == v } } ?: SoundMode.FULL
+
+    fun setNavSoundMode(c: Context, m: SoundMode) = settings(c).edit().putString(Settings.KEY_SOUND_MODE, m.name).apply()
+
+    /** The mode in force: without navigation always Alerts only. */
+    fun soundMode(c: Context): SoundMode =
+        if (com.backpack.app.nav.NavigationEngine.isActive) navSoundMode(c) else SoundMode.ALERTS
+
     fun cameras(c: Context) = settings(c).getBoolean(Settings.KEY_CAMERAS, false)
 }

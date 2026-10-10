@@ -202,6 +202,9 @@ class MainActivity : AppCompatActivity() {
 
     private val activeColor by lazy { ContextCompat.getColor(this, R.color.rg_active) }
     private val inactiveColor by lazy { ContextCompat.getColor(this, R.color.rg_icon_inactive) }
+    /** 1.4.1: map-button icons: day dark red / dark grey, night white / faint white. */
+    private val iconOn by lazy { ContextCompat.getColor(this, R.color.rg_icon_on) }
+    private val iconOff by lazy { ContextCompat.getColor(this, R.color.rg_icon_off) }
     private val backdropColor by lazy { ContextCompat.getColor(this, R.color.rg_control_backdrop) }
 
     private val locationPermissionLauncher = registerForActivityResult(
@@ -293,15 +296,18 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { if (overviewOn) leaveOverview() else enterOverview() }
         }
         findViewById<ImageButton>(R.id.resume_button).apply {
-            setIconActive(this, false)
             // Previous route (after a detour / Go here) first; else 1.4.0 the navigation you stopped.
             setOnClickListener { if (TripState.previous != null) resumePreviousRoute() else resumeLastTrip() }
+            // 1.4.1: hold = forget it (the Cancel button takes the place again).
             setOnLongClickListener {
-                if (TripState.previous == null && com.backpack.app.nav.LastTrip.load(this@MainActivity) != null) {
+                if (TripState.previous != null) {
+                    TripState.previous = null
+                    showMessage("Previous route forgotten")
+                } else {
                     com.backpack.app.nav.LastTrip.clear(this@MainActivity)
-                    refreshResumeButton()
                     showMessage("Last navigation forgotten")
                 }
+                refreshResumeButton()
                 true
             }
         }
@@ -321,6 +327,7 @@ class MainActivity : AppCompatActivity() {
         setupRouteOptionsButton()
         setupAltRouteButton()
         styleBottomButtons()
+        setupSoundButton()
         refreshResumeButton()
         watchKeyboard()
         placeLayout()
@@ -869,7 +876,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setIconActive(button: ImageButton, active: Boolean) {
-        button.imageTintList = ColorStateList.valueOf(if (active) activeColor else inactiveColor)
+        button.imageTintList = ColorStateList.valueOf(if (active) iconOn else iconOff)
     }
 
     /**
@@ -880,18 +887,57 @@ class MainActivity : AppCompatActivity() {
     private fun setStatusRing(button: ImageButton, on: Boolean) {
         (button.background?.mutate() as? GradientDrawable)?.setStroke(
             if (on) dp(2) else Math.max(1, dp(1) * 3 / 4),
-            if (on) activeColor else ContextCompat.getColor(this, R.color.rg_control_edge)
+            if (on) iconOn else ContextCompat.getColor(this, R.color.rg_control_edge)
         )
     }
 
-    /** 1.4.0: Go / Stop / Clear / Resume in our own button style: the grey
-     *  round backdrop, a simple red shape (Clear: grey), a little bigger. */
-    private fun styleBottomButtons() {
-        findViewById<ImageButton>(R.id.nav_go_button).apply {
-            background = ContextCompat.getDrawable(this@MainActivity, R.drawable.icon_backdrop)
-            imageTintList = ColorStateList.valueOf(activeColor)
+    /**
+     * 1.4.1 right slot of the bottom row: the sound mode. Navigating: tap
+     * cycles Full -> Navigation -> Alerts only (kept for the next trips).
+     * Not navigating: always Alerts only. Dangers are heard in every mode.
+     */
+    private fun setupSoundButton() {
+        findViewById<ImageButton>(R.id.sound_button).setOnClickListener {
+            if (!NavigationEngine.isActive) {
+                showMessage("Alerts only \u00b7 other sound modes while navigating")
+                return@setOnClickListener
+            }
+            val next = when (Prefs.navSoundMode(this)) {
+                Prefs.SoundMode.FULL -> Prefs.SoundMode.NAV
+                Prefs.SoundMode.NAV -> Prefs.SoundMode.ALERTS
+                Prefs.SoundMode.ALERTS -> Prefs.SoundMode.FULL
+            }
+            Prefs.setNavSoundMode(this, next)
+            NavigationEngine.soundModeChanged()
+            refreshSoundButton()
+            showMessage(when (next) {
+                Prefs.SoundMode.FULL -> "Sound: full \u00b7 instructions, sight tips, readings"
+                Prefs.SoundMode.NAV -> "Sound: navigation \u00b7 instructions only"
+                Prefs.SoundMode.ALERTS -> "Sound: alerts only \u00b7 dangers and speed alarm"
+            })
         }
-        setIconActive(findViewById(R.id.clear_route_button), false)
+        refreshSoundButton()
+    }
+
+    private fun refreshSoundButton() {
+        val b = findViewById<ImageButton>(R.id.sound_button) ?: return
+        val icon = when (Prefs.soundMode(this)) {
+            Prefs.SoundMode.FULL -> R.drawable.ic_sound_full
+            Prefs.SoundMode.NAV -> R.drawable.ic_sound_nav
+            Prefs.SoundMode.ALERTS -> R.drawable.ic_sound_alerts
+        }
+        if (b.tag != icon) { b.tag = icon; b.setImageResource(icon) }
+    }
+
+    /** 1.4.1: the bottom row (navigation actions): circled two-tone icons
+     *  filling the round backdrop, in the "on" colour. */
+    private fun styleBottomButtons() {
+        for (id in listOf(R.id.nav_go_button, R.id.clear_route_button, R.id.resume_button, R.id.sound_button)) {
+            findViewById<ImageButton>(id).apply {
+                background = ContextCompat.getDrawable(this@MainActivity, R.drawable.icon_backdrop)
+                imageTintList = ColorStateList.valueOf(iconOn)
+            }
+        }
     }
 
     /** Puts the digits of [tv] exactly in the middle of its view (and so of the circle). */
@@ -1898,10 +1944,17 @@ class MainActivity : AppCompatActivity() {
         requestBestRoute(start, end, stops, onFailure = { restoreCommitted(before) })
     }
 
+    /**
+     * 1.4.1 left slot of the bottom row: Cancel and Resume take turns.
+     * Resume: the route before a detour / "Go here", or (nothing on screen)
+     * the navigation stopped before arriving. Cancel: a route on screen.
+     */
     private fun refreshResumeButton() {
-        // 1.4.0: also the navigation stopped before arriving (when nothing else is planned).
-        val last = TripState.plan == null && !NavigationEngine.isActive && com.backpack.app.nav.LastTrip.load(this) != null
-        findViewById<View>(R.id.resume_button).visibility = if (TripState.previous != null || last) View.VISIBLE else View.GONE
+        val routeShown = TripState.plan != null || NavigationEngine.isActive
+        val last = !routeShown && com.backpack.app.nav.LastTrip.load(this) != null
+        val resume = TripState.previous != null || last
+        findViewById<View>(R.id.resume_button).visibility = if (resume) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.clear_route_button).visibility = if (routeShown && !resume) View.VISIBLE else View.GONE
         placeLayout()
     }
 
@@ -1983,6 +2036,15 @@ class MainActivity : AppCompatActivity() {
             clearRoute()
             showMessage("Route cleared")
         }
+        // 1.4.1: hold = cancel and also forget the trip (no Resume afterwards).
+        findViewById<ImageButton>(R.id.clear_route_button).setOnLongClickListener {
+            if (NavigationEngine.isActive) NavigationEngine.stop()
+            clearRoute()
+            com.backpack.app.nav.LastTrip.clear(this)
+            refreshResumeButton()
+            showMessage("Route cancelled and forgotten")
+            true
+        }
     }
 
     private fun startNavigation() {
@@ -2016,6 +2078,7 @@ class MainActivity : AppCompatActivity() {
     /** Switches the screen into navigation look; safe to call again. */
     private fun startNavigationUi() {
         val first = !navUiActive
+        handler.post { refreshSoundButton() }
         // Navigation has its own camera (and its own north-up switch).
         setPlanFollow(PlanFollow.OFF)
         flattenOnIdle = false
@@ -2066,6 +2129,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stopNavigationUi() {
+        handler.post { refreshSoundButton() }
         if (overviewOn) {
             overviewOn = false
             handler.removeCallbacks(overviewReturnRunnable)
@@ -2616,7 +2680,6 @@ class MainActivity : AppCompatActivity() {
         val step = if (land) 46 else 53
         val gap = step - 38
         fun shown(id: Int) = findViewById<View>(id).visibility == View.VISIBLE
-        val resumeShown = shown(R.id.resume_button)
 
         // Left column (planning), 1.2.0 four buttons: mode (+ toll), urgency
         // (+ sights camera in Weekend), backpack services, settings; resume.
@@ -2624,7 +2687,7 @@ class MainActivity : AppCompatActivity() {
         setMargins(R.id.urgency_row, top = gap)
         setMargins(R.id.poi_row, top = gap)
         setMargins(R.id.route_options_button, top = top0 + 3 * step)
-        var leftRows = if (navUiActive) 0 else 4
+        val leftRows = if (navUiActive) 0 else 4
 
         // Right column.
         setMargins(R.id.locate_button, top = top0)
@@ -2636,26 +2699,11 @@ class MainActivity : AppCompatActivity() {
             rightRows = if (altShown) 3 else 2
             setMargins(R.id.search_button, top = top0 + rightRows * step)
             rightRows++
-            if (resumeShown) {
-                moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.END)
-                setMargins(R.id.resume_button, top = top0 + rightRows * step, end = 8)
-                rightRows++
-            }
         } else {
             setMargins(R.id.waypoint_button, top = top0 + step)
             setMargins(R.id.preference_toggle_button, top = top0 + 2 * step)
             setMargins(R.id.search_button, top = top0 + 3 * step)
             rightRows = 4
-            if (land) {
-                // Landscape: resume as the 5th row on the right.
-                moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.END)
-                setMargins(R.id.resume_button, top = top0 + 4 * step, end = 8)
-                if (resumeShown) rightRows = 5
-            } else {
-                moveTo(R.id.resume_button, android.view.Gravity.TOP or android.view.Gravity.START)
-                setMargins(R.id.resume_button, top = top0 + 4 * step, start = 8)
-                if (resumeShown) leftRows = 5
-            }
         }
 
         // Route chips (1.0.8): stacked, left-aligned (letters in a line),
@@ -2680,14 +2728,14 @@ class MainActivity : AppCompatActivity() {
             hiddenForKeyboard.clear()
         }
 
-        // Bottom: Go / Clear (20..64) -> messages (68). The floating search
+        // Bottom: the action row (14..70) -> messages (72). The floating search
         // box sits in the messages' place (just over the keyboard while
         // typing), the messages and suggestions over it.
-        val searchBottom = if (keyboardOpen) 8 else 68
+        val searchBottom = if (keyboardOpen) 8 else 72
         setMargins(R.id.search_input, bottom = searchBottom, start = 8, end = 8)
         setMargins(R.id.search_mic, bottom = searchBottom, end = 10)
         setMargins(R.id.search_results_scroll, bottom = searchBottom + 33, start = 8, end = 8)
-        val bandBottom = if (searchOpen) searchBottom + 33 else 68
+        val bandBottom = if (searchOpen) searchBottom + 33 else 72
         // Landscape: bottom-left, never over the position arrow (screen centre).
         moveTo(R.id.message_band, android.view.Gravity.BOTTOM or if (land) android.view.Gravity.START else android.view.Gravity.CENTER_HORIZONTAL)
         shapeMessageBand(land)
@@ -3000,10 +3048,10 @@ class MainActivity : AppCompatActivity() {
         val b = findViewById<ImageButton>(R.id.sights_toggle)
         val v = if (urgencyMode == UrgencyMode.WEEKEND) View.VISIBLE else View.GONE
         if (b.visibility != v) b.visibility = v
-        // 1.4.0: photo aperture: open and red = sights on, closed and dark grey = off.
-        val icon = if (touristOn) R.drawable.ic_aperture_open else R.drawable.ic_aperture_closed
+        // 1.4.1 (Alex's icons): two-tone camera = sights on, outlined = off.
+        val icon = if (touristOn) R.drawable.ic_sights_on else R.drawable.ic_sights_off
         if (b.tag != icon) { b.tag = icon; b.setImageResource(icon) }
-        b.imageTintList = ColorStateList.valueOf(if (touristOn) 0xFFC62828.toInt() else 0xFF424242.toInt())
+        setIconActive(b, touristOn)
         setStatusRing(b, touristOn && touristResults.isNotEmpty())
     }
 
@@ -3584,7 +3632,7 @@ class MainActivity : AppCompatActivity() {
         if (navUiActive) stopNavigationUi()
         queryPois() // no route: places around you / the map centre again
         findViewById<ImageButton>(R.id.nav_go_button).visibility = View.GONE
-        findViewById<ImageButton>(R.id.clear_route_button).visibility = View.GONE
+        refreshResumeButton()
         findViewById<LinearLayout>(R.id.route_options_row).apply {
             removeAllViews()
             visibility = View.GONE
@@ -3651,7 +3699,7 @@ class MainActivity : AppCompatActivity() {
             TripState.committed = TripState.copy()
             routeInfo.visibility = View.GONE
             findViewById<View>(R.id.nav_go_button).visibility = View.GONE
-            findViewById<View>(R.id.clear_route_button).visibility = View.GONE
+            refreshResumeButton()
             findViewById<LinearLayout>(R.id.route_options_row).apply { removeAllViews(); visibility = View.GONE }
             placeLayout()
             refreshTourist(force = true) // sights of the visible area again
@@ -3668,7 +3716,7 @@ class MainActivity : AppCompatActivity() {
         placeLayout()
         populateRouteOptionsRow(results, sel)
         findViewById<ImageButton>(R.id.nav_go_button).visibility = View.VISIBLE
-        findViewById<ImageButton>(R.id.clear_route_button).visibility = View.VISIBLE
+        refreshResumeButton()
 
         if (fit) fitCamera(results)
         if (tourist) refreshTourist()

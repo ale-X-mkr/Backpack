@@ -1,5 +1,13 @@
-<!-- 1.4.0: Resume navigation (our button style: simple shape on the grey round backdrop). -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="#FFB71C1C"
+<!-- 1.4.1 Resume: "replay" in the same two-tone circle.
+     Shapes: Material icons, (C) Google / The Android Open Source Project,
+     Apache License 2.0 (http://www.apache.org/licenses/LICENSE-2.0). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="@android:color/white" android:pathData="M12,5V1.5L7,6.5l5,5V8c2.76,0 5,2.24 5,5s-2.24,5 -5,5 -5,-2.24 -5,-5H5c0,3.87 3.13,7 7,7s7,-3.13 7,-7 -3.13,-7 -7,-7z" /><path android:fillColor="@android:color/white" android:pathData="M10.6,10.6 L14.6,13 L10.6,15.4 Z" />
+    <group android:pivotX="12" android:pivotY="12" android:scaleX="1.15" android:scaleY="1.15">
+        <path android:fillColor="@android:color/white" android:fillAlpha="0.3" android:pathData="M12,4c-4.42,0 -8,3.58 -8,8s3.58,8 8,8 8,-3.58 8,-8 -3.58,-8 -8,-8z"/>
+        <path android:fillColor="@android:color/white" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,20c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8 8,3.58 8,8 -3.58,8 -8,8z"/>
+        <group android:pivotX="12" android:pivotY="12" android:scaleX="0.62" android:scaleY="0.62" android:translateY="-0.6">
+            <path android:fillColor="@android:color/white" android:pathData="M7,6l5,5V7c3.31,0 6,2.69 6,6s-2.69,6 -6,6 -6,-2.69 -6,-6H4c0,4.42 3.58,8 8,8s8,-3.58 8,-8 -3.58,-8 -8,-8V1L7,6z"/>
+        </group>
+    </group>
 </vector>

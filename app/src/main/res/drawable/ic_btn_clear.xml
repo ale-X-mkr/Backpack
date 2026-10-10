@@ -1,5 +1,10 @@
-<!-- 1.4.0: Clear the route (our button style: simple shape on the grey round backdrop). -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="#FF555555"
+<!-- 1.4.1 Cancel route: "cancel" (two-tone circled X).
+     Shapes: Material icons, (C) Google / The Android Open Source Project,
+     Apache License 2.0 (http://www.apache.org/licenses/LICENSE-2.0). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:strokeColor="@android:color/white" android:strokeWidth="2.6" android:strokeLineCap="round" android:fillColor="#00000000" android:pathData="M7,7 L17,17 M17,7 L7,17" />
+    <group android:pivotX="12" android:pivotY="12" android:scaleX="1.15" android:scaleY="1.15">
+        <path android:fillColor="@android:color/white" android:fillAlpha="0.3" android:pathData="M12,4c-4.41,0 -8,3.59 -8,8s3.59,8 8,8 8,-3.59 8,-8 -3.59,-8 -8,-8zM17,15.59L15.59,17 12,13.41 8.41,17 7,15.59 10.59,12 7,8.41 8.41,7 12,10.59 15.59,7 17,8.41 13.41,12 17,15.59z"/>
+        <path android:fillColor="@android:color/white" android:pathData="M12,2C6.47,2 2,6.47 2,12s4.47,10 10,10 10,-4.47 10,-10S17.53,2 12,2zM12,20c-4.41,0 -8,-3.59 -8,-8s3.59,-8 8,-8 8,3.59 8,8 -3.59,8 -8,8zM15.59,7L12,10.59 8.41,7 7,8.41 10.59,12 7,15.59 8.41,17 12,13.41 15.59,17 17,15.59 13.41,12 17,8.41z"/>
+    </group>
 </vector>

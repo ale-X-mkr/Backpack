@@ -3,8 +3,11 @@
     <color name="rg_active_soft">#E0B03A3A</color>
     <color name="rg_icon_inactive">#FFD6D6D6</color>
     <color name="rg_inactive_soft">#E0505050</color>
-    <color name="rg_control_backdrop">#80BDBDBD</color>
-    <color name="rg_control_edge">#40303030</color>
+    <!-- 1.4.1 night buttons: darkened faint red backdrop, white icon = on, faint white = off. -->
+    <color name="rg_control_backdrop">#A0451C1C</color>
+    <color name="rg_control_edge">#40FFFFFF</color>
+    <color name="rg_icon_on">#FFFFFFFF</color>
+    <color name="rg_icon_off">#73FFFFFF</color>
     <color name="rg_text">#FFEEEEEE</color>
     <color name="rg_text_secondary">#FFB0B0B0</color>
     <color name="rg_popup_bg">#F5303030</color>

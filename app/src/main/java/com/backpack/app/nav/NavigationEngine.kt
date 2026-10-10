@@ -266,6 +266,8 @@ object NavigationEngine {
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    /** The voice engine could not start: info shows silently. */
+    private var ttsFailed = false
     private var pendingSpeech: String? = null
     private var focusRequest: AudioFocusRequest? = null
 
@@ -273,6 +275,8 @@ object NavigationEngine {
         if (tts != null) return
         tts = TextToSpeech(c) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
+            ttsFailed = !ttsReady
+            if (ttsFailed) main.post { pump() }
             if (ttsReady) {
                 // 1.3.0: the voice language from Settings (Spanish: a Latin American voice first).
                 setVoiceLocale(Prefs.voiceLanguage(c))
@@ -333,8 +337,9 @@ object NavigationEngine {
     /** A navigation instruction: always first, cuts any info being said
      *  (which resumes afterwards from the start of its sentence). */
     fun speak(text: String) {
-        // Settings > Navigation > Spoken instructions.
+        // Settings > Navigation > Spoken instructions; 1.4.1: none in "Alerts only".
         if (app?.let { Prefs.voiceOn(it) } == false) return
+        if (app?.let { Prefs.soundMode(it) } == Prefs.SoundMode.ALERTS) return
         if (!ttsReady) {
             pendingSpeech = text
             return
@@ -376,6 +381,26 @@ object NavigationEngine {
     private const val UTTERANCE_INFO = "info"
     /** Voice off: a heads-up still shows its message, for this long. */
     private const val SILENT_HEADS_UP_MS = 8000L
+
+    /**
+     * 1.4.1: a danger warning (danger zone...): said in every sound mode,
+     * with or without navigation, before any other info, never cutting an
+     * instruction. Dropped when it could not be said within [validMs].
+     */
+    fun speakDanger(c: Context, text: String, validMs: Long = 60_000L) {
+        if (app == null) app = c.applicationContext
+        initTts(c.applicationContext)
+        val until = System.currentTimeMillis() + validMs
+        voice.add(com.backpack.app.core.VoiceQueue.Item(com.backpack.app.core.VoiceQueue.Kind.DANGER,
+            { text }, { System.currentTimeMillis() < until }))
+        pump()
+    }
+
+    /** 1.4.1: the sound button changed the mode: below "Full" no readings go on. */
+    fun soundModeChanged() {
+        val c = app ?: return
+        if (Prefs.soundMode(c) != Prefs.SoundMode.FULL) stopReading()
+    }
 
     /** Queues a heads-up or a reading (said between instructions, one at a time). */
     fun speakInfo(item: com.backpack.app.core.VoiceQueue.Item) {
@@ -419,11 +444,13 @@ object NavigationEngine {
 
     private fun pump() {
         val voiceOn = app?.let { Prefs.voiceOn(it) } != false
-        if (voiceOn && !ttsReady) return // waits for the voice to start
+        if (tts != null && !ttsReady && !ttsFailed) return // waits for the voice to start
         val s = voice.next(System.currentTimeMillis(), secondsToNext())
         if (s !is com.backpack.app.core.VoiceQueue.Say.Sentence) return
+        // 1.4.1: dangers are always said (also in a call, also with instructions off).
+        val danger = s.item.kind == com.backpack.app.core.VoiceQueue.Kind.DANGER
         // 1.4.0: in a phone call only instructions are said; a sight tip shows its message silently.
-        if (!voiceOn || inCall()) {
+        if (!ttsReady || (!danger && (!voiceOn || inCall()))) {
             // Readings need the voice; a heads-up still shows its message for a while.
             if (s.item.kind == com.backpack.app.core.VoiceQueue.Kind.READING) { voice.dropReadings(); pump(); return }
             main.removeCallbacks(silentDone)

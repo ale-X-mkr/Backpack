@@ -45,6 +45,8 @@ object SightHeadsUp {
 
     fun onProgress(c: Context, p: Progress, route: RouteResult) {
         if (p.offRoute || p.arrived) return
+        // 1.4.1: sight tips only in the "Full" sound mode.
+        if (Prefs.soundMode(c) != Prefs.SoundMode.FULL) return
         val toggles = c.getSharedPreferences("backpack_toggle_state", Context.MODE_PRIVATE)
         val prefs = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
         if (toggles.getString("urgency", "WEEKEND") != "WEEKEND") return

@@ -225,7 +225,7 @@
                 android:layout_height="28dp"
                 android:layout_gravity="start|center_vertical"
                 android:layout_marginStart="39dp"
-                android:src="@drawable/ic_aperture_open"
+                android:src="@drawable/ic_sights_off"
                 android:background="@drawable/icon_backdrop"
                 android:padding="3dp"
                 android:contentDescription="Sights on or off"
@@ -441,24 +441,6 @@
         android:stateListAnimator="@null"
         android:visibility="gone" />
 
-    <!-- Left column, 4th row: back to the route before a detour, a replaced
-         stop or "Go here" (kept until arrival). -->
-    <ImageButton
-        android:id="@+id/resume_button"
-        android:scaleType="fitCenter"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
-        android:layout_gravity="top|start"
-        android:layout_marginTop="325dp"
-        android:layout_marginStart="8dp"
-        android:src="@drawable/ic_btn_resume"
-        android:background="@drawable/icon_backdrop"
-        android:padding="6dp"
-        android:contentDescription="Resume navigation"
-        android:elevation="0dp"
-        android:stateListAnimator="@null"
-        android:visibility="gone" />
-
     <!-- Route chips A / B / C: one row at the top centre, between the two
          columns (under the instruction bar while navigating); scrolls
          sideways if they don't all fit. Top margin set in code. -->
@@ -573,16 +555,16 @@
 
 
 
-    <!-- ===== ZONE: bottom bar, navigation only: 3 equal slots (clear | go | speed),
-         84dp tall (the speed widget with its limit sign fits inside, nothing
-         clipped), centres 6 + 42 = 48dp above the bottom; empty slots keep
-         their place. ===== -->
+    <!-- ===== ZONE: bottom bar = the navigation actions only (1.4.1, Alex):
+         left Cancel / Resume (they swap), centre Go / Stop, right the sound
+         mode. 3 equal slots, 55 dp buttons (the circle fills the backdrop),
+         centres 14 + 28 = 42 dp above the bottom; empty slots keep their place. ===== -->
     <LinearLayout
         android:id="@+id/bottom_bar"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
+        android:layout_height="56dp"
         android:layout_gravity="bottom"
-        android:layout_marginBottom="20dp"
+        android:layout_marginBottom="14dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:orientation="horizontal">
@@ -596,13 +578,27 @@
             <ImageButton
                 android:id="@+id/clear_route_button"
                 android:scaleType="fitCenter"
-                android:layout_width="46dp"
-                android:layout_height="46dp"
+                android:layout_width="55dp"
+                android:layout_height="55dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_clear"
                 android:background="@drawable/icon_backdrop"
-                android:padding="11dp"
-                android:contentDescription="Clear route"
+                android:padding="0dp"
+                android:contentDescription="Cancel route"
+                android:elevation="0dp"
+                android:stateListAnimator="@null"
+                android:visibility="gone" />
+
+            <ImageButton
+                android:id="@+id/resume_button"
+                android:scaleType="fitCenter"
+                android:layout_width="55dp"
+                android:layout_height="55dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_btn_resume"
+                android:background="@drawable/icon_backdrop"
+                android:padding="0dp"
+                android:contentDescription="Resume"
                 android:elevation="0dp"
                 android:stateListAnimator="@null"
                 android:visibility="gone" />
@@ -618,12 +614,12 @@
             <ImageButton
                 android:id="@+id/nav_go_button"
                 android:scaleType="fitCenter"
-                android:layout_width="46dp"
-                android:layout_height="46dp"
+                android:layout_width="55dp"
+                android:layout_height="55dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_go"
                 android:background="@drawable/icon_backdrop"
-                android:padding="10dp"
+                android:padding="0dp"
                 android:contentDescription="Start navigation"
                 android:elevation="0dp"
                 android:stateListAnimator="@null"
@@ -631,11 +627,27 @@
 
         </FrameLayout>
 
-        <!-- Third slot left free: Go stays centred. -->
-        <Space
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:clipChildren="false">
+
+            <ImageButton
+                android:id="@+id/sound_button"
+                android:scaleType="fitCenter"
+                android:layout_width="55dp"
+                android:layout_height="55dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_sound_alerts"
+                android:background="@drawable/icon_backdrop"
+                android:padding="0dp"
+                android:contentDescription="Sound mode"
+                android:elevation="0dp"
+                android:stateListAnimator="@null"
+                android:visibility="visible" />
+
+        </FrameLayout>
 
     </LinearLayout>
 

@@ -1,32 +1,7 @@
-<!--
-  ~ Copyright (C) 2026 The Android Open Source Project
-  ~
-  ~ Licensed under the Apache License, Version 2.0 (the "License");
-  ~ you may not use this file except in compliance with the License.
-  ~ You may obtain a copy of the License at
-  ~
-  ~      http://www.apache.org/licenses/LICENSE-2.0
-  ~
-  ~ Unless required by applicable law or agreed to in writing, software
-  ~ distributed under the License is distributed on an "AS IS" BASIS,
-  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  ~ See the License for the specific language governing permissions and
-  ~ limitations under the License.
-  -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:autoMirrored="true" android:height="24dp" android:tint="#1667BC" android:viewportHeight="960" android:viewportWidth="960" android:width="24dp">
-
-    <path android:fillColor="@android:color/white" android:pathData="M444,760L514,760L514,710Q564,701 600,671Q636,641 636,582Q636,540 612,505Q588,470 516,444Q456,424 433,409Q410,394 410,368Q410,342 428.5,327Q447,312 482,312Q514,312 532,327.5Q550,343 558,366L622,340Q611,305 581.5,279Q552,253 516,250L516,200L446,200L446,250Q396,261 368,294Q340,327 340,368Q340,415 367.5,444Q395,473 454,494Q517,517 541.5,535Q566,553 566,582Q566,615 542.5,630.5Q519,646 486,646Q453,646 427.5,625.5Q402,605 390,564L324,590Q338,638 367.5,667.5Q397,697 444,708L444,760ZM480,880Q397,880 324,848.5Q251,817 197,763Q143,709 111.5,636Q80,563 80,480Q80,397 111.5,324Q143,251 197,197Q251,143 324,111.5Q397,80 480,80Q563,80 636,111.5Q709,143 763,197Q817,251 848.5,324Q880,397 880,480Q880,563 848.5,636Q817,709 763,763Q709,817 636,848.5Q563,880 480,880ZM480,800Q614,800 707,707Q800,614 800,480Q800,346 707,253Q614,160 480,160Q346,160 253,253Q160,346 160,480Q160,614 253,707Q346,800 480,800Z"/>
-
-    <path
-        android:strokeColor="#D14343"
-        android:strokeWidth="55"
-        android:fillColor="#00000000"
-        android:pathData="M480,60 A420,420 0 1,1 479.9,60 Z" />
-
-    <path
-        android:strokeColor="#D14343"
-        android:strokeWidth="55"
-        android:strokeLineCap="round"
-        android:pathData="M180,180 L780,780" />
-
+<!-- 1.4.1 Avoiding tolls: "money off", chosen by Alex.
+     Shapes: Material icons, (C) Google / The Android Open Source Project,
+     Apache License 2.0 (http://www.apache.org/licenses/LICENSE-2.0). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="@android:color/white" android:pathData="M12.5,6.9c1.78,0 2.44,0.85 2.5,2.1h2.21c-0.07,-1.72 -1.12,-3.3 -3.21,-3.81V3h-3v2.16c-0.39,0.08 -0.75,0.21 -1.1,0.36l1.51,1.51c0.32,-0.08 0.69,-0.13 1.09,-0.13zM5.47,3.92L4.06,5.33 7.5,8.77c0,2.08 1.56,3.22 3.91,3.91l3.51,3.51c-0.34,0.49 -1.05,0.91 -2.42,0.91 -2.06,0 -2.87,-0.92 -2.98,-2.1h-2.2c0.12,2.19 1.76,3.42 3.68,3.83V21h3v-2.15c0.96,-0.18 1.83,-0.55 2.46,-1.12l2.22,2.22 1.41,-1.41L5.47,3.92z"/>
 </vector>

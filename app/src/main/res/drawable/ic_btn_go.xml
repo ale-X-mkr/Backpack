@@ -1,5 +1,13 @@
-<!-- 1.4.0: Go: start navigation (our button style: simple shape on the grey round backdrop). -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="#FFB71C1C"
+<!-- 1.4.1 Go: "play circle" (two-tone), turned so the arrow points up.
+     Shapes: Material icons, (C) Google / The Android Open Source Project,
+     Apache License 2.0 (http://www.apache.org/licenses/LICENSE-2.0). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="@android:color/white" android:pathData="M8.5,5.2 L19,12 L8.5,18.8 Z" />
+    <group android:pivotX="12" android:pivotY="12" android:scaleX="1.15" android:scaleY="1.15">
+        <group android:pivotX="12" android:pivotY="12" android:rotation="-90">
+        <path android:fillColor="@android:color/white" android:fillAlpha="0.3" android:pathData="M12,4c-4.41,0 -8,3.59 -8,8c0,4.41 3.59,8 8,8s8,-3.59 8,-8C20,7.59 16.41,4 12,4zM9.5,16.5v-9l7,4.5L9.5,16.5z"/>
+        <path android:fillColor="@android:color/white" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10s10,-4.48 10,-10S17.52,2 12,2zM12,20c-4.41,0 -8,-3.59 -8,-8c0,-4.41 3.59,-8 8,-8s8,3.59 8,8C20,16.41 16.41,20 12,20z"/>
+        <path android:fillColor="@android:color/white" android:pathData="M9.5,16.5l7,-4.5l-7,-4.5z"/>
+        </group>
+    </group>
 </vector>

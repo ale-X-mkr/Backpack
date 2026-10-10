@@ -364,6 +364,8 @@ object SettingsPopup {
             "https://photon.komoot.io", null)
         source("Wikipedia \u00b7 Wikidata \u00b7 Wikimedia", "Which places are well known, and the articles to read about them (Wikidata CC0, Wikipedia CC BY-SA).",
             "https://www.wikidata.org", "https://donate.wikimedia.org")
+        source("Material icons \u00b7 Google", "Button icons (Go, Stop, Cancel, Resume, sound, sights, tolls). Apache License 2.0.",
+            "https://fonts.google.com/icons", null)
     }
 
     private fun mapPage(p: Popup, prefs: android.content.SharedPreferences) {

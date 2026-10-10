@@ -54,4 +54,19 @@ class VoiceQueueTest {
         assertTrue(q.dropReadings())
         assertEquals(VoiceQueue.Say.Nothing, q.next(0, null))
     }
+
+    @Test fun dangerGoesFirstWithoutGapAndReadingResumes() {
+        val q = VoiceQueue()
+        q.add(VoiceQueue.Item(VoiceQueue.Kind.READING, "First part. Second part."))
+        assertEquals("First part.", said(q.next(0, null)))
+        q.add(VoiceQueue.Item(VoiceQueue.Kind.DANGER, "Danger zone"))
+        // Not while a sentence is being said...
+        assertEquals(VoiceQueue.Say.Nothing, q.next(0, null))
+        q.sentenceDone()
+        // ...then before the rest, even right after an instruction near a turn.
+        q.navStarted(); q.navDone(1000)
+        assertEquals("Danger zone", said(q.next(1500, 3.0)))
+        q.sentenceDone()
+        assertEquals("Second part.", said(q.next(1500, null)))
+    }
 }

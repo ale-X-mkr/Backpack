@@ -4,6 +4,9 @@
     <color name="rg_active_soft">#E08A0000</color>
     <color name="rg_icon_inactive">#FF4E4E4E</color>
     <color name="rg_inactive_soft">#E0707070</color>
+    <!-- 1.4.1: icons on the map buttons (day): dark red = on, dark grey = off. -->
+    <color name="rg_icon_on">#FF8A0000</color>
+    <color name="rg_icon_off">#FF4E4E4E</color>
     <!-- Map controls: 50 % mid-light grey backdrop (1.0.8, was 35 %), faint dark-grey edge. -->
     <color name="rg_control_backdrop">#80BDBDBD</color>
     <color name="rg_control_edge">#40303030</color>

@@ -11,10 +11,13 @@ package com.backpack.app.core
  * - A heads-up only starts in a gap between instructions (the last one
  *   [GAP_AFTER_MS] ago, the next maneuver [GAP_BEFORE_S] away); a heads-up
  *   no longer valid (place passed) is dropped silently.
+ * - 1.4.1 DANGER (danger zone...): never waits for a gap and goes before
+ *   any other info (the one being said resumes after it); it still never
+ *   cuts an instruction or a sentence already started.
  */
 class VoiceQueue {
 
-    enum class Kind { HEADS_UP, READING }
+    enum class Kind { HEADS_UP, READING, DANGER }
 
     class Item(
         val kind: Kind,
@@ -52,7 +55,12 @@ class VoiceQueue {
     var lastNavDoneMs = 0L
         private set
 
-    fun add(item: Item) { queue.addLast(item) }
+    fun add(item: Item) {
+        if (item.kind != Kind.DANGER) { queue.addLast(item); return }
+        // After the dangers already waiting, before everything else.
+        val at = queue.indexOfFirst { it.kind != Kind.DANGER }.let { if (it < 0) queue.size else it }
+        queue.add(at, item)
+    }
 
     fun pendingCount(kind: Kind): Int = queue.count { it.kind == kind } + (if (current?.kind == kind) 1 else 0)
 
@@ -86,7 +94,15 @@ class VoiceQueue {
     fun next(nowMs: Long, secondsToNextManeuver: Double?): Say {
         if (navSpeaking || infoSpeaking) return Say.Nothing
         var c = current
-        if (c != null && c.kind == Kind.HEADS_UP && !c.valid()) { current = null; c = null }
+        if (c != null && c.kind != Kind.READING && !c.valid()) { current = null; c = null }
+        // A danger waiting goes first; the item it interrupts resumes after it.
+        if (c != null && c.kind != Kind.DANGER && queue.firstOrNull()?.kind == Kind.DANGER) {
+            val d = queue.removeFirst()
+            queue.addFirst(c)
+            queue.addFirst(d)
+            current = null
+            c = null
+        }
         if (c == null) {
             while (true) {
                 val head = queue.firstOrNull() ?: return Say.Nothing
