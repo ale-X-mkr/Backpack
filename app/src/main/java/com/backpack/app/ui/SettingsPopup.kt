@@ -68,7 +68,7 @@ object SettingsPopup {
             when (page) {
                 // Saved at once: a screen rebuild while the popup is open loses nothing.
                 Page.ROUTE -> routePage(c, p, host.travelMode, { o }, { o = it; Prefs.saveRouteOptions(c, it) }, prefs)
-                Page.NAVIGATION -> navigationPage(p, prefs, host)
+                Page.NAVIGATION -> navigationPage(c, p, prefs, host)
                 Page.SPEED -> speedPage(p, prefs)
                 Page.SIGHTS -> sightsPage(c, p, prefs)
                 Page.PLACES -> placesPage(c, p, prefs, host)
@@ -195,7 +195,7 @@ object SettingsPopup {
         p.text("Balanced mode compares the toll with the time it saves, at the value of the current mode (urgency button).", 11f)
     }
 
-    private fun navigationPage(p: Popup, prefs: android.content.SharedPreferences, host: Host) {
+    private fun navigationPage(c: Context, p: Popup, prefs: android.content.SharedPreferences, host: Host) {
         p.section("3D view while navigating")
         val tilts = listOf(-1 to "Adaptive", 0 to "Flat", 30 to "30°", 45 to "45°", 60 to "60°")
         p.choices(tilts, { it.second }, { tilts.firstOrNull { t -> t.first == prefs.getInt(Settings.KEY_NAV_TILT, -1) } ?: tilts[0] }) {
@@ -217,6 +217,13 @@ object SettingsPopup {
             prefs.edit().putBoolean(Settings.KEY_VOICE_SHORT, it.first).apply()
         }
         p.text("Short: only the maneuver -- \"In 100 m, turn right\", \"Turn right\", \"Take the 3rd exit\" -- no street names, no \"Continue for...\". Applies from the next route.", 11f)
+        // 1.6.0: screen language (texts); the voice language below stays separate.
+        p.section(c.getString(com.backpack.app.R.string.lang_screen))
+        val screenLangs = com.backpack.app.L10n.LANGUAGES
+        p.choices(screenLangs, { if (it.first.isEmpty()) c.getString(com.backpack.app.R.string.lang_auto) else it.second },
+            { screenLangs.firstOrNull { l -> l.first == com.backpack.app.L10n.current() } ?: screenLangs[0] }) {
+            if (it.first != com.backpack.app.L10n.current()) { p.dismiss(); com.backpack.app.L10n.set(it.first) }
+        }
         // 1.3.0: voice language (instructions, heads-ups, the guide's readings).
         p.section("Voice language")
         val langs = com.backpack.app.core.VoiceText.LANGUAGES

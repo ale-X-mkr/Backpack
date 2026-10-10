@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lang_screen">Idioma de pantalla</string>
+    <string name="lang_auto">Auto (teléfono)</string>
+</resources>
