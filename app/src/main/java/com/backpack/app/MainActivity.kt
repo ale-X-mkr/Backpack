@@ -525,6 +525,9 @@ class MainActivity : AppCompatActivity() {
             // 1.2.1: moving the map by hand while planning = looking around: no following.
             if (!navUiActive && reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) stopPlanFollow()
         }
+        // 1.4.2: the centre button follows the map's orientation (compass).
+        m.addOnCameraMoveListener { refreshNorthMark() }
+        m.addOnCameraIdleListener { refreshNorthMark() }
         m.addOnMapLongClickListener { p ->
             handleStartOverride(LatLon(p.latitude, p.longitude))
             true
@@ -729,18 +732,34 @@ class MainActivity : AppCompatActivity() {
         refreshNorthMark()
     }
 
-    /** 1.4.0: a small N on the centre button while the map is north up. */
+    /**
+     * 1.4.2 centre button as a compass. Map north up: small N (red) / S E W
+     * (grey) around the icon, between it and the backdrop's edge. Not
+     * centred on you: a narrow needle instead of the dot, the button turned
+     * with the map so the needle points north.
+     */
     private fun refreshNorthMark() {
-        val north = if (navUiActive) northUp else planFollow == PlanFollow.NORTH
         val b = findViewById<ImageButton>(R.id.locate_button) ?: return
-        val icon = if (north) R.drawable.ic_location_north else R.drawable.ic_location_marker
+        val m = map
+        var bearing = m?.cameraPosition?.bearing ?: 0.0
+        bearing = ((bearing % 360.0) + 360.0) % 360.0
+        val centering = if (navUiActive) !overviewOn && m != null && puckActive() && m.locationComponent.cameraMode != CameraMode.NONE
+            else planFollow != PlanFollow.OFF
+        val icon = if (centering) R.drawable.ic_location_marker else R.drawable.ic_location_needle
         if (b.tag != icon) {
             b.tag = icon
             val tint = b.imageTintList
             b.setImageResource(icon)
             b.imageTintList = tint
         }
+        val rot = if (centering) 0f else -bearing.toFloat()
+        if (Math.abs(b.rotation - rot) > 0.3f) b.rotation = rot
+        val north = bearing < 1.5 || bearing > 358.5
+        val fg = if (north) compassLetters else null
+        if (b.foreground !== fg) b.foreground = fg
     }
+
+    private val compassLetters by lazy { ContextCompat.getDrawable(this, R.drawable.compass_letters) }
 
     /** Searching the map, choosing routes or places: no more following. */
     private fun stopPlanFollow() {
