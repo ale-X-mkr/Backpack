@@ -23,8 +23,8 @@ android {
         applicationId = "com.backpack.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 30
-        versionName = "1.5.0"
+        versionCode = 31
+        versionName = "1.5.1"
         buildConfigField("String", "ORS_KEY_1", "\"${localProp("ors.key1")}\"")
         buildConfigField("String", "ORS_KEY_2", "\"${localProp("ors.key2")}\"")
     }

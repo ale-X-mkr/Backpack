@@ -761,58 +761,56 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Centre button as a compass (1.4.2, 1.4.4):
-     * - planning, centred on you: the dot (+ N/S/E/W when the map is north up);
-     * - navigating "your direction up": a bigger red needle, the whole
-     *   compass (letters too) turning with the map so N points north;
-     * - navigating "north up": compass still (N on top), the needle turns
-     *   with your heading;
-     * - map not centred on you: the needle, the button turned with the map
-     *   (letters when it is north up).
+     * Centre button as a compass (1.4.2; 1.5.1 as agreed with Alex):
+     * - map NOT north up (navigating or not, centred or not): the ring and
+     *   N/S/E/W turn with the map around a red arrow that stays pointing up;
+     * - map north up and centred on you: letters still, the arrow shows your
+     *   heading (GPS, while moving);
+     * - map north up, not centred: letters still, the dot ("centre on me").
+     * Only the ring, letters and arrow turn, never the button itself.
      */
     private fun refreshNorthMark() {
         val b = findViewById<ImageButton>(R.id.locate_button) ?: return
+        if (b.rotation != 0f) b.rotation = 0f
         val m = map
         var bearing = m?.cameraPosition?.bearing ?: 0.0
         bearing = ((bearing % 360.0) + 360.0) % 360.0
-        val follow = navUiActive && !overviewOn && m != null && puckActive() && m.locationComponent.cameraMode != CameraMode.NONE
-        val dot = !navUiActive && planFollow != PlanFollow.OFF
-        val icon = if (dot) R.drawable.ic_location_marker else R.drawable.ic_location_ring
-        if (b.tag != icon) {
-            b.tag = icon
+        val northNow = bearing < 1.5 || bearing > 358.5
+        val centred = if (navUiActive) !overviewOn && m != null && puckActive() && m.locationComponent.cameraMode != CameraMode.NONE
+            else planFollow != PlanFollow.OFF
+        val dot = northNow && !centred
+        val image: android.graphics.drawable.Drawable = if (dot) dotIcon else ringRotate
+        if (b.drawable !== image) {
             val tint = b.imageTintList
-            b.setImageResource(icon)
+            b.setImageDrawable(image)
             b.imageTintList = tint
         }
-        val northNow = bearing < 1.5 || bearing > 358.5
-        val headingMode = follow && northUp
-        val turning = follow && !northUp
-        val rot = if (dot || headingMode) 0f else -bearing.toFloat()
-        if (Math.abs(b.rotation - rot) > 0.3f) b.rotation = rot
-        val letters = northNow || turning
-        val needle = !dot
+        val roseLevel = if (northNow) 0 else levelOf(-bearing.toFloat())
+        ringRotate.level = roseLevel
+        lettersRotate.level = roseLevel
         val heading = LocationHub.lastGoodFix?.takeIf { it.hasBearing() && it.hasSpeed() && it.speed > 0.8f }?.bearing ?: 0f
-        val angle = if (headingMode) heading else 0f
-        needleRotate.level = ((((angle % 360f) + 360f) % 360f) / 360f * 10000f).toInt()
-        compassLayer.getDrawable(0).alpha = if (letters) 255 else 0
-        compassLayer.getDrawable(1).alpha = if (needle) 255 else 0
-        val fg = if (letters || needle) compassLayer else null
-        if (b.foreground !== fg) b.foreground = fg
-        else if (fg != null) b.invalidate()
+        needleRotate.level = if (northNow && centred) levelOf(heading) else 0
+        compassLayer.getDrawable(1).alpha = if (dot) 0 else 255
+        if (b.foreground !== compassLayer) b.foreground = compassLayer else b.invalidate()
     }
 
-    private val needleRotate by lazy {
-        android.graphics.drawable.RotateDrawable().apply {
-            drawable = ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_compass_needle)
-            fromDegrees = 0f
-            toDegrees = 360f
-        }
+    private fun levelOf(deg: Float): Int = ((((deg % 360f) + 360f) % 360f) / 360f * 10000f).toInt()
+
+    private fun rotating(res: Int) = android.graphics.drawable.RotateDrawable().apply {
+        drawable = ContextCompat.getDrawable(this@MainActivity, res)!!.mutate()
+        fromDegrees = 0f
+        toDegrees = 360f
     }
 
-    /** Letters over the whole button; the needle over the icon (7 dp padding). */
+    private val dotIcon by lazy { ContextCompat.getDrawable(this, R.drawable.ic_location_marker)!!.mutate() }
+    private val ringRotate by lazy { rotating(R.drawable.ic_location_ring) }
+    private val lettersRotate by lazy { rotating(R.drawable.compass_letters) }
+    private val needleRotate by lazy { rotating(R.drawable.ic_compass_needle) }
+
+    /** Letters over the whole button; the arrow over the icon (7 dp padding). */
     private val compassLayer by lazy {
         android.graphics.drawable.LayerDrawable(arrayOf(
-            ContextCompat.getDrawable(this, R.drawable.compass_letters)!!.mutate(),
+            lettersRotate,
             android.graphics.drawable.InsetDrawable(needleRotate, dp(7))
         ))
     }
@@ -1307,30 +1305,35 @@ class MainActivity : AppCompatActivity() {
         packageManager.queryIntentActivities(Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH), 0).isNotEmpty()
     } catch (e: Exception) { false }
 
-    /** Name of the speech recognizer chosen on the phone (Settings > voice input). */
-    private fun recognizerName(): String {
-        val flat = android.provider.Settings.Secure.getString(contentResolver, "voice_recognition_service")
-        val pkg = flat?.let { android.content.ComponentName.unflattenFromString(it)?.packageName } ?: return "the phone's default speech recognizer"
+    private fun voiceIntent() = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        .putExtra(android.speech.RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+        .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, getString(R.string.voice_prompt))
+
+    /**
+     * 1.5.1: the app that really answers Backpack's microphone (the speech
+     * request), not Android's "voice input" service setting (not used here).
+     * Null = Android will ask (several apps, none chosen as default).
+     */
+    private fun voiceHandlerName(): String? {
+        val ri = try { packageManager.resolveActivity(voiceIntent(), android.content.pm.PackageManager.MATCH_DEFAULT_ONLY) } catch (e: Exception) { null }
+        val pkg = ri?.activityInfo?.packageName ?: return getString(R.string.voice_handler_unknown)
+        if (pkg == "android" || pkg.endsWith(".resolver")) return null
         return try { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() } catch (e: Exception) { pkg }
     }
 
     private fun startVoiceSearch() {
         val prefs = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
         fun launch() {
-            try {
-                voiceLauncher.launch(Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                    .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    .putExtra(android.speech.RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-                    .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Where to?"))
-            } catch (e: Exception) { showError("No voice input on this phone") }
+            try { voiceLauncher.launch(voiceIntent()) } catch (e: Exception) { showError(getString(R.string.voice_none)) }
         }
         if (prefs.getBoolean(Settings.KEY_VOICE_INFO_SHOWN, false)) { launch(); return }
-        val p = Popup(this, "Voice search")
-        val name = recognizerName()
-        p.text("Your voice is handled by: $name.")
-        p.text("If that is Google, your voice may go to Google. FUTO Voice Input or Sayboard (F-Droid) work offline: your voice stays on the phone. Choose one in Android settings > voice input.", 12f)
-        p.button("Cancel") { p.dismiss() }
-        p.button("Continue", primary = true) {
+        val p = Popup(this, getString(R.string.voice_title))
+        val name = voiceHandlerName()
+        p.text(if (name == null) getString(R.string.voice_handler_choose) else getString(R.string.voice_handler, name))
+        p.text(getString(R.string.voice_offline_tip), 12f)
+        p.button(getString(R.string.voice_cancel)) { p.dismiss() }
+        p.button(getString(R.string.voice_continue), primary = true) {
             p.dismiss()
             prefs.edit().putBoolean(Settings.KEY_VOICE_INFO_SHOWN, true).apply()
             launch()
@@ -2360,13 +2363,14 @@ class MainActivity : AppCompatActivity() {
         if (key == nextTurnKey) return
         nextTurnKey = key
         val at = route.line.alongAt(step.wayStart)
-        val from = (at - 150.0).coerceAtLeast(0.0)
-        layers.setNextTurn(com.backpack.app.core.SpeedLimits.section(route.line, from, at + 50.0 - from))
+        // 1.5.1: short: ~30 m before the turn, ~25 m after it (arrowhead at the end).
+        val from = (at - 30.0).coerceAtLeast(0.0)
+        layers.setNextTurn(com.backpack.app.core.SpeedLimits.section(route.line, from, at + 25.0 - from))
     }
 
     private fun onNavProgress(p: Progress, route: RouteResult) {
         if (!navUiActive) startNavigationUi()
-        if (northUp) refreshNorthMark() // 1.4.4: the needle shows your heading
+        refreshNorthMark() // the arrow shows your heading when north up
         if (p.arrived) return
         val step = if (p.nextStepIndex >= 0) route.steps.getOrNull(p.nextStepIndex) else null
         updateNavBar(step, p.distanceToNextM)

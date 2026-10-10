@@ -77,6 +77,10 @@ class MapLayers(private val context: Context) {
         for ((name, res) in iconRes) {
             bitmap(res)?.let { style.addImage(name, it) }
         }
+        // 1.5.1: the turn arrowhead in the map's colours (white + red border on dark maps).
+        val darkNow = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        if (darkNow) bitmap(R.drawable.ic_turn_head_dark)?.let { style.addImage(ICON_TURN, it) }
         for (i in 0 until 4) {
             val l = RouteLabels.letter(i)
             style.addImage("badge_$l", LetterBadge.bitmap(context, l, false))
@@ -140,9 +144,18 @@ class MapLayers(private val context: Context) {
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             PropertyFactory.lineGradient(gradient(primary, doneColor, doneFraction()))
         ))
-        // 1.4.0: the next turn, brighter, with an arrowhead.
+        // 1.5.1: the next turn, short, with an arrowhead: our red with a thin
+        // black border on light maps, white with a red border on dark maps.
+        val darkMap = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val turnFill = if (darkMap) 0xFFFFFFFF.toInt() else 0xFFB71C1C.toInt()
+        val turnEdge = if (darkMap) 0xFFD32F2F.toInt() else 0xFF000000.toInt()
+        add(LineLayer(LAYER_NEXT_EDGE, SRC_NEXT).withProperties(
+            PropertyFactory.lineColor(turnEdge), PropertyFactory.lineWidth(width(4.4f)),
+            PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
+        ))
         add(LineLayer(LAYER_NEXT, SRC_NEXT).withProperties(
-            PropertyFactory.lineColor(0xFFFFFFFF.toInt()), PropertyFactory.lineWidth(width(3.2f)), PropertyFactory.lineOpacity(0.95f),
+            PropertyFactory.lineColor(turnFill), PropertyFactory.lineWidth(width(3.2f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
         add(SymbolLayer(LAYER_NEXT_HEAD, SRC_NEXT).withProperties(
@@ -504,6 +517,7 @@ class MapLayers(private val context: Context) {
         private const val LAYER_TRACK = "bp-track-layer"
         private const val SRC_NEXT = "bp-next-turn"
         private const val LAYER_NEXT = "bp-next-turn-line"
+        private const val LAYER_NEXT_EDGE = "bp-next-turn-edge"
         private const val LAYER_NEXT_HEAD = "bp-next-turn-head"
         private const val SRC_FOCUS = "bp-focus"
         private const val LAYER_FOCUS = "bp-focus-ring"

@@ -9,4 +9,14 @@
     <string name="preference_recommended_label">Balanced</string>
     <string name="avoid_tolls_label">Avoid tolls</string>
     <string name="urgency_label">Time value mode</string>
+    <!-- 1.5.1: voice search (texts kept here from now on, for translations). -->
+    <string name="voice_title">Voice search</string>
+    <string name="voice_handler">Your voice is handled by: %1$s.</string>
+    <string name="voice_handler_choose">Android will ask you which app to use.</string>
+    <string name="voice_handler_unknown">the phone\'s speech app</string>
+    <string name="voice_offline_tip">If that is Google, your voice may go to Google. To keep it on your phone: install FUTO Voice Input, then in Android Settings ▸ Apps ▸ Google ▸ Open by default, tap Clear defaults. Next time choose FUTO Voice Input ▸ Always.\nOr tap the search box and use the microphone of your keyboard (FUTO Keyboard works offline).</string>
+    <string name="voice_cancel">Cancel</string>
+    <string name="voice_continue">Continue</string>
+    <string name="voice_prompt">Where to?</string>
+    <string name="voice_none">No voice input on this phone</string>
 </resources>
