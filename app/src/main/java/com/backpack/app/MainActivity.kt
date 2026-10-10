@@ -733,33 +733,61 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 1.4.2 centre button as a compass. Map north up: small N (red) / S E W
-     * (grey) around the icon, between it and the backdrop's edge. Not
-     * centred on you: a narrow needle instead of the dot, the button turned
-     * with the map so the needle points north.
+     * Centre button as a compass (1.4.2, 1.4.4):
+     * - planning, centred on you: the dot (+ N/S/E/W when the map is north up);
+     * - navigating "your direction up": a bigger red needle, the whole
+     *   compass (letters too) turning with the map so N points north;
+     * - navigating "north up": compass still (N on top), the needle turns
+     *   with your heading;
+     * - map not centred on you: the needle, the button turned with the map
+     *   (letters when it is north up).
      */
     private fun refreshNorthMark() {
         val b = findViewById<ImageButton>(R.id.locate_button) ?: return
         val m = map
         var bearing = m?.cameraPosition?.bearing ?: 0.0
         bearing = ((bearing % 360.0) + 360.0) % 360.0
-        val centering = if (navUiActive) !overviewOn && m != null && puckActive() && m.locationComponent.cameraMode != CameraMode.NONE
-            else planFollow != PlanFollow.OFF
-        val icon = if (centering) R.drawable.ic_location_marker else R.drawable.ic_location_needle
+        val follow = navUiActive && !overviewOn && m != null && puckActive() && m.locationComponent.cameraMode != CameraMode.NONE
+        val dot = !navUiActive && planFollow != PlanFollow.OFF
+        val icon = if (dot) R.drawable.ic_location_marker else R.drawable.ic_location_ring
         if (b.tag != icon) {
             b.tag = icon
             val tint = b.imageTintList
             b.setImageResource(icon)
             b.imageTintList = tint
         }
-        val rot = if (centering) 0f else -bearing.toFloat()
+        val northNow = bearing < 1.5 || bearing > 358.5
+        val headingMode = follow && northUp
+        val turning = follow && !northUp
+        val rot = if (dot || headingMode) 0f else -bearing.toFloat()
         if (Math.abs(b.rotation - rot) > 0.3f) b.rotation = rot
-        val north = bearing < 1.5 || bearing > 358.5
-        val fg = if (north) compassLetters else null
+        val letters = northNow || turning
+        val needle = !dot
+        val heading = LocationHub.lastGoodFix?.takeIf { it.hasBearing() && it.hasSpeed() && it.speed > 0.8f }?.bearing ?: 0f
+        val angle = if (headingMode) heading else 0f
+        needleRotate.level = ((((angle % 360f) + 360f) % 360f) / 360f * 10000f).toInt()
+        compassLayer.getDrawable(0).alpha = if (letters) 255 else 0
+        compassLayer.getDrawable(1).alpha = if (needle) 255 else 0
+        val fg = if (letters || needle) compassLayer else null
         if (b.foreground !== fg) b.foreground = fg
+        else if (fg != null) b.invalidate()
     }
 
-    private val compassLetters by lazy { ContextCompat.getDrawable(this, R.drawable.compass_letters) }
+    private val needleRotate by lazy {
+        android.graphics.drawable.RotateDrawable().apply {
+            drawable = ContextCompat.getDrawable(this@MainActivity, R.drawable.ic_compass_needle)
+            fromDegrees = 0f
+            toDegrees = 360f
+        }
+    }
+
+    /** Letters over the whole button; the needle over the icon (7 dp padding). */
+    private val compassLayer by lazy {
+        android.graphics.drawable.LayerDrawable(arrayOf(
+            ContextCompat.getDrawable(this, R.drawable.compass_letters)!!.mutate(),
+            android.graphics.drawable.InsetDrawable(needleRotate, dp(7))
+        ))
+    }
 
     /** Searching the map, choosing routes or places: no more following. */
     private fun stopPlanFollow() {
@@ -2310,6 +2338,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun onNavProgress(p: Progress, route: RouteResult) {
         if (!navUiActive) startNavigationUi()
+        if (northUp) refreshNorthMark() // 1.4.4: the needle shows your heading
         if (p.arrived) return
         val step = if (p.nextStepIndex >= 0) route.steps.getOrNull(p.nextStepIndex) else null
         updateNavBar(step, p.distanceToNextM)
