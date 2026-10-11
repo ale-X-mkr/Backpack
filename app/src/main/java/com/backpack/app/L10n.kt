@@ -17,16 +17,29 @@ object L10n {
 
     fun current(): String = AppCompatDelegate.getApplicationLocales().toLanguageTags().substringBefore(',').substringBefore('-')
 
+    private const val PREFS = "backpack_l10n"
+    private const val KEY = "screen_lang"
+    @Volatile private var saved: String? = null
+
     fun set(tag: String) {
+        saved = tag
+        appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.putString(KEY, tag)?.apply()
         AppCompatDelegate.setApplicationLocales(if (tag.isEmpty()) LocaleListCompat.getEmptyLocaleList() else LocaleListCompat.forLanguageTags(tag))
     }
 
-    /** A context in the screen language (for the service, the core texts). */
+    private var appContext: Context? = null
+
+    /** A context in the screen language (for the service, the core texts). Also
+     *  before any screen was opened (Android 12 and older load AppCompat's
+     *  choice only with the first screen): our own saved copy then. */
     fun context(c: Context): Context {
         val locales = AppCompatDelegate.getApplicationLocales()
-        if (locales.isEmpty) return c
+        val locale = if (!locales.isEmpty) locales.get(0) else {
+            val tag = saved ?: c.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "").orEmpty().also { saved = it }
+            if (tag.isEmpty()) null else java.util.Locale.forLanguageTag(tag)
+        } ?: return c
         val cfg = Configuration(c.resources.configuration)
-        cfg.setLocale(locales.get(0))
+        cfg.setLocale(locale)
         return c.createConfigurationContext(cfg)
     }
 
@@ -37,6 +50,7 @@ object L10n {
     /** Core texts read from the string resources in the screen language. */
     fun install(c: Context) {
         val app = c.applicationContext
+        appContext = app
         Txt.lookup = { key ->
             val ctx = context(app)
             val id = ctx.resources.getIdentifier(key, "string", app.packageName)

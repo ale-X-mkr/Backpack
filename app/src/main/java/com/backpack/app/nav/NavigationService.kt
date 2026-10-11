@@ -204,14 +204,14 @@ class NavigationService : Service() {
 
     private fun createChannel() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, t(R.string.other_notif_navigation), NotificationManager.IMPORTANCE_LOW).apply {
-                    description = t(R.string.other_notif_channel_desc)
-                    setShowBadge(false)
-                }
-            )
-        }
+        // Created every time: Android keeps the user's channel settings and only
+        // updates its name / description (they follow the screen language).
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, t(R.string.other_notif_navigation), NotificationManager.IMPORTANCE_LOW).apply {
+                description = t(R.string.other_notif_channel_desc)
+                setShowBadge(false)
+            }
+        )
     }
 
     companion object {
