@@ -95,16 +95,16 @@ private var urgencyApplyPending = false
 
 class MainActivity : AppCompatActivity() {
 
-    private enum class ModeUi(val mode: TravelMode, val iconRes: Int, val label: String) {
-        WALKING(TravelMode.WALKING, R.drawable.ic_mode_walking, "Walking"),
-        CYCLING(TravelMode.CYCLING, R.drawable.ic_mode_cycling, "Cycling"),
-        DRIVING(TravelMode.DRIVING, R.drawable.ic_mode_driving, "Driving")
+    private enum class ModeUi(val mode: TravelMode, val iconRes: Int, val labelRes: Int) {
+        WALKING(TravelMode.WALKING, R.drawable.ic_mode_walking, R.string.main_mode_walking),
+        CYCLING(TravelMode.CYCLING, R.drawable.ic_mode_cycling, R.string.main_mode_cycling),
+        DRIVING(TravelMode.DRIVING, R.drawable.ic_mode_driving, R.string.main_mode_driving)
     }
 
-    private enum class PreferenceUi(val pref: RoutePreference, val iconRes: Int, val label: String) {
-        FASTEST(RoutePreference.FASTEST, R.drawable.ic_pref_fastest, "Fastest route"),
-        SHORTEST(RoutePreference.SHORTEST, R.drawable.ic_pref_shortest, "Shortest distance"),
-        RECOMMENDED(RoutePreference.RECOMMENDED, R.drawable.ic_pref_balanced, "Balanced mode")
+    private enum class PreferenceUi(val pref: RoutePreference, val iconRes: Int, val labelRes: Int) {
+        FASTEST(RoutePreference.FASTEST, R.drawable.ic_pref_fastest, R.string.main_pref_fastest),
+        SHORTEST(RoutePreference.SHORTEST, R.drawable.ic_pref_shortest, R.string.main_pref_shortest),
+        RECOMMENDED(RoutePreference.RECOMMENDED, R.drawable.ic_pref_balanced, R.string.main_pref_balanced)
     }
 
     /** Icons only -- the EUR/hour values come from Settings. */
@@ -119,22 +119,22 @@ class MainActivity : AppCompatActivity() {
      *  (the standard set, in its usual order); the others are the extras.
      *  [color]: on the button, in the panel and on the map icons. */
     private enum class PoiCategory(
-        val iconRes: Int, val iconName: String, val label: String, val color: Int? = null, val essential: Boolean = false
+        val iconRes: Int, val iconName: String, val labelRes: Int, val color: Int? = null, val essential: Boolean = false
     ) {
-        NONE(R.drawable.ic_poi_toggle, "", "Off"),
-        FOOD(R.drawable.ic_poi_food, "poi_food", "Food", 0xFF800000.toInt(), true),
-        LODGING(R.drawable.ic_poi_lodging, "poi_lodging", "Lodging", 0xFF3E5468.toInt(), true),
-        PARKING(R.drawable.ic_poi_parking, "poi_parking", "Parking", 0xFF0D3B8C.toInt(), true),
-        FUEL(R.drawable.ic_poi_fuel, "poi_fuel", "Fuel/Charging", 0xFF1E6B2E.toInt(), true),
-        TOILETS(R.drawable.ic_poi_toilets, "poi_toilets", "Toilets", 0xFF1F78B4.toInt(), true),
-        EMERGENCY(R.drawable.ic_poi_emergency, "poi_emergency", "Emergency", 0xFFE51401.toInt(), true),
-        WATER(R.drawable.ic_poi_water, "poi_water", "Water", 0xFF0097A7.toInt()),
-        SLEEP(R.drawable.ic_poi_sleep, "poi_sleep", "Hostel/Camping", 0xFF6D4C41.toInt()),
-        LAUNDRY(R.drawable.ic_poi_laundry, "poi_laundry", "Laundry", 0xFF5E35B1.toInt()),
-        PHARMACY(R.drawable.ic_poi_pharmacy, "poi_pharmacy", "Pharmacy", 0xFF00897B.toInt()),
-        MONEY(R.drawable.ic_poi_money, "poi_money", "ATM/Exchange", 0xFF827717.toInt()),
-        WIFI(R.drawable.ic_poi_wifi, "poi_wifi", "Wi-Fi", 0xFF3949AB.toInt()),
-        BIKE(R.drawable.ic_poi_bike, "poi_bike", "Bike repair", 0xFFEF6C00.toInt())
+        NONE(R.drawable.ic_poi_toggle, "", R.string.main_poi_off),
+        FOOD(R.drawable.ic_poi_food, "poi_food", R.string.main_poi_food, 0xFF800000.toInt(), true),
+        LODGING(R.drawable.ic_poi_lodging, "poi_lodging", R.string.main_poi_lodging, 0xFF3E5468.toInt(), true),
+        PARKING(R.drawable.ic_poi_parking, "poi_parking", R.string.main_poi_parking, 0xFF0D3B8C.toInt(), true),
+        FUEL(R.drawable.ic_poi_fuel, "poi_fuel", R.string.main_poi_fuel, 0xFF1E6B2E.toInt(), true),
+        TOILETS(R.drawable.ic_poi_toilets, "poi_toilets", R.string.main_poi_toilets, 0xFF1F78B4.toInt(), true),
+        EMERGENCY(R.drawable.ic_poi_emergency, "poi_emergency", R.string.main_poi_emergency, 0xFFE51401.toInt(), true),
+        WATER(R.drawable.ic_poi_water, "poi_water", R.string.main_poi_water, 0xFF0097A7.toInt()),
+        SLEEP(R.drawable.ic_poi_sleep, "poi_sleep", R.string.main_poi_sleep, 0xFF6D4C41.toInt()),
+        LAUNDRY(R.drawable.ic_poi_laundry, "poi_laundry", R.string.main_poi_laundry, 0xFF5E35B1.toInt()),
+        PHARMACY(R.drawable.ic_poi_pharmacy, "poi_pharmacy", R.string.main_poi_pharmacy, 0xFF00897B.toInt()),
+        MONEY(R.drawable.ic_poi_money, "poi_money", R.string.main_poi_money, 0xFF827717.toInt()),
+        WIFI(R.drawable.ic_poi_wifi, "poi_wifi", R.string.main_poi_wifi, 0xFF3949AB.toInt()),
+        BIKE(R.drawable.ic_poi_bike, "poi_bike", R.string.main_poi_bike, 0xFFEF6C00.toInt())
     }
 
     private lateinit var mapView: MapView
@@ -215,11 +215,11 @@ class MainActivity : AppCompatActivity() {
         if (fine) {
             LocationHub.acquire(this, LocationHub.LEASE_UI)
             map?.style?.let { activateLocationPuck(it) }
-            if (!LocationHub.isGpsEnabled(this)) showError("GPS is off -- turn on Location")
+            if (!LocationHub.isGpsEnabled(this)) showError(getString(R.string.main_gps_off))
         } else if (coarseOnly) {
-            showError("Precise location needed -- GPS navigation can't work with approximate location")
+            showError(getString(R.string.main_precise_needed))
         } else {
-            showError("Location permission denied -- no position, no navigation")
+            showError(getString(R.string.main_permission_denied))
         }
     }
 
@@ -284,7 +284,7 @@ class MainActivity : AppCompatActivity() {
         // 1.3.0: the speed alarm lives outside the screen (also with it off).
         com.backpack.app.speed.SpeedGuard.start(this)
         com.backpack.app.nav.AppRunning.onExit = { finishAndRemoveTask() }
-        mapView.addOnDidFailLoadingMapListener { showError("Map could not load -- check the connection") }
+        mapView.addOnDidFailLoadingMapListener { showError(getString(R.string.main_map_load_failed)) }
         mapView.getMapAsync { m -> onMapReady(m) }
 
         findViewById<ImageButton>(R.id.locate_button).apply {
@@ -302,10 +302,10 @@ class MainActivity : AppCompatActivity() {
             setOnLongClickListener {
                 if (TripState.previous != null) {
                     TripState.previous = null
-                    showMessage("Previous route forgotten")
+                    showMessage(getString(R.string.main_previous_forgotten))
                 } else {
                     com.backpack.app.nav.LastTrip.clear(this@MainActivity)
-                    showMessage("Last navigation forgotten")
+                    showMessage(getString(R.string.main_last_nav_forgotten))
                 }
                 refreshResumeButton()
                 true
@@ -434,7 +434,7 @@ class MainActivity : AppCompatActivity() {
         // Navigation may have ended while the screen was away.
         if (navUiActive && !NavigationEngine.isActive) stopNavigationUi()
         if (LocationHub.hasPermission(this) && !LocationHub.isGpsEnabled(this)) {
-            showError("GPS is off -- turn on Location")
+            showError(getString(R.string.main_gps_off))
         }
     }
 
@@ -541,7 +541,7 @@ class MainActivity : AppCompatActivity() {
                 if (idx != TripState.selectedIndex) promoteRouteToPrimary(idx)
             } else if (choosing && !waypointModeArmed && TripState.plan != null && layers.selectedRouteAt(m, screen)) {
                 // The selected route itself: never a new destination.
-                if (!NavigationEngine.isActive) showMessage("Route ${RouteLabels.letter(TripState.selectedIndex)} selected \u00b7 Go to start")
+                if (!NavigationEngine.isActive) showMessage(getString(R.string.main_route_selected_go, RouteLabels.letter(TripState.selectedIndex)))
             } else if (!overviewOn) {
                 handleDestinationTap(LatLon(p.latitude, p.longitude))
             }
@@ -688,7 +688,7 @@ class MainActivity : AppCompatActivity() {
         wakeDisplay()
         val fix = LocationHub.lastGoodFix ?: return
         layers.setWarning(LatLon(fix.latitude, fix.longitude))
-        showMessage("GPS signal weak -- holding last known position")
+        showMessage(getString(R.string.main_gps_weak))
     }
 
     private fun clearGpsWarning() {
@@ -713,12 +713,12 @@ class MainActivity : AppCompatActivity() {
             if (following) northUp = !northUp
             followPosition(null)
             refreshNorthMark()
-            showMessage(if (northUp) "North up" else "Your direction up")
+            showMessage(getString(if (northUp) R.string.main_north_up else R.string.main_direction_up))
             return
         }
         val current = LocationHub.lastGoodFix
         if (current == null) {
-            showError(if (LocationHub.isGpsEnabled(this)) "Still waiting for a GPS fix -- try again in a moment" else "GPS is off -- turn on Location")
+            showError(getString(if (LocationHub.isGpsEnabled(this)) R.string.main_waiting_fix else R.string.main_gps_off))
             return
         }
         // 1.2.1 planning: north up (flat, recentred only near the edge) ->
@@ -728,7 +728,7 @@ class MainActivity : AppCompatActivity() {
             PlanFollow.OFF -> {
                 flyFlat(here, maxOf(m.cameraPosition.zoom, 15.0), keepFollow = true)
                 setPlanFollow(PlanFollow.NORTH)
-                showMessage("Following you \u00b7 north up")
+                showMessage(getString(R.string.main_following_north))
             }
             PlanFollow.NORTH -> {
                 val lc = m.locationComponent
@@ -736,13 +736,13 @@ class MainActivity : AppCompatActivity() {
                 lc.setCameraMode(CameraMode.TRACKING_GPS, 750L, maxOf(m.cameraPosition.zoom, 16.0), null,
                     Prefs.navTilt(this, currentMode == ModeUi.DRIVING), null)
                 setPlanFollow(PlanFollow.HEADING)
-                showMessage("Following you \u00b7 your direction up")
+                showMessage(getString(R.string.main_following_heading))
             }
             PlanFollow.HEADING -> {
                 if (puckActive()) m.locationComponent.cameraMode = CameraMode.NONE
                 flyFlat(here, m.cameraPosition.zoom, keepFollow = true)
                 setPlanFollow(PlanFollow.NORTH)
-                showMessage("Following you \u00b7 north up")
+                showMessage(getString(R.string.main_following_north))
             }
         }
     }
@@ -923,7 +923,7 @@ class MainActivity : AppCompatActivity() {
      *  With [retry], the bubble says "tap to retry" and stays a little longer. */
     private fun showError(text: String, retry: (() -> Unit)? = null) {
         errorFadeOutRunnable?.let { handler.removeCallbacks(it) }
-        errorBubble.text = if (retry != null) "$text \u00b7 tap to retry" else text
+        errorBubble.text = if (retry != null) getString(R.string.main_tap_to_retry, text) else text
         if (retry != null) {
             errorBubble.isClickable = true
             errorBubble.setOnClickListener {
@@ -975,7 +975,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupSoundButton() {
         findViewById<ImageButton>(R.id.sound_button).setOnClickListener {
             if (!NavigationEngine.isActive) {
-                showMessage("Alerts only \u00b7 other sound modes while navigating")
+                showMessage(getString(R.string.main_alerts_only_idle))
                 return@setOnClickListener
             }
             val next = when (Prefs.navSoundMode(this)) {
@@ -986,11 +986,11 @@ class MainActivity : AppCompatActivity() {
             Prefs.setNavSoundMode(this, next)
             NavigationEngine.soundModeChanged()
             refreshSoundButton()
-            showMessage(when (next) {
-                Prefs.SoundMode.FULL -> "Sound: full \u00b7 instructions, sight tips, readings"
-                Prefs.SoundMode.NAV -> "Sound: navigation \u00b7 instructions only"
-                Prefs.SoundMode.ALERTS -> "Sound: alerts only \u00b7 dangers and speed alarm"
-            })
+            showMessage(getString(when (next) {
+                Prefs.SoundMode.FULL -> R.string.main_sound_full
+                Prefs.SoundMode.NAV -> R.string.main_sound_nav
+                Prefs.SoundMode.ALERTS -> R.string.main_sound_alerts
+            }))
         }
         refreshSoundButton()
     }
@@ -1157,11 +1157,11 @@ class MainActivity : AppCompatActivity() {
     /** Enter: first result straight away (as before). */
     private fun submitSearch(text: String) {
         suggestRunnable?.let { handler.removeCallbacks(it) }
-        showMessage("Searching...")
+        showMessage(getString(R.string.main_searching))
         closeSearch()
         searchClient.search(text, currentPosition() ?: cameraCenter()) { places, error ->
             val first = places.firstOrNull()
-            if (first == null) showError(error ?: "Address not found") else goToPlace(first)
+            if (first == null) showError(error ?: getString(R.string.main_address_not_found)) else goToPlace(first)
         }
     }
 
@@ -1178,14 +1178,14 @@ class MainActivity : AppCompatActivity() {
         // Handled once: a later rebuild or resume does not repeat it.
         intent.action = null
         if (link == null) {
-            showError("This place link can't be read by Backpack")
+            showError(getString(R.string.main_link_unreadable))
             return
         }
         if (NavigationEngine.isActive) {
-            val p = Popup(this, "New destination")
-            p.text("${link.label ?: link.query ?: "A place"} was sent by another app. Navigate there instead?")
-            p.button("Go here", primary = true) { p.dismiss(); resolveLink(link) }
-            p.button("Cancel") { p.dismiss() }
+            val p = Popup(this, getString(R.string.main_new_destination))
+            p.text(getString(R.string.main_link_sent, link.label ?: link.query ?: getString(R.string.main_a_place)))
+            p.button(getString(R.string.main_go_here), primary = true) { p.dismiss(); resolveLink(link) }
+            p.button(getString(R.string.main_cancel)) { p.dismiss() }
             p.show()
             return
         }
@@ -1199,10 +1199,10 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val query = link.query ?: return
-        showMessage("Looking for $query...")
+        showMessage(getString(R.string.main_looking_for, query))
         searchClient.search(query, currentPosition() ?: cameraCenter()) { places, error ->
             val first = places.firstOrNull()
-            if (first == null) showError(error ?: "Place not found: $query")
+            if (first == null) showError(error ?: getString(R.string.main_place_not_found, query))
             else placeLinkDestination(first.point, link.label ?: first.name, link.mode)
         }
     }
@@ -1219,7 +1219,7 @@ class MainActivity : AppCompatActivity() {
         if (resolveStartPoint() == null) {
             TripState.pendingLink = point to label
             TripState.pendingLinkMode = mode
-            showMessage("$label \u00b7 waiting for GPS to plan the route...")
+            showMessage(getString(R.string.main_waiting_gps_plan, label))
             return
         }
         applyMode()
@@ -1229,7 +1229,7 @@ class MainActivity : AppCompatActivity() {
             setIconActive(findViewById(R.id.waypoint_button), false)
         }
         handleDestinationTap(point)
-        showMessage("$label \u00b7 check the route, then Go")
+        showMessage(getString(R.string.main_check_route_go, label))
     }
 
     /** Travel mode set without rerouting (a new destination follows). */
@@ -1477,7 +1477,7 @@ class MainActivity : AppCompatActivity() {
         val on = searchingNow() && System.currentTimeMillis() - searchingStartedAtMs < 120_000L
         if (!on) searchingSwitched = false
         findViewById<TextView>(R.id.searching_text).text =
-            if (searchingSwitched) "Searching places\u2026 trying another server" else "Searching places\u2026"
+            getString(if (searchingSwitched) R.string.main_searching_places_switch else R.string.main_searching_places)
         val v = if (on) View.VISIBLE else View.GONE
         if (line.visibility != v) line.visibility = v
         return on
@@ -1542,6 +1542,12 @@ class MainActivity : AppCompatActivity() {
     /** "within 1 h on foot of you" style text for the result message. */
     private var reachLabel: String? = null
 
+    /** "within [about] <time> <how> of you / the map centre" (1.6.0: from resources). */
+    private fun reachText(time: String, how: String, exact: Boolean, aroundMe: Boolean): String = getString(
+        if (aroundMe) { if (exact) R.string.main_reach_you else R.string.main_reach_you_about }
+        else { if (exact) R.string.main_reach_centre else R.string.main_reach_centre_about },
+        time, how)
+
     private fun sightsReachMinutes() = getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE)
         .getInt(Settings.KEY_SIGHTS_REACH_MIN, Reach.DEFAULT_MINUTES)
 
@@ -1573,16 +1579,16 @@ class MainActivity : AppCompatActivity() {
         val mode = currentMode
         val time = if (minutes < 60) "$minutes min" else "${minutes / 60} h"
         val how = when (mode.mode) {
-            com.backpack.app.core.TravelMode.WALKING -> "on foot"
-            com.backpack.app.core.TravelMode.CYCLING -> "by bike"
-            com.backpack.app.core.TravelMode.DRIVING -> "by car"
+            com.backpack.app.core.TravelMode.WALKING -> getString(R.string.main_on_foot)
+            com.backpack.app.core.TravelMode.CYCLING -> getString(R.string.main_by_bike)
+            com.backpack.app.core.TravelMode.DRIVING -> getString(R.string.main_by_car)
         }
         ReachArea.get(this, origin, mode.mode, minutes) { ring, exact ->
             // Still wanted (no route meanwhile, same settings and place)?
             if (isDestroyed || !touristOn || TripState.plan != null ||
                 reachSettings != settings || reachOrigin !== origin
             ) return@get
-            reachLabel = "within ${if (exact) "" else "about "}$time $how of ${if (aroundMe) "you" else "the map centre"}"
+            reachLabel = reachText(time, how, exact, aroundMe)
             val key = "%.3f,%.3f,%s,%d,%b".format(java.util.Locale.ROOT, origin.lat, origin.lon, mode.name, minutes, exact)
             touristFinder.inReach(ring, key, { if (announce) onPlacesServerSwitch() },
                 onPartial = { part ->
@@ -1613,7 +1619,7 @@ class MainActivity : AppCompatActivity() {
             touristAreaCenter = center
             layers.setTourist(emptyList())
             refreshSightsButton()
-            showError(error ?: "Places search failed", retry = { refreshTourist(force = true) })
+            showError(error ?: getString(R.string.main_places_search_failed), retry = { refreshTourist(force = true) })
             return
         }
         TripState.touristCandidates = all
@@ -1631,20 +1637,20 @@ class MainActivity : AppCompatActivity() {
                 corridorM().toInt(), sightsMaxFraction())
             if (choice != null) {
                 drawPlan(plan, choice.index, fit = false, note = null, tourist = false)
-                note = "Weekend sights route: ${choice.places} well-known places instead of ${choice.basePlaces}, +" +
-                    Tourist.minutesLabel(choice.extraSeconds)
+                note = getString(R.string.main_weekend_sights_route, choice.places.toString(), choice.basePlaces.toString(),
+                    Tourist.minutesLabel(choice.extraSeconds))
             }
         }
         val shown = showTouristFor(if (plan != null) selectedRoute() else null)
         // Part of the squares could not be fetched: say so, keep what was found.
-        if (error != null) showError("Some places may be missing ($error)", retry = { refreshTourist(force = true) })
+        if (error != null) showError(getString(R.string.main_places_missing, error), retry = { refreshTourist(force = true) })
         if (!announce) return
         showMessage(note ?: when {
-            shown.isEmpty() -> if (plan != null) "No well-known places along this route"
-                else if (reachLabel != null) "No well-known places $reachLabel" else "No well-known places here"
-            plan != null -> "${shown.size} well-known places along your route (hold the button for the list)"
-            reachLabel != null -> "${shown.size} well-known places $reachLabel"
-            else -> "${shown.size} well-known places here"
+            shown.isEmpty() -> if (plan != null) getString(R.string.main_no_sights_route)
+                else if (reachLabel != null) getString(R.string.main_no_sights_reach, reachLabel) else getString(R.string.main_no_sights_here)
+            plan != null -> getString(R.string.main_sights_on_route, shown.size)
+            reachLabel != null -> getString(R.string.main_sights_reach, shown.size, reachLabel)
+            else -> getString(R.string.main_sights_here, shown.size)
         })
     }
 
@@ -1674,7 +1680,7 @@ class MainActivity : AppCompatActivity() {
         }
         override fun onSeveral(pois: List<TouristPoi>) {
             if (isDestroyed) return
-            showMessage("${pois.size} sights near you \u00b7 see the map at your next break", showMs = 8000L)
+            showMessage(getString(R.string.main_several_sights, pois.size), showMs = 8000L)
         }
     }
 
@@ -1750,13 +1756,13 @@ class MainActivity : AppCompatActivity() {
 
     /** The place's Wikipedia summary, read aloud (queued like every reading). */
     private fun readAloud(poi: TouristPoi) {
-        if (!Prefs.voiceOn(this)) { showMessage("Voice is off (Settings > Navigation)"); return }
+        if (!Prefs.voiceOn(this)) { showMessage(getString(R.string.main_voice_off)); return }
         if (!readingsAllowed()) return
-        showMessage("Looking up ${poi.name}\u2026")
+        showMessage(getString(R.string.main_looking_up, poi.name))
         val lang = Prefs.voiceLanguage(this)
         com.backpack.app.tourist.WikiSummary.forPoi(poi, lang) { text, textLang ->
             if (isDestroyed) return@forPoi
-            if (text == null) { showMessage("No Wikipedia article to read for ${poi.name}"); return@forPoi }
+            if (text == null) { showMessage(getString(R.string.main_no_article_read, poi.name)); return@forPoi }
             NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
                 com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text", textLang.takeIf { it != lang }), this)
         }
@@ -1765,7 +1771,7 @@ class MainActivity : AppCompatActivity() {
     /** 1.4.1: while navigating, readings only in the "Full" sound mode. */
     private fun readingsAllowed(): Boolean {
         if (Prefs.soundMode(this) == Prefs.SoundMode.FULL || !NavigationEngine.isActive) return true
-        showMessage("Readings need sound mode Full (bottom right button)")
+        showMessage(getString(R.string.main_readings_need_full))
         return false
     }
 
@@ -1776,22 +1782,22 @@ class MainActivity : AppCompatActivity() {
      */
     private fun showSightGuide(poi: TouristPoi) {
         val p = Popup(this, poi.name)
-        val body = p.text("Looking it up on Wikipedia...")
-        p.button("Stop reading") { NavigationEngine.stopReading() }
-        p.button("Add stop") { NavigationEngine.stopReading(); p.dismiss(); addStopFlow(poi.point, poi.name) }
+        val body = p.text(getString(R.string.main_looking_wikipedia))
+        p.button(getString(R.string.main_stop_reading)) { NavigationEngine.stopReading() }
+        p.button(getString(R.string.main_add_stop)) { NavigationEngine.stopReading(); p.dismiss(); addStopFlow(poi.point, poi.name) }
         // Close keeps the voice going (eyes back on the road); Stop reading ends it.
-        p.button("Close", primary = true) { p.dismiss() }
+        p.button(getString(R.string.main_close), primary = true) { p.dismiss() }
         p.show()
         val lang = Prefs.voiceLanguage(this)
         com.backpack.app.tourist.WikiSummary.forPoi(poi, lang) { text, textLang ->
             if (isDestroyed) return@forPoi
             if (text == null) {
-                body.text = "No Wikipedia article for this place (or no connection)."
+                body.text = getString(R.string.main_no_article_place)
                 return@forPoi
             }
             body.text = text + "\n\nWikipedia, CC BY-SA"
             p.fit()
-            if (!Prefs.voiceOn(this)) showMessage("Voice is off (Settings > Navigation)")
+            if (!Prefs.voiceOn(this)) showMessage(getString(R.string.main_voice_off))
             // Queued: after the heads-up being said, cut by instructions and resumed.
             else if (readingsAllowed()) NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
                 com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text", textLang.takeIf { it != lang }), this)
@@ -1850,47 +1856,47 @@ class MainActivity : AppCompatActivity() {
 
     private fun showTouristList() {
         val onRoute = touristRoute() != null && TripState.destination != null
-        val p = Popup(this, if (onRoute) "Along your route" else "Well-known places here")
+        val p = Popup(this, getString(if (onRoute) R.string.main_along_route else R.string.main_sights_here_title))
         // While navigating, places already behind you are left out.
         val rows = touristResults.filter { it.key !in touristDimOwner }.map { it to aheadOnRoute(it) }
             .filter { (_, a) -> !onRoute || a == null || a.first > -50.0 }
             .sortedBy { (_, a) -> if (onRoute) a?.first ?: Double.MAX_VALUE else 0.0 }
-        if (rows.isEmpty()) p.text("No places ahead on your route.")
+        if (rows.isEmpty()) p.text(getString(R.string.main_no_places_ahead))
         for ((poi, a) in rows) {
             val where = if (onRoute && a != null) {
-                " \u00b7 in ${Speech.shortDistance(a.first.coerceAtLeast(0.0), useMetric)} \u00b7 \u2248 +" +
-                    Tourist.minutesLabel(Tourist.estimateDetourSeconds(a.second, currentMode.mode))
+                " · " + getString(R.string.main_list_ahead, Speech.shortDistance(a.first.coerceAtLeast(0.0), useMetric),
+                    Tourist.minutesLabel(Tourist.estimateDetourSeconds(a.second, currentMode.mode)))
             } else ""
             p.text("${starsText(poi.stars)}${poi.name}\n${poi.category.label}$where", 14f).apply {
                 setPadding(0, dp(6), 0, dp(6))
                 setOnClickListener { p.dismiss(); showTouristPlace(poi) }
             }
         }
-        p.button("Close", primary = true) { p.dismiss() }
+        p.button(getString(R.string.main_close), primary = true) { p.dismiss() }
         p.show()
     }
 
     /** 1.1.0: destination pin tapped: the town's Wikivoyage guide, if any. */
     private fun showDestinationGuide() {
         val dest = TripState.destination ?: return
-        showMessage("Looking for a travel guide...")
+        showMessage(getString(R.string.main_looking_guide))
         com.backpack.app.tourist.TravelGuide.forPoint(dest) { name, url ->
             if (isDestroyed) return@forPoint
-            val p = Popup(this, name ?: "Destination")
+            val p = Popup(this, name ?: getString(R.string.main_destination))
             when {
-                url != null -> { p.text("Travel guide for $name, written by travellers (Wikivoyage, CC BY-SA)."); p.link("Open the travel guide", url) }
-                name != null -> p.text("No Wikivoyage travel guide for $name yet.")
-                else -> p.text("No travel guide found (no town here, or no connection).")
+                url != null -> { p.text(getString(R.string.main_guide_for, name)); p.link(getString(R.string.main_open_guide), url) }
+                name != null -> p.text(getString(R.string.main_no_guide_for, name))
+                else -> p.text(getString(R.string.main_no_guide))
             }
-            p.button("Close", primary = true) { p.dismiss() }
+            p.button(getString(R.string.main_close), primary = true) { p.dismiss() }
             p.show()
         }
     }
 
     private fun showTouristPlace(poi: TouristPoi) {
-        val known = if (poi.sitelinks > 0) " \u00b7 written about on ${poi.sitelinks} Wikipedia/Wikimedia sites" else ""
+        val known = if (poi.sitelinks > 0) " · " + getString(R.string.main_sitelinks, poi.sitelinks) else ""
         showPlacePopup(poi.name, "${starsText(poi.stars)}${poi.category.label}$known", poi.point,
-            poi.readMoreUrl, if (poi.wikipediaUrl != null || poi.articleUrl != null) "Read about it on Wikipedia" else "Read about it on Wikidata",
+            poi.readMoreUrl, getString(if (poi.wikipediaUrl != null || poi.articleUrl != null) R.string.main_read_wikipedia else R.string.main_read_wikidata),
             poi.voyageUrl)
     }
 
@@ -1898,15 +1904,15 @@ class MainActivity : AppCompatActivity() {
         val kind = com.backpack.app.core.Places.kindLabel(place.kind)
         // 1.3.0: open or closed right now, then the hours as written.
         val now = when (com.backpack.app.core.OpeningHours.isOpenNow(place.openingHours)) {
-            true -> " \u00b7 Open now"
-            false -> " \u00b7 Closed now"
+            true -> " · " + getString(R.string.main_open_now)
+            false -> " · " + getString(R.string.main_closed_now)
             null -> ""
         }
         val detail = kind + now + (place.openingHours?.let { "\n$it" } ?: "")
         val link = when {
-            place.wikipedia != null -> "Read about it on Wikipedia"
-            place.wikidata != null -> "Read about it on Wikidata"
-            else -> "Website"
+            place.wikipedia != null -> getString(R.string.main_read_wikipedia)
+            place.wikidata != null -> getString(R.string.main_read_wikidata)
+            else -> getString(R.string.main_website)
         }
         showPlacePopup(place.label, detail, place.point, place.readMoreUrl, link)
     }
@@ -1927,8 +1933,8 @@ class MainActivity : AppCompatActivity() {
         val passed = NavigationEngine.isActive && ahead != null && ahead.first < -50.0
         if (route != null && end != null && ahead != null && !passed) {
             val estimate = Tourist.estimateDetourSeconds(ahead.second, currentMode.mode)
-            val where = "In ${Speech.shortDistance(ahead.first.coerceAtLeast(0.0), useMetric)} on your route \u00b7 " +
-                "${Speech.shortDistance(ahead.second, useMetric)} off it"
+            val where = getString(R.string.main_on_route_where, Speech.shortDistance(ahead.first.coerceAtLeast(0.0), useMetric),
+                Speech.shortDistance(ahead.second, useMetric))
             val detourText = p.text("$where \u00b7 \u2248 +${Tourist.minutesLabel(estimate)}")
             // Exact extra time from the router, same rules as the trip.
             val start = (if (NavigationEngine.isActive) currentPosition() else null) ?: resolveStartPoint()
@@ -1938,18 +1944,18 @@ class MainActivity : AppCompatActivity() {
                 detourPlanner.plan(buildRequest(start, end, stops)) { plan, _ ->
                     val r = plan?.routes?.getOrNull(plan.primaryIndex) ?: return@plan
                     val extra = (r.durationSeconds - current).coerceAtLeast(0.0)
-                    detourText.text = "$where \u00b7 +${Tourist.minutesLabel(extra)} as a stop"
+                    detourText.text = getString(R.string.main_as_stop, where, Tourist.minutesLabel(extra))
                 }
             }
         } else if (passed) {
-            p.text("Already passed on your route.")
+            p.text(getString(R.string.main_already_passed))
         }
         // Tap to read about it in the browser.
         readMoreUrl?.let { p.link(linkLabel, it) }
-        voyageUrl?.let { p.link("Travel guide (Wikivoyage)", it) }
-        if (end != null && !passed) p.button("Add stop", primary = true) { p.dismiss(); addStopFlow(point, title) }
-        p.button("Go here", primary = end == null) { p.dismiss(); goHere(point, title) }
-        p.button("Close") { p.dismiss() }
+        voyageUrl?.let { p.link(getString(R.string.main_guide_link), it) }
+        if (end != null && !passed) p.button(getString(R.string.main_add_stop), primary = true) { p.dismiss(); addStopFlow(point, title) }
+        p.button(getString(R.string.main_go_here), primary = end == null) { p.dismiss(); goHere(point, title) }
+        p.button(getString(R.string.main_close)) { p.dismiss() }
         p.dialog.setOnDismissListener { detourPlanner.cancel() }
         p.show()
     }
@@ -1972,29 +1978,29 @@ class MainActivity : AppCompatActivity() {
         val end = TripState.destination ?: return
         val ahead = aheadOn(point)
         if (NavigationEngine.isActive && ahead != null && ahead.first < -50.0) {
-            showMessage("$name is already behind you")
+            showMessage(getString(R.string.main_already_behind, name))
             return
         }
         val existing = NavigationEngine.remainingStops() ?: TripState.waypoints.toList()
         val line = touristRoute()?.line
         if (Stops.ownCount(existing, TripState.detour) < Stops.MAX) {
             changeTrip(end, Tourist.insertStop(existing, point, line), TripState.detour, remember = null,
-                message = "$name added as a stop \u00b7 finding route...")
+                message = getString(R.string.main_added_stop, name))
             return
         }
-        val p = Popup(this, "Already ${Stops.MAX} stops")
-        p.text("Visit $name on the way (a short detour, then your route goes on), or replace your last stop by it?")
-        p.bodyButton("Visit on the way") {
+        val p = Popup(this, getString(R.string.main_max_stops_title, Stops.MAX))
+        p.text(getString(R.string.main_visit_or_replace, name))
+        p.bodyButton(getString(R.string.main_visit_on_way)) {
             p.dismiss()
             changeTrip(end, Stops.withDetour(existing, TripState.detour, point, line), point, remember = existing,
-                message = "Detour to $name \u00b7 finding route...")
+                message = getString(R.string.main_detour_to, name))
         }
-        p.bodyButton("Replace last stop") {
+        p.bodyButton(getString(R.string.main_replace_last)) {
             p.dismiss()
             changeTrip(end, Stops.replaceLast(existing, TripState.detour, point, line), TripState.detour, remember = existing,
-                message = "$name replaces your last stop \u00b7 finding route...")
+                message = getString(R.string.main_replaces_last, name))
         }
-        p.button("Cancel") { p.dismiss() }
+        p.button(getString(R.string.main_cancel)) { p.dismiss() }
         p.show()
     }
 
@@ -2019,7 +2025,7 @@ class MainActivity : AppCompatActivity() {
             TripState.restore(before)
             refreshPins()
             refreshResumeButton()
-            showError("No GPS fix yet -- try again in a moment")
+            showError(getString(R.string.main_no_fix_retry))
             return
         }
         showMessage(message)
@@ -2048,7 +2054,7 @@ class MainActivity : AppCompatActivity() {
             val existing = NavigationEngine.remainingStops() ?: TripState.waypoints.toList()
             // Straight there: the detour (if any) is dropped, your own stops stay.
             changeTrip(point, existing.filter { it != TripState.detour }, null, remember = existing,
-                message = "Going to $name \u00b7 finding route...")
+                message = getString(R.string.main_going_to, name))
             return
         }
         if (TripState.destination != null) TripState.rememberForResume(TripState.waypoints.toList())
@@ -2076,7 +2082,7 @@ class MainActivity : AppCompatActivity() {
         refreshPins()
         refreshResumeButton()
         val start = resolveStartPoint() ?: run { TripState.restore(before); refreshPins(); refreshResumeButton(); return }
-        showMessage("Previous route resumed \u00b7 finding route...")
+        showMessage(getString(R.string.main_previous_resumed))
         TripState.changePending = true
         requestBestRoute(start, end, stops, onFailure = { restoreCommitted(before) })
     }
@@ -2105,8 +2111,8 @@ class MainActivity : AppCompatActivity() {
         TripState.waypoints.clear()
         TripState.waypoints.addAll(t.stops)
         refreshPins()
-        val start = resolveStartPoint() ?: run { TripState.restore(before); refreshPins(); showError("Waiting for GPS"); return }
-        showMessage("Resuming navigation\u2026")
+        val start = resolveStartPoint() ?: run { TripState.restore(before); refreshPins(); showError(getString(R.string.main_waiting_gps)); return }
+        showMessage(getString(R.string.main_resuming))
         TripState.changePending = true
         requestBestRoute(start, t.destination, t.stops, onFailure = { restoreCommitted(before) }, autoStart = true)
     }
@@ -2118,7 +2124,7 @@ class MainActivity : AppCompatActivity() {
         button.setOnClickListener {
             waypointModeArmed = !waypointModeArmed
             setIconActive(button, waypointModeArmed)
-            showMessage(if (waypointModeArmed) "Tap the map to add a stop (max $maxWaypoints)" else "Stop mode off")
+            showMessage(if (waypointModeArmed) getString(R.string.main_stop_mode_on, maxWaypoints) else getString(R.string.main_stop_mode_off))
         }
         setIconActive(button, false)
     }
@@ -2126,8 +2132,8 @@ class MainActivity : AppCompatActivity() {
     private fun addWaypoint(point: LatLon) {
         if (Stops.ownCount(TripState.waypoints, TripState.detour) >= maxWaypoints) {
             // With a destination: visit on the way or replace the last stop.
-            if (TripState.destination != null) addStopFlow(point, "This place")
-            else showMessage("Maximum $maxWaypoints stops reached")
+            if (TripState.destination != null) addStopFlow(point, getString(R.string.main_this_place))
+            else showMessage(getString(R.string.main_max_stops, maxWaypoints))
             return
         }
         TripState.waypoints.add(point)
@@ -2136,14 +2142,14 @@ class MainActivity : AppCompatActivity() {
             // The natural next tap sets the destination, not a rejected 3rd stop.
             waypointModeArmed = false
             setIconActive(findViewById(R.id.waypoint_button), false)
-            showMessage("Stop added. Tap the map to set your destination.")
+            showMessage(getString(R.string.main_stop_added_dest))
         } else {
-            showMessage("Stop added. Tap for one more, or set your destination.")
+            showMessage(getString(R.string.main_stop_added_more))
         }
         val start = resolveStartPoint()
         val end = TripState.destination
         if (start != null && end != null) {
-            showMessage("Finding route...")
+            showMessage(getString(R.string.main_finding_route))
             requestBestRoute(start, end)
         }
     }
@@ -2163,7 +2169,7 @@ class MainActivity : AppCompatActivity() {
             if (NavigationEngine.isActive) {
                 NavigationEngine.stop() // stop + clear together, not two separate steps
                 clearRoute()
-                showMessage("Navigation stopped, route cleared")
+                showMessage(getString(R.string.main_nav_stopped_cleared))
             } else {
                 startNavigation()
             }
@@ -2171,7 +2177,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.clear_route_button).setOnClickListener {
             if (NavigationEngine.isActive) NavigationEngine.stop()
             clearRoute()
-            showMessage("Route cleared")
+            showMessage(getString(R.string.main_route_cleared))
         }
         // 1.4.1: hold = cancel and also forget the trip (no Resume afterwards).
         findViewById<ImageButton>(R.id.clear_route_button).setOnLongClickListener {
@@ -2179,7 +2185,7 @@ class MainActivity : AppCompatActivity() {
             clearRoute()
             com.backpack.app.nav.LastTrip.clear(this)
             refreshResumeButton()
-            showMessage("Route cancelled and forgotten")
+            showMessage(getString(R.string.main_route_forgotten))
             true
         }
     }
@@ -2190,7 +2196,7 @@ class MainActivity : AppCompatActivity() {
         // Fix: navigate the route the user SELECTED (Step 38 always took the first).
         val route = plan?.routes?.getOrNull(TripState.selectedIndex)
         if (plan == null || route == null || route.points.isEmpty() || end == null) {
-            showError("No route to navigate yet")
+            showError(getString(R.string.main_no_route_yet))
             return
         }
         if (!LocationHub.hasPermission(this)) {
@@ -2318,7 +2324,7 @@ class MainActivity : AppCompatActivity() {
 
     private val navListener = object : NavigationEngine.Listener {
         override fun onProgress(progress: Progress, route: RouteResult) = onNavProgress(progress, route)
-        override fun onRerouting() = showMessage("Off route, recalculating...")
+        override fun onRerouting() = showMessage(getString(R.string.main_off_route))
         override fun onRerouted(plan: RoutePlan) {
             if (altChoiceOpen) closeAltChoice(restore = false)
             TripState.plan = plan
@@ -2341,7 +2347,7 @@ class MainActivity : AppCompatActivity() {
             TripState.dropDetour()
             refreshResumeButton()
             navDistanceText.text = ""
-            statusStrip.text = "Arrived"
+            statusStrip.text = getString(R.string.main_arrived)
             navInstructionIcon.setImageResource(R.drawable.ic_nav_arrive)
             navInstructionIcon.visibility = View.VISIBLE
             wakeDisplay()
@@ -2379,7 +2385,7 @@ class MainActivity : AppCompatActivity() {
         updateNavBar(step, p.distanceToNextM)
         updateNavBarProximityColor(p.distanceToNextM)
         if (p.anticipation) {
-            showMessage("${Speech.shortDistance(p.distanceToNextM, useMetric)}: ${step?.instruction ?: "next change"}")
+            showMessage("${Speech.shortDistance(p.distanceToNextM, useMetric)}: ${step?.instruction ?: getString(R.string.main_next_change)}")
             wakeDisplay()
         }
         if (p.stepAdvanced) wakeDisplay()
@@ -2403,8 +2409,8 @@ class MainActivity : AppCompatActivity() {
         showNextTurn(p, route)
         queryPois() // the stretch ahead, every 40 % of it
         // Live remaining distance and arrival time.
-        routeInfoDist.text = navInfo("Dist:", navDistance(p.remainingM), " \u00b7")
-        routeInfoEta.text = navInfo("ETA:", etaLabel(p.remainingS).removePrefix("ETA: "))
+        routeInfoDist.text = navInfo(getString(R.string.main_dist), navDistance(p.remainingM), " \u00b7")
+        routeInfoEta.text = navInfo(getString(R.string.main_eta), etaLabel(p.remainingS).removePrefix(getString(R.string.main_eta) + " "))
         LocationHub.lastGoodFix?.let { dimDisplayIfIdle(p.distanceToNextM, it) }
     }
 
@@ -2412,7 +2418,7 @@ class MainActivity : AppCompatActivity() {
         if (navInstructionBar.visibility != View.VISIBLE) { navInstructionBar.visibility = View.VISIBLE; refreshNavBox() }
         if (step == null) {
             navDistanceText.text = ""
-            statusStrip.text = "Head to your destination"
+            statusStrip.text = getString(R.string.main_head_to_destination)
             return
         }
         navDistanceText.text = Speech.shortDistance(distance ?: step.distanceMeters, useMetric).replace(" ", "")
@@ -2471,7 +2477,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.overview_button).apply {
             setImageResource(if (on) R.drawable.ic_drive_view else R.drawable.ic_overview)
             setIconActive(this, on)
-            contentDescription = if (on) "Back to the drive view" else "Route overview"
+            contentDescription = getString(if (on) R.string.main_cd_drive_view else R.string.main_cd_overview)
         }
     }
 
@@ -2497,7 +2503,7 @@ class MainActivity : AppCompatActivity() {
                 m.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, dp(56), dp(130), dp(56), dp(170)), 700)
             }
         } catch (e: Exception) { }
-        showMessage("Overview \u00b7 tap a place to add it \u00b7 back to driving in 20 s")
+        showMessage(getString(R.string.main_overview_msg))
         scheduleOverviewReturn()
     }
 
@@ -2604,8 +2610,8 @@ class MainActivity : AppCompatActivity() {
         if (navUiActive && (p != null || r != null)) {
             val m = p?.remainingM ?: r!!.distanceMeters
             val sec = p?.remainingS ?: r!!.durationSeconds
-            routeInfoDist.text = navInfo("Dist:", navDistance(m), " \u00b7")
-            routeInfoEta.text = navInfo("ETA:", etaLabel(sec).removePrefix("ETA: "))
+            routeInfoDist.text = navInfo(getString(R.string.main_dist), navDistance(m), " \u00b7")
+            routeInfoEta.text = navInfo(getString(R.string.main_eta), etaLabel(sec).removePrefix(getString(R.string.main_eta) + " "))
         } else r?.let { setRouteInfoText(it) }
     }
 
@@ -2640,8 +2646,8 @@ class MainActivity : AppCompatActivity() {
                 fun h(v: Double) = if (useMetric) "${v.toInt()} m" else "${(v * 3.28084).toInt()} ft"
                 "\u2191 ${h(up)}  \u2193 ${h(down)}"
             }
-            r.tollDistanceMeters > 0 -> "Cost: ~€%.0f".format(r.tollDistanceMeters / 1000.0 * tollRatePerKm)
-            else -> "Cost: --"
+            r.tollDistanceMeters > 0 -> getString(R.string.main_cost, r.tollDistanceMeters / 1000.0 * tollRatePerKm)
+            else -> getString(R.string.main_cost_none)
         }
     }
 
@@ -2660,21 +2666,21 @@ class MainActivity : AppCompatActivity() {
             contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(com.backpack.app.core.Gpx.write(tripTitle(trip), trip.points).toByteArray())
             }
-            showMessage("Trip saved as GPX")
+            showMessage(getString(R.string.main_trip_saved))
         } catch (e: Exception) {
-            showError("Could not save the trip")
+            showError(getString(R.string.main_trip_save_failed))
         }
     }
 
     private fun tripTitle(t: com.backpack.app.track.TripRecorder.Trip): String {
         val date = java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(t.startMs))
-        return if (t.name.isBlank()) "Backpack trip $date" else "${t.name} ($date)"
+        return if (t.name.isBlank()) getString(R.string.main_trip_default_name, date) else "${t.name} ($date)"
     }
 
     private fun showTrips() {
         val trips = com.backpack.app.track.TripRecorder.trips(this)
-        val p = Popup(this, "My trips")
-        if (trips.isEmpty()) p.text("No trips yet. Your track is recorded while navigating (Settings > Navigation), on this phone only.")
+        val p = Popup(this, getString(R.string.main_my_trips))
+        if (trips.isEmpty()) p.text(getString(R.string.main_no_trips))
         for (t in trips) {
             val pts = t.points
             val km = distanceLabel(com.backpack.app.core.Gpx.length(pts))
@@ -2684,15 +2690,15 @@ class MainActivity : AppCompatActivity() {
                 setOnClickListener { p.dismiss(); showTrip(t) }
             }
         }
-        if (trackShown) p.bodyButton("Hide the trip shown on the map") {
+        if (trackShown) p.bodyButton(getString(R.string.main_hide_trip)) {
             layers.setTrack(null); trackShown = false; p.dismiss()
         }
-        if (trips.isNotEmpty()) p.bodyButton("Delete all trips") {
+        if (trips.isNotEmpty()) p.bodyButton(getString(R.string.main_delete_all_trips)) {
             com.backpack.app.track.TripRecorder.deleteAll(this)
             p.dismiss()
-            showMessage("All trips deleted")
+            showMessage(getString(R.string.main_all_trips_deleted))
         }
-        p.button("Close", primary = true) { p.dismiss() }
+        p.button(getString(R.string.main_close), primary = true) { p.dismiss() }
         p.show()
     }
 
@@ -2700,7 +2706,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showTrackOnMap(t: com.backpack.app.track.TripRecorder.Trip) {
         val pts = t.points.map { LatLon(it.lat, it.lon) }
-        if (pts.size < 2) { showMessage("Nothing recorded on this trip"); return }
+        if (pts.size < 2) { showMessage(getString(R.string.main_nothing_recorded)); return }
         layers.setTrack(pts)
         trackShown = true
         stopPlanFollow()
@@ -2709,20 +2715,20 @@ class MainActivity : AppCompatActivity() {
             val bounds = LatLngBounds.Builder().includes(pts.map { LatLng(it.lat, it.lon) }).build()
             m.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, dp(48), dp(130), dp(48), dp(150)), 800)
         } catch (e: Exception) { }
-        showMessage("${tripTitle(t)} \u00b7 hide it in My trips")
+        showMessage(getString(R.string.main_trip_shown, tripTitle(t)))
     }
 
     private fun showTrip(t: com.backpack.app.track.TripRecorder.Trip) {
         val p = Popup(this, tripTitle(t))
-        p.text("${t.points.size} points \u00b7 ${distanceLabel(com.backpack.app.core.Gpx.length(t.points))}. GPX opens in any map or hiking app.")
-        p.button("Delete") { com.backpack.app.track.TripRecorder.delete(t); p.dismiss(); showMessage("Trip deleted") }
+        p.text(getString(R.string.main_trip_info, t.points.size, distanceLabel(com.backpack.app.core.Gpx.length(t.points))))
+        p.button(getString(R.string.main_delete)) { com.backpack.app.track.TripRecorder.delete(t); p.dismiss(); showMessage(getString(R.string.main_trip_deleted)) }
         // 1.4.0: the track on the map, framed whole.
-        p.button("Show on map") { p.dismiss(); showTrackOnMap(t) }
-        p.button("Save as GPX", primary = true) {
+        p.button(getString(R.string.main_show_on_map)) { p.dismiss(); showTrackOnMap(t) }
+        p.button(getString(R.string.main_save_gpx), primary = true) {
             p.dismiss()
             tripToSave = t
             val name = "Backpack_" + java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.ROOT).format(java.util.Date(t.startMs)) + ".gpx"
-            try { saveGpxLauncher.launch(name) } catch (e: Exception) { showError("No app to save files") }
+            try { saveGpxLauncher.launch(name) } catch (e: Exception) { showError(getString(R.string.main_no_save_app)) }
         }
         p.show()
     }
@@ -2733,10 +2739,10 @@ class MainActivity : AppCompatActivity() {
         if (pts.isEmpty()) return
         val (up, down) = com.backpack.app.core.Elevation.gain(r)
         fun h(v: Double) = if (useMetric) "${v.toInt()} m" else "${(v * 3.28084).toInt()} ft"
-        val p = Popup(this, "Height profile")
-        p.text("Climb ${h(up)} \u00b7 descent ${h(down)} \u00b7 ${distanceLabel(r.distanceMeters)}")
+        val p = Popup(this, getString(R.string.main_height_profile))
+        p.text(getString(R.string.main_climb_descent, h(up), h(down), distanceLabel(r.distanceMeters)))
         p.view(com.backpack.app.ui.ElevationView(this, pts, useMetric), 140)
-        p.button("Close", primary = true) { p.dismiss() }
+        p.button(getString(R.string.main_close), primary = true) { p.dismiss() }
         p.show()
     }
 
@@ -3017,7 +3023,7 @@ class MainActivity : AppCompatActivity() {
                 if (puckActive()) map?.locationComponent?.forceLocationUpdate(loc)
             } else if (gapMs > 15000 && deadReckoningActive) {
                 deadReckoningActive = false
-                showMessage("GPS signal lost")
+                showMessage(getString(R.string.main_gps_lost))
             }
             handler.postDelayed(this, 1000L)
         }
@@ -3110,7 +3116,7 @@ class MainActivity : AppCompatActivity() {
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                 for (cat in pair) {
                     val cell = TextView(this).apply {
-                        text = cat.label
+                        text = getString(cat.labelRes)
                         textSize = 14f
                         gravity = android.view.Gravity.CENTER_VERTICAL
                         compoundDrawablePadding = dp(6)
@@ -3133,11 +3139,11 @@ class MainActivity : AppCompatActivity() {
                 root.addView(row)
             }
         }
-        header("Essentials")
+        header(getString(R.string.main_essentials))
         group(PoiCategory.values().filter { it.essential })
-        header("Backpacker extras")
+        header(getString(R.string.main_extras))
         group(PoiCategory.values().filter { it != PoiCategory.NONE && !it.essential })
-        if (urgencyMode == UrgencyMode.EMERGENCY) header("Emergency mode: hospitals, police, fire stations always shown")
+        if (urgencyMode == UrgencyMode.EMERGENCY) header(getString(R.string.main_emergency_always))
         val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.END }
         fun action(label: String, onClick: () -> Unit) = buttons.addView(TextView(this).apply {
             text = label
@@ -3147,13 +3153,13 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(12), dp(8), dp(12), dp(4))
             setOnClickListener { onClick() }
         })
-        action("All off") {
+        action(getString(R.string.main_all_off)) {
             selectedServices.clear()
             saveServices()
             PoiCategory.values().forEach { paint(it) }
             servicesChanged()
         }
-        action("Done") { window.dismiss() }
+        action(getString(R.string.main_done)) { window.dismiss() }
         root.addView(buttons)
         // Scrolls when the screen is low (landscape): never cut off.
         val scroll = android.widget.ScrollView(this).apply { addView(root) }
@@ -3175,7 +3181,7 @@ class MainActivity : AppCompatActivity() {
         if (activeServices().isEmpty()) {
             svcSlot.reset()
             refreshPoiPins()
-            showMessage("Services off")
+            showMessage(getString(R.string.main_services_off))
             return
         }
         refreshPoiPins()
@@ -3215,15 +3221,15 @@ class MainActivity : AppCompatActivity() {
             val on = !sightsPrefs().getBoolean(Settings.KEY_SIGHTS_WEEKEND, true)
             sightsPrefs().edit().putBoolean(Settings.KEY_SIGHTS_WEEKEND, on).apply()
             sightsChanged()
-            showMessage(when {
-                !on -> "Sights off"
-                sightGroups().isEmpty() -> "Sights on, but no kinds ticked (Settings > Sights)"
-                else -> "Sights on"
-            })
+            showMessage(getString(when {
+                !on -> R.string.main_sights_off
+                sightGroups().isEmpty() -> R.string.main_sights_no_kinds
+                else -> R.string.main_sights_on
+            }))
         }
         // Hold: the list of the places shown.
         b.setOnLongClickListener {
-            if (touristOn && touristResults.isNotEmpty()) showTouristList() else showMessage("No well-known places shown yet")
+            if (touristOn && touristResults.isNotEmpty()) showTouristList() else showMessage(getString(R.string.main_no_sights_shown))
             true
         }
         refreshSightsButton()
@@ -3332,7 +3338,7 @@ class MainActivity : AppCompatActivity() {
     private fun servicesSummary(): String {
         val counts = activeServices().mapNotNull { cat ->
             val n = serviceCounts[cat] ?: 0
-            if (n == 0) null else "$n ${cat.label}"
+            if (n == 0) null else "$n ${getString(cat.labelRes)}"
         }
         return counts.joinToString(", ")
     }
@@ -3372,7 +3378,7 @@ class MainActivity : AppCompatActivity() {
             slot.finder.alongRoutes(servicesCategory, listOf(stretch), radius,
                 onSwitch = { if (gen == slot.gen && force) onPlacesServerSwitch() }
             ) { results, error, note, serverFailed ->
-                onPoiResults(slot, gen, results, error, note, serverFailed, announce, "along your route")
+                onPoiResults(slot, gen, results, error, note, serverFailed, announce, getString(R.string.main_along_your_route))
                 // 1.2.1: then the rest of the route, in the background.
                 val pk = "${System.identityHashCode(route)}/${radius.toInt()}/$names"
                 if (results != null && gen == slot.gen && pk != prefetchedRouteKey) {
@@ -3401,13 +3407,13 @@ class MainActivity : AppCompatActivity() {
         pokeSearching()
         val time = if (minutes < 60) "$minutes min" else "${minutes / 60} h"
         val how = when (currentMode.mode) {
-            com.backpack.app.core.TravelMode.WALKING -> "on foot"
-            com.backpack.app.core.TravelMode.CYCLING -> "by bike"
-            com.backpack.app.core.TravelMode.DRIVING -> "by car"
+            com.backpack.app.core.TravelMode.WALKING -> getString(R.string.main_on_foot)
+            com.backpack.app.core.TravelMode.CYCLING -> getString(R.string.main_by_bike)
+            com.backpack.app.core.TravelMode.DRIVING -> getString(R.string.main_by_car)
         }
         ReachArea.get(this, origin, currentMode.mode, minutes) { ring, exact ->
             if (isDestroyed || gen != slot.gen) return@get
-            val where = "within ${if (exact) "" else "about "}$time $how of ${if (aroundMe) "you" else "the map centre"}"
+            val where = reachText(time, how, exact, aroundMe)
             slot.finder.inReach(servicesCategory, ring, origin,
                 onSwitch = { if (gen == slot.gen && force) onPlacesServerSwitch() }
             ) { results, error, note, serverFailed ->
@@ -3429,7 +3435,7 @@ class MainActivity : AppCompatActivity() {
             slot.failures++
             slot.retryAtMs = System.currentTimeMillis() + when (slot.failures) { 1 -> 60_000L; 2 -> 120_000L; else -> 300_000L }
             refreshServicesButton(false)
-            showError(error ?: "Places search failed", retry = { queryPois(force = true) })
+            showError(error ?: getString(R.string.main_places_search_failed), retry = { queryPois(force = true) })
             return
         }
         if (serverFailed) {
@@ -3445,8 +3451,8 @@ class MainActivity : AppCompatActivity() {
         when {
             note != null -> showMessage(note)
             !announce -> {}
-            summary.isEmpty() -> showMessage("No ${activeServices().joinToString(", ") { it.label }} $where")
-            else -> showMessage("$summary $where \u00b7 tap one for details")
+            summary.isEmpty() -> showMessage(getString(R.string.main_no_services, activeServices().joinToString(", ") { getString(it.labelRes) }, where))
+            else -> showMessage(getString(R.string.main_services_found, summary, where))
         }
     }
 
@@ -3476,7 +3482,7 @@ class MainActivity : AppCompatActivity() {
         refreshModeButtonHighlight()
         syncDrivingModeUI()
         saveToggleState()
-        rerouteIfPossible("${mode.label} mode selected")
+        rerouteIfPossible(getString(R.string.main_mode_selected, getString(mode.labelRes)))
         // Reach and detour distances depend on the travel mode.
         if (TripState.plan == null && touristOn) refreshTourist()
         // With a route the new plan brings its own search (drawPlan).
@@ -3501,7 +3507,7 @@ class MainActivity : AppCompatActivity() {
         currentPreference = preference
         refreshPreferenceHighlight()
         saveToggleState()
-        rerouteIfPossible("${preference.label} selected")
+        rerouteIfPossible(getString(R.string.main_pref_selected, getString(preference.labelRes)))
     }
 
     private fun refreshPreferenceHighlight() {
@@ -3522,7 +3528,7 @@ class MainActivity : AppCompatActivity() {
             tollToggle.setImageResource(if (avoidTolls) R.drawable.ic_toll_off else R.drawable.ic_toll_on)
             setTollButtonStatus(!avoidTolls)
             saveToggleState()
-            rerouteIfPossible(if (avoidTolls) "No toll selected" else "Toll roads allowed")
+            rerouteIfPossible(getString(if (avoidTolls) R.string.main_no_toll else R.string.main_tolls_allowed))
         }
     }
 
@@ -3536,7 +3542,7 @@ class MainActivity : AppCompatActivity() {
         val start = resolveStartPoint()
         val end = TripState.destination
         if (start != null && end != null && currentMode == ModeUi.DRIVING && currentPreference == PreferenceUi.RECOMMENDED) {
-            showMessage("Finding route...")
+            showMessage(getString(R.string.main_finding_route))
             requestBestRoute(start, end) // the new plan searches its places
         } else {
             queryPois(force = true)
@@ -3554,9 +3560,9 @@ class MainActivity : AppCompatActivity() {
             urgencyButton.setImageResource(urgencyMode.iconRes)
             showMessage(
                 when (urgencyMode) {
-                    UrgencyMode.WEEKEND -> "Weekend mode \u00b7 sights ${if (sightsSwitchOn()) "on" else "off"} (camera next to this button)"
-                    UrgencyMode.WORK -> "Work mode \u00b7 your services only, short detours"
-                    UrgencyMode.EMERGENCY -> "Emergency mode \u00b7 hospitals, police, fire stations shown"
+                    UrgencyMode.WEEKEND -> getString(if (sightsSwitchOn()) R.string.main_weekend_sights_on else R.string.main_weekend_sights_off)
+                    UrgencyMode.WORK -> getString(R.string.main_work_mode)
+                    UrgencyMode.EMERGENCY -> getString(R.string.main_emergency_mode)
                 }
             )
             saveToggleState()
@@ -3569,8 +3575,8 @@ class MainActivity : AppCompatActivity() {
         urgencyButton.setOnLongClickListener {
             when {
                 touristOn && touristResults.isNotEmpty() -> showTouristList()
-                touristOn -> showMessage("No well-known places found yet")
-                else -> showMessage("Weekend mode shows well-known places")
+                touristOn -> showMessage(getString(R.string.main_no_sights_found_yet))
+                else -> showMessage(getString(R.string.main_weekend_shows_sights))
             }
             true
         }
@@ -3640,7 +3646,7 @@ class MainActivity : AppCompatActivity() {
         val start = resolveStartPoint()
         val end = TripState.destination
         if (start != null && end != null) {
-            showMessage("$label · finding route...")
+            showMessage(getString(R.string.main_label_finding_route, label))
             requestBestRoute(start, end)
         } else {
             showMessage(label)
@@ -3718,7 +3724,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleDestinationTap(point: LatLon) {
         stopPlanFollow()
         if (NavigationEngine.isActive) {
-            showMessage("Stop navigation before changing your route (or open a place: Go here)")
+            showMessage(getString(R.string.main_stop_nav_first_place))
             return
         }
         if (waypointModeArmed) {
@@ -3739,25 +3745,25 @@ class MainActivity : AppCompatActivity() {
     private fun setDestination(point: LatLon) {
         val start = resolveStartPoint()
         if (start == null) {
-            showError("No GPS fix yet -- long-press to set a start point manually")
+            showError(getString(R.string.main_no_fix_longpress))
             return
         }
         clearRouteVisuals()
         TripState.destination = point
         refreshPins()
-        showMessage("Finding route...")
+        showMessage(getString(R.string.main_finding_route))
         requestBestRoute(start, point)
     }
 
     private fun handleStartOverride(point: LatLon) {
         if (NavigationEngine.isActive) {
-            showMessage("Stop navigation before changing your route")
+            showMessage(getString(R.string.main_stop_nav_first))
             return
         }
         clearRoute()
         TripState.customStart = point
         refreshPins()
-        showMessage("Custom start point set -- tap to choose a destination")
+        showMessage(getString(R.string.main_custom_start))
     }
 
     private fun clearRouteVisuals() {
@@ -3821,9 +3827,9 @@ class MainActivity : AppCompatActivity() {
         planner.plan(request) { plan, error ->
             if (plan == null) {
                 onFailure?.invoke()
-                showError(error ?: "Route request failed")
+                showError(error ?: getString(R.string.main_route_failed))
                 // 1.5.0: no key yet: the guide to get one (then the route is asked again).
-                if (error == RoutePlanner.NO_KEY) showKeyGuide()
+                if (RoutePlanner.isNoKey(error)) showKeyGuide()
                 return@plan
             }
             // From now on, a detour missing from the remaining stops means "visited".
@@ -3845,7 +3851,7 @@ class MainActivity : AppCompatActivity() {
     private fun drawPlan(plan: RoutePlan, selectedIndex: Int, fit: Boolean, note: String?, tourist: Boolean = true) {
         val results = plan.routes
         if (results.isEmpty() || results[0].points.isEmpty()) {
-            showError("Route returned no geometry")
+            showError(getString(R.string.main_no_geometry))
             return
         }
         val sel = selectedIndex.coerceIn(0, results.size - 1)
@@ -3860,7 +3866,7 @@ class MainActivity : AppCompatActivity() {
             findViewById<LinearLayout>(R.id.route_options_row).apply { removeAllViews(); visibility = View.GONE }
             placeLayout()
             refreshTourist(force = true) // sights of the visible area again
-            showMessage("You are already there")
+            showMessage(getString(R.string.main_already_there))
             return
         }
         TripState.selectedIndex = sel
@@ -3902,13 +3908,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun distanceLabel(m: Double): String {
         val km = m / 1000.0
-        return if (useMetric) "Dist: %.2f km".format(km) else "Dist: %.2f mi".format(km * 0.621371)
+        return getString(R.string.main_dist) + if (useMetric) " %.2f km".format(km) else " %.2f mi".format(km * 0.621371)
     }
 
     private fun etaLabel(seconds: Double): String {
         val c = java.util.Calendar.getInstance()
         c.add(java.util.Calendar.SECOND, seconds.toInt())
-        return "ETA: %02d:%02d".format(c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE))
+        return getString(R.string.main_eta) + " %02d:%02d".format(c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE))
     }
 
     /** Shows the whole route (and alternatives) above the bottom controls. */
@@ -3978,7 +3984,7 @@ class MainActivity : AppCompatActivity() {
                 " · ~€%.0f".format(result.tollDistanceMeters / 1000.0 * tollRatePerKm)
             } else ""
             val unpavedPart = if (result.unpavedFraction >= 0.01) {
-                " · %.0f%% unpaved".format(result.unpavedFraction * 100)
+                " · " + getString(R.string.main_chip_unpaved, result.unpavedFraction * 100)
             } else ""
             // Letter badge (same as on the map line) + facts; only the selected
             // chip gets the red frame, no chip turns red.
@@ -4024,12 +4030,12 @@ class MainActivity : AppCompatActivity() {
             closeAltChoice(restore = false)
             TripState.plan = single
             TripState.selectedIndex = 0
-            drawPlan(single, 0, fit = false, note = "Route switched", tourist = false)
+            drawPlan(single, 0, fit = false, note = getString(R.string.main_route_switched), tourist = false)
             return
         }
         // A manual pick is final for this plan: the Weekend sights choice won't override it.
         TripState.scenicCheckedPlan = plan
-        drawPlan(plan, index, fit = false, note = "Manually selected route")
+        drawPlan(plan, index, fit = false, note = getString(R.string.main_manual_route))
     }
 
     // ---------- Find alternative route (during navigation) ----------
@@ -4084,13 +4090,13 @@ class MainActivity : AppCompatActivity() {
     private fun findAlternatives() {
         val current = NavigationEngine.route ?: return
         val end = TripState.destination ?: return
-        val from = currentPosition() ?: run { showError("No GPS position yet"); return }
+        val from = currentPosition() ?: run { showError(getString(R.string.main_no_gps_position)); return }
         val stops = NavigationEngine.remainingStops() ?: TripState.waypoints.toList()
         val reqA = buildRequest(from, end, stops)
         val otherPref = if (currentPreference == PreferenceUi.FASTEST) RoutePreference.SHORTEST else RoutePreference.FASTEST
         val reqB = reqA.copy(preference = otherPref)
         setIconActive(findViewById(R.id.alt_route_button), true)
-        showMessage("Looking for other routes...")
+        showMessage(getString(R.string.main_looking_other_routes))
         var resA: RoutePlan? = null
         var resB: RoutePlan? = null
         var answers = 0
@@ -4110,7 +4116,7 @@ class MainActivity : AppCompatActivity() {
             if (NavigationEngine.route !== current) {
                 // Rerouted meanwhile: these answers are about an old situation.
                 setIconActive(findViewById(R.id.alt_route_button), false)
-                showMessage("Route changed meanwhile -- tap again for alternatives")
+                showMessage(getString(R.string.main_route_changed_meanwhile))
                 return
             }
             // A = your route from here, routed again (real turn steps, so it
@@ -4128,7 +4134,7 @@ class MainActivity : AppCompatActivity() {
             resB?.routes?.forEach { addDistinct(it, reqB) }
             if (routes.size < 2) {
                 setIconActive(findViewById(R.id.alt_route_button), false)
-                showMessage("No other route found")
+                showMessage(getString(R.string.main_no_other_route))
                 return
             }
             // 1.0.5: navigation stops; the routes stay in memory for review
@@ -4147,7 +4153,7 @@ class MainActivity : AppCompatActivity() {
             TripState.selectedIndex = 0
             TripState.committed = TripState.copy()
             refreshPins()
-            drawPlan(plan, 0, fit = true, note = "Navigation paused \u00b7 touch a route to compare, Go to start", tourist = false)
+            drawPlan(plan, 0, fit = true, note = getString(R.string.main_nav_paused_compare), tourist = false)
         }
         altPlannerA.plan(reqA) { plan, _ -> resA = plan; finish() }
         altPlannerB.plan(reqB) { plan, _ -> resB = plan; finish() }

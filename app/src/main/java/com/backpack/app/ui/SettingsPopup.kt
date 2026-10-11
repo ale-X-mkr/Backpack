@@ -6,6 +6,7 @@ import android.view.Gravity
 import android.widget.TextView
 import com.backpack.app.BuildConfig
 import com.backpack.app.Prefs
+import com.backpack.app.R
 import com.backpack.app.Settings
 import com.backpack.app.core.BikeType
 import com.backpack.app.core.Hills
@@ -22,8 +23,8 @@ import com.backpack.app.net.TileCache
  */
 object SettingsPopup {
 
-    enum class Page(val label: String) {
-        ROUTE("Route"), NAVIGATION("Navigation"), SPEED("Speed"), SIGHTS("Sights"), PLACES("Places"), MAP("Map"), SERVERS("Advanced"), CREDITS("Credits")
+    enum class Page(val labelRes: Int) {
+        ROUTE(R.string.set_tab_route), NAVIGATION(R.string.set_tab_navigation), SPEED(R.string.set_tab_speed), SIGHTS(R.string.set_tab_sights), PLACES(R.string.set_tab_places), MAP(R.string.set_tab_map), SERVERS(R.string.set_tab_advanced), CREDITS(R.string.set_tab_credits)
     }
 
     interface Host {
@@ -48,7 +49,7 @@ object SettingsPopup {
         val prefs = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)
         val originalOptions = Prefs.routeOptions(c)
         var o = originalOptions
-        val p = Popup(c, "Settings · v${BuildConfig.VERSION_NAME}")
+        val p = Popup(c, c.getString(R.string.set_title, BuildConfig.VERSION_NAME))
 
         // Tabs (1.0.5): one row of text tabs, the current one bold with a
         // red underline; scrolls sideways when they don't all fit.
@@ -69,18 +70,18 @@ object SettingsPopup {
                 // Saved at once: a screen rebuild while the popup is open loses nothing.
                 Page.ROUTE -> routePage(c, p, host.travelMode, { o }, { o = it; Prefs.saveRouteOptions(c, it) }, prefs)
                 Page.NAVIGATION -> navigationPage(c, p, prefs, host)
-                Page.SPEED -> speedPage(p, prefs)
+                Page.SPEED -> speedPage(c, p, prefs)
                 Page.SIGHTS -> sightsPage(c, p, prefs)
                 Page.PLACES -> placesPage(c, p, prefs, host)
-                Page.MAP -> mapPage(p, prefs)
+                Page.MAP -> mapPage(c, p, prefs)
                 Page.SERVERS -> serversPage(c, p, prefs, host)
-                Page.CREDITS -> creditsPage(p)
+                Page.CREDITS -> creditsPage(c, p)
             }
             p.fit()
         }
         for (page in Page.values()) {
             val tab = TextView(c).apply {
-                text = page.label
+                text = c.getString(page.labelRes)
                 textSize = 14f
                 gravity = Gravity.CENTER
                 setPadding((10 * d).toInt(), (6 * d).toInt(), (10 * d).toInt(), (7 * d).toInt())
@@ -97,7 +98,7 @@ object SettingsPopup {
         p.header.visibility = android.view.View.VISIBLE
         build(start)
 
-        p.button("Done", primary = true) { p.dismiss() }
+        p.button(c.getString(R.string.set_done), primary = true) { p.dismiss() }
         p.dialog.setOnDismissListener {
             host.onSettingsClosed()
             if (o != originalOptions) host.onRouteOptionsChanged(o)
@@ -113,50 +114,50 @@ object SettingsPopup {
         prefs: android.content.SharedPreferences
     ) {
         p.section(when (mode) {
-            TravelMode.DRIVING -> "Route options · Driving"
-            TravelMode.CYCLING -> "Route options · Cycling"
-            TravelMode.WALKING -> "Route options · Walking"
+            TravelMode.DRIVING -> c.getString(R.string.set_route_driving)
+            TravelMode.CYCLING -> c.getString(R.string.set_route_cycling)
+            TravelMode.WALKING -> c.getString(R.string.set_route_walking)
         })
         when (mode) {
             TravelMode.DRIVING -> {
                 p.choices(Vehicle.values().toList(), { it.label }, { get().vehicle }) { set(get().copy(vehicle = it)) }
-                p.section("Avoid")
+                p.section(c.getString(R.string.set_avoid))
                 p.toggles(listOf(
-                    Triple("Motorways", { get().carAvoidMotorways }, { v: Boolean -> set(get().copy(carAvoidMotorways = v)) }),
-                    Triple("Ferries", { get().carAvoidFerries }, { v: Boolean -> set(get().copy(carAvoidFerries = v)) }),
-                    Triple("Fords", { get().carAvoidFords }, { v: Boolean -> set(get().copy(carAvoidFords = v)) })
+                    Triple(c.getString(R.string.set_motorways), { get().carAvoidMotorways }, { v: Boolean -> set(get().copy(carAvoidMotorways = v)) }),
+                    Triple(c.getString(R.string.set_ferries), { get().carAvoidFerries }, { v: Boolean -> set(get().copy(carAvoidFerries = v)) }),
+                    Triple(c.getString(R.string.set_fords), { get().carAvoidFords }, { v: Boolean -> set(get().copy(carAvoidFords = v)) })
                 ))
-                p.section("Surface")
-                p.toggle("Prefer paved roads", { get().carPreferPaved }) { set(get().copy(carPreferPaved = it)) }
-                p.text("Tolls: toll button on the map. Motorbike is routed like a car. \"Prefer paved\" takes the alternative with the least unpaved road if it costs under 25 % more time.", 11f)
+                p.section(c.getString(R.string.set_surface))
+                p.toggle(c.getString(R.string.set_prefer_paved), { get().carPreferPaved }) { set(get().copy(carPreferPaved = it)) }
+                p.text(pct(c, R.string.set_car_note), 11f)
             }
             TravelMode.CYCLING -> {
                 p.choices(BikeType.values().toList(), { it.label }, { get().bikeType }) { set(get().copy(bikeType = it)) }
-                p.section("Hills")
+                p.section(c.getString(R.string.set_hills))
                 p.choices(Hills.values().toList(), { it.label }, { get().bikeHills }) { set(get().copy(bikeHills = it)) }
-                p.section("Avoid")
+                p.section(c.getString(R.string.set_avoid))
                 p.toggles(listOf(
-                    Triple("Steps", { get().bikeAvoidSteps }, { v: Boolean -> set(get().copy(bikeAvoidSteps = v)) }),
-                    Triple("Ferries", { get().bikeAvoidFerries }, { v: Boolean -> set(get().copy(bikeAvoidFerries = v)) })
+                    Triple(c.getString(R.string.set_steps), { get().bikeAvoidSteps }, { v: Boolean -> set(get().copy(bikeAvoidSteps = v)) }),
+                    Triple(c.getString(R.string.set_ferries), { get().bikeAvoidFerries }, { v: Boolean -> set(get().copy(bikeAvoidFerries = v)) })
                 ))
-                p.section("Surface")
-                p.toggle("Prefer paved roads", { get().bikePreferPaved }) { set(get().copy(bikePreferPaved = it)) }
+                p.section(c.getString(R.string.set_surface))
+                p.toggle(c.getString(R.string.set_prefer_paved), { get().bikePreferPaved }) { set(get().copy(bikePreferPaved = it)) }
             }
             TravelMode.WALKING -> {
                 p.choices(WalkType.values().toList(), { it.label }, { get().walkType }) { set(get().copy(walkType = it)) }
-                p.section("Prefer")
+                p.section(c.getString(R.string.set_prefer))
                 p.toggles(listOf(
-                    Triple("Green areas", { get().walkGreen }, { v: Boolean -> set(get().copy(walkGreen = v)) }),
-                    Triple("Quiet streets", { get().walkQuiet }, { v: Boolean -> set(get().copy(walkQuiet = v)) })
+                    Triple(c.getString(R.string.set_green_areas), { get().walkGreen }, { v: Boolean -> set(get().copy(walkGreen = v)) }),
+                    Triple(c.getString(R.string.set_quiet_streets), { get().walkQuiet }, { v: Boolean -> set(get().copy(walkQuiet = v)) })
                 ))
-                p.section("Avoid")
+                p.section(c.getString(R.string.set_avoid))
                 p.toggles(listOf(
-                    Triple("Steps", { get().walkAvoidSteps }, { v: Boolean -> set(get().copy(walkAvoidSteps = v)) }),
-                    Triple("Ferries", { get().walkAvoidFerries }, { v: Boolean -> set(get().copy(walkAvoidFerries = v)) })
+                    Triple(c.getString(R.string.set_steps), { get().walkAvoidSteps }, { v: Boolean -> set(get().copy(walkAvoidSteps = v)) }),
+                    Triple(c.getString(R.string.set_ferries), { get().walkAvoidFerries }, { v: Boolean -> set(get().copy(walkAvoidFerries = v)) })
                 ))
             }
         }
-        p.bodyButton("Reset this mode") {
+        p.bodyButton(c.getString(R.string.set_reset_mode)) {
             val d = RouteOptions()
             val cur = get()
             set(when (mode) {
@@ -169,54 +170,54 @@ object SettingsPopup {
             })
         }
         // 1.4.0: Balanced accepts a little more time for a clearly shorter route.
-        p.section("Balanced: a little more time for a shorter route")
+        p.section(c.getString(R.string.set_balanced_title))
         val pct = prefs.getInt(Settings.KEY_BALANCE_EXTRA, Settings.DEFAULT_BALANCE_EXTRA).coerceIn(0, 25)
-        val label = p.text(if (pct == 0) "Off: always the fastest" else "Up to $pct% more time", 12f)
+        val label = p.text(if (pct == 0) c.getString(R.string.set_balanced_off) else c.getString(R.string.set_balanced_up_to, pct), 12f)
         p.custom(android.widget.SeekBar(c).apply {
             max = 25
             progress = pct
             setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: android.widget.SeekBar?, v: Int, fromUser: Boolean) {
-                    label.text = if (v == 0) "Off: always the fastest" else "Up to $v% more time"
+                    label.text = if (v == 0) c.getString(R.string.set_balanced_off) else c.getString(R.string.set_balanced_up_to, v)
                     if (fromUser) prefs.edit().putInt(Settings.KEY_BALANCE_EXTRA, v).apply()
                 }
                 override fun onStartTrackingTouch(sb: android.widget.SeekBar?) {}
                 override fun onStopTrackingTouch(sb: android.widget.SeekBar?) {}
             })
         })
-        p.text("Takes a clearly shorter alternative (3%+, no more toll) when it costs at most this much extra time. Off in Emergency. Applies from the next route.", 11f)
-        p.section("Value of your time (EUR / hour)")
+        p.text(pct(c, R.string.set_balanced_help), 11f)
+        p.section(c.getString(R.string.set_time_value))
         val num = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-        floatField(p, prefs, "Weekend", Settings.KEY_VALUE_WEEKEND, Settings.DEFAULT_VALUE_WEEKEND, num)
-        floatField(p, prefs, "Work", Settings.KEY_VALUE_WORK, Settings.DEFAULT_VALUE_WORK, num)
-        floatField(p, prefs, "Emergency", Settings.KEY_VALUE_EMERGENCY, Settings.DEFAULT_VALUE_EMERGENCY, num)
-        p.section("Toll estimate")
-        floatField(p, prefs, "EUR per km of toll road", Settings.KEY_TOLL_RATE, Settings.DEFAULT_TOLL_RATE, num)
-        p.text("Balanced mode compares the toll with the time it saves, at the value of the current mode (urgency button).", 11f)
+        floatField(p, prefs, c.getString(R.string.set_weekend), Settings.KEY_VALUE_WEEKEND, Settings.DEFAULT_VALUE_WEEKEND, num)
+        floatField(p, prefs, c.getString(R.string.set_work), Settings.KEY_VALUE_WORK, Settings.DEFAULT_VALUE_WORK, num)
+        floatField(p, prefs, c.getString(R.string.set_emergency), Settings.KEY_VALUE_EMERGENCY, Settings.DEFAULT_VALUE_EMERGENCY, num)
+        p.section(c.getString(R.string.set_toll_estimate))
+        floatField(p, prefs, c.getString(R.string.set_toll_rate), Settings.KEY_TOLL_RATE, Settings.DEFAULT_TOLL_RATE, num)
+        p.text(c.getString(R.string.set_toll_help), 11f)
     }
 
     private fun navigationPage(c: Context, p: Popup, prefs: android.content.SharedPreferences, host: Host) {
-        p.section("3D view while navigating")
-        val tilts = listOf(-1 to "Adaptive", 0 to "Flat", 30 to "30°", 45 to "45°", 60 to "60°")
+        p.section(c.getString(R.string.set_3d_view))
+        val tilts = listOf(-1 to c.getString(R.string.set_tilt_adaptive), 0 to c.getString(R.string.set_tilt_flat), 30 to "30°", 45 to "45°", 60 to "60°")
         p.choices(tilts, { it.second }, { tilts.firstOrNull { t -> t.first == prefs.getInt(Settings.KEY_NAV_TILT, -1) } ?: tilts[0] }) {
             prefs.edit().putInt(Settings.KEY_NAV_TILT, it.first).apply()
         }
-        p.text("Adaptive: 30° when slow, up to 50° at motorway speed. North up is flat.", 11f)
-        p.section("Zoom while navigating")
-        val zooms = listOf(1 to "Closer", 0 to "Normal", -1 to "Farther")
+        p.text(c.getString(R.string.set_tilt_help), 11f)
+        p.section(c.getString(R.string.set_zoom_title))
+        val zooms = listOf(1 to c.getString(R.string.set_zoom_closer), 0 to c.getString(R.string.set_zoom_normal), -1 to c.getString(R.string.set_zoom_farther))
         p.choices(zooms, { it.second }, { zooms.firstOrNull { z -> z.first == prefs.getInt(Settings.KEY_NAV_ZOOM, 0) } ?: zooms[1] }) {
             prefs.edit().putInt(Settings.KEY_NAV_ZOOM, it.first).apply()
         }
-        p.text("Driving still zooms out with speed. The overview button (while navigating) shows the rest of the route flat, with the places along it; it comes back to this view by itself.", 11f)
-        p.section("Voice")
-        p.toggle("Spoken instructions", { prefs.getBoolean(Settings.KEY_VOICE, true) }) {
+        p.text(c.getString(R.string.set_zoom_help), 11f)
+        p.section(c.getString(R.string.set_voice))
+        p.toggle(c.getString(R.string.set_spoken), { prefs.getBoolean(Settings.KEY_VOICE, true) }) {
             prefs.edit().putBoolean(Settings.KEY_VOICE, it).apply()
         }
-        val detail = listOf(false to "Full", true to "Short")
+        val detail = listOf(false to c.getString(R.string.set_voice_full), true to c.getString(R.string.set_voice_short))
         p.choices(detail, { it.second }, { detail.first { d -> d.first == prefs.getBoolean(Settings.KEY_VOICE_SHORT, false) } }) {
             prefs.edit().putBoolean(Settings.KEY_VOICE_SHORT, it.first).apply()
         }
-        p.text("Short: only the maneuver -- \"In 100 m, turn right\", \"Turn right\", \"Take the 3rd exit\" -- no street names, no \"Continue for...\". Applies from the next route.", 11f)
+        p.text(c.getString(R.string.set_voice_help), 11f)
         // 1.6.0: screen language (texts); the voice language below stays separate.
         p.section(c.getString(com.backpack.app.R.string.lang_screen))
         val screenLangs = com.backpack.app.L10n.LANGUAGES
@@ -225,46 +226,41 @@ object SettingsPopup {
             if (it.first != com.backpack.app.L10n.current()) { p.dismiss(); com.backpack.app.L10n.set(it.first) }
         }
         // 1.3.0: voice language (instructions, heads-ups, the guide's readings).
-        p.section("Voice language")
+        p.section(c.getString(R.string.set_voice_lang))
         val langs = com.backpack.app.core.VoiceText.LANGUAGES
         p.choices(langs, { it.second }, { langs.firstOrNull { l -> l.first == (prefs.getString(Settings.KEY_VOICE_LANG, null) ?: com.backpack.app.core.VoiceText.defaultFor(java.util.Locale.getDefault().language)) } ?: langs[0] }) {
             prefs.edit().putString(Settings.KEY_VOICE_LANG, it.first).apply()
         }
-        p.text("Instructions, sight tips and the guide's Wikipedia readings (in English when a place has no article in your language). Spanish uses a Latin American voice when your phone has one (Android Settings > Text-to-speech). Applies from the next route.", 11f)
+        p.text(c.getString(R.string.set_voice_lang_help), 11f)
         // 1.3.0: Backpack keeps running with the screen off until this (or Exit in the notification).
         // 1.3.0: trip recording.
-        p.section("Trips")
-        p.toggle("Record my track while navigating (on this phone only)", { prefs.getBoolean(Settings.KEY_RECORD_TRIPS, true) }) {
+        p.section(c.getString(R.string.set_trips))
+        p.toggle(c.getString(R.string.set_record_trips), { prefs.getBoolean(Settings.KEY_RECORD_TRIPS, true) }) {
             prefs.edit().putBoolean(Settings.KEY_RECORD_TRIPS, it).apply()
         }
-        p.bodyButton("My trips (save as GPX)") { host.onShowTrips() }
-        p.section("Background")
-        p.text("While Backpack is open, navigation, the speed alarm (by car) and sight tips go on with the screen off or another app in front. Exit stops everything.", 11f)
-        p.bodyButton("Exit Backpack") { host.onExitApp() }
+        p.bodyButton(c.getString(R.string.set_my_trips)) { host.onShowTrips() }
+        p.section(c.getString(R.string.set_background))
+        p.text(c.getString(R.string.set_background_help), 11f)
+        p.bodyButton(c.getString(R.string.set_exit)) { host.onExitApp() }
     }
 
-    private fun speedPage(p: Popup, prefs: android.content.SharedPreferences) {
-        p.section("Units")
-        val units = listOf(true to "Kilometres", false to "Miles")
+    private fun speedPage(c: Context, p: Popup, prefs: android.content.SharedPreferences) {
+        p.section(c.getString(R.string.set_units))
+        val units = listOf(true to c.getString(R.string.set_km), false to c.getString(R.string.set_miles))
         p.choices(units, { it.second }, { units.first { u -> u.first == prefs.getBoolean(Settings.KEY_UNIT_METRIC, true) } }) {
             prefs.edit().putBoolean(Settings.KEY_UNIT_METRIC, it.first).apply()
         }
-        p.section("Speed-limit alarm")
-        p.toggle("Alarm sound", { prefs.getBoolean(Settings.KEY_ALARM_SOUND, true) }) {
+        p.section(c.getString(R.string.set_speed_alarm))
+        p.toggle(c.getString(R.string.set_alarm_sound), { prefs.getBoolean(Settings.KEY_ALARM_SOUND, true) }) {
             prefs.edit().putBoolean(Settings.KEY_ALARM_SOUND, it).apply()
         }
-        p.text("The ring fills with your speed: blue, green (top = the limit's middle range), yellow near the limit, red over it. " +
-            "5+ over: blinking with a high beep; 20+ over: the beep without pause. " +
-            "On roads of 100+: blue with a low buzz below 70% of the limit, red with a low buzz when stopped. " +
-            "Limits come from OpenStreetMap, loaded for the road ahead of your route.", 11f)
+        p.text(pct(c, R.string.set_speed_help), 11f)
         // 1.4.0: fixed speed cameras, off by default.
-        p.section("Speed cameras")
-        p.toggle("Fixed speed cameras (sound)", { prefs.getBoolean(Settings.KEY_CAMERAS, false) }) {
+        p.section(c.getString(R.string.set_cameras))
+        p.toggle(c.getString(R.string.set_cameras_toggle), { prefs.getBoolean(Settings.KEY_CAMERAS, false) }) {
             prefs.edit().putBoolean(Settings.KEY_CAMERAS, it).apply()
         }
-        p.text("From OpenStreetMap, where mapped (not all are). A sonar blip that speeds up as you get closer. " +
-            "France: only \"Danger zone\" for the stretch, as the law requires. Germany, Switzerland, Cyprus, North Macedonia: silent (warnings are illegal there), and silent when the country is unknown. " +
-            "Mobile checks and traffic are not covered.", 11f)
+        p.text(c.getString(R.string.set_cameras_help), 11f)
     }
 
     /**
@@ -272,8 +268,8 @@ object SettingsPopup {
      * travel mode turns them into distances.
      */
     private fun sightsPage(c: Context, p: Popup, prefs: android.content.SharedPreferences) {
-        p.text("Sights are shown in Weekend mode: the small camera next to the Weekend button turns them on or off (hold it for the list).", 12f)
-        p.section("Kinds")
+        p.text(c.getString(R.string.set_sights_intro), 12f)
+        p.section(c.getString(R.string.set_kinds))
         for (g in com.backpack.app.core.SightGroup.values()) {
             p.toggle(g.label, { g in com.backpack.app.core.SightGroup.parse(prefs.getString(Settings.KEY_SIGHT_GROUPS, null)) }) { on ->
                 val now = com.backpack.app.core.SightGroup.parse(prefs.getString(Settings.KEY_SIGHT_GROUPS, null)).toMutableSet()
@@ -282,7 +278,7 @@ object SettingsPopup {
             }
         }
         // 1.4.0: priority of the kinds (first = most wanted; tap ↑ to move one up).
-        p.section("Priority (first = most wanted)")
+        p.section(c.getString(R.string.set_priority))
         val list = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.VERTICAL }
         fun fill() {
             list.removeAllViews()
@@ -306,43 +302,43 @@ object SettingsPopup {
         }
         fill()
         p.custom(list)
-        p.text("Places of the kinds at the top are proposed first, even when less famous.", 11f)
-        p.section("No destination: around the map centre")
+        p.text(c.getString(R.string.set_priority_help), 11f)
+        p.section(c.getString(R.string.set_no_dest))
         val reach = com.backpack.app.core.Reach.MINUTES.map { it to (if (it < 60) "$it min" else "${it / 60} h") }
         p.choices(reach, { it.second }, {
             val cur = prefs.getInt(Settings.KEY_SIGHTS_REACH_MIN, com.backpack.app.core.Reach.DEFAULT_MINUTES)
             reach.firstOrNull { it.first == cur } ?: reach[1]
         }) { prefs.edit().putInt(Settings.KEY_SIGHTS_REACH_MIN, it.first).apply() }
-        p.text("Places you can reach in this time with the current travel mode from the centre of the map (your position while the map follows you). Your backpack services use the same time. By car the public route service answers up to 1 h; 2 h uses a distance estimate.", 11f)
-        p.section("Choosing a route or navigating")
-        intField(p, prefs, "Longest detour (min, there and back)", Settings.KEY_DETOUR_WEEKEND_MIN, Settings.DEFAULT_DETOUR_WEEKEND_MIN, 1, 60)
-        p.text("Sights along the proposed routes that you can visit within this extra time.", 11f)
-        p.section("Voice heads-up while navigating")
-        p.toggle("Tell me when a sight is coming up (voice + message)", { prefs.getBoolean(Settings.KEY_SIGHT_HEADSUP, true) }) {
+        p.text(c.getString(R.string.set_no_dest_help), 11f)
+        p.section(c.getString(R.string.set_choosing_route))
+        intField(p, prefs, c.getString(R.string.set_longest_detour), Settings.KEY_DETOUR_WEEKEND_MIN, Settings.DEFAULT_DETOUR_WEEKEND_MIN, 1, 60)
+        p.text(c.getString(R.string.set_detour_help), 11f)
+        p.section(c.getString(R.string.set_headsup_title))
+        p.toggle(c.getString(R.string.set_headsup_toggle), { prefs.getBoolean(Settings.KEY_SIGHT_HEADSUP, true) }) {
             prefs.edit().putBoolean(Settings.KEY_SIGHT_HEADSUP, it).apply()
         }
-        intField(p, prefs, "Minutes before the sight", Settings.KEY_SIGHT_HEADSUP_MIN, Settings.DEFAULT_SIGHT_HEADSUP_MIN, 1, 15)
-        p.text("Time, not distance: worked out with your route's average speed, so it fits walking, cycling and driving. Said once per place, never close to a turn. Tap the message to hear what Wikipedia says about it, or to add it as a stop.", 11f)
-        p.section("Sights route")
-        intField(p, prefs, "Max extra time (%), 0 = off", Settings.KEY_SIGHTS_MAX_PCT, Settings.DEFAULT_SIGHTS_MAX_PCT, 0, 100)
-        p.text("An alternative passing clearly more sights is taken if it is at most this much slower.", 11f)
+        intField(p, prefs, c.getString(R.string.set_headsup_min), Settings.KEY_SIGHT_HEADSUP_MIN, Settings.DEFAULT_SIGHT_HEADSUP_MIN, 1, 15)
+        p.text(c.getString(R.string.set_headsup_help), 11f)
+        p.section(c.getString(R.string.set_sights_route))
+        intField(p, prefs, pct(c, R.string.set_sights_max), Settings.KEY_SIGHTS_MAX_PCT, Settings.DEFAULT_SIGHTS_MAX_PCT, 0, 100)
+        p.text(c.getString(R.string.set_sights_max_help), 11f)
     }
 
     private fun placesPage(c: Context, p: Popup, prefs: android.content.SharedPreferences, host: Host) {
-        p.section("Backpack services along a route: longest detour")
-        intField(p, prefs, "Work mode (min, there and back)", Settings.KEY_DETOUR_WORK_MIN, Settings.DEFAULT_DETOUR_WORK_MIN, 1, 30)
-        p.text("With a destination: the services you ticked in the backpack, along the route within this detour (Weekend mode: the detour in Settings > Sights). Emergency adds hospitals, police and fire stations (15 min) and hides sights. Without a destination: within the reach time (Settings > Sights) of the map centre; Emergency always around you.", 11f)
-        p.section("Saved places")
-        p.text("Places are fetched per square of about 5 km and kept on this phone (everyday places 3 days, sights 2 weeks), so an area already seen needs no server.", 11f)
-        p.bodyButton("Clear recent searches") {
+        p.section(c.getString(R.string.set_services_detour))
+        intField(p, prefs, c.getString(R.string.set_work_detour), Settings.KEY_DETOUR_WORK_MIN, Settings.DEFAULT_DETOUR_WORK_MIN, 1, 30)
+        p.text(c.getString(R.string.set_services_help), 11f)
+        p.section(c.getString(R.string.set_saved_places))
+        p.text(c.getString(R.string.set_saved_places_help), 11f)
+        p.bodyButton(c.getString(R.string.set_clear_recent)) {
             prefs.edit().remove(Settings.KEY_RECENT_SEARCHES).apply()
-            android.widget.Toast.makeText(c, "Recent searches cleared", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(c, c.getString(R.string.set_recent_cleared), android.widget.Toast.LENGTH_SHORT).show()
         }
-        p.bodyButton("Clear saved places") {
+        p.bodyButton(c.getString(R.string.set_clear_places)) {
             TileCache.clearAll(c)
             com.backpack.app.tourist.SiteInfoStore.forget()
             host.onPlacesCleared()
-            android.widget.Toast.makeText(c, "Saved places cleared", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(c, c.getString(R.string.set_places_cleared), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -351,54 +347,54 @@ object SettingsPopup {
      * they accept donations, a link to their own official donation page.
      * Backpack collects nothing itself.
      */
-    private fun creditsPage(p: Popup) {
-        p.text("Backpack is free and built on these open projects. If it helps you, consider supporting them.")
+    private fun creditsPage(c: Context, p: Popup) {
+        p.text(c.getString(R.string.set_credits_intro))
         fun source(name: String, what: String, site: String, donate: String?) {
             p.section(name)
             p.text(what, 12f)
-            p.link("Website", site, 12f)
-            donate?.let { p.link("Support them", it, 12f) }
+            p.link(c.getString(R.string.set_website), site, 12f)
+            donate?.let { p.link(c.getString(R.string.set_support_them), it, 12f) }
         }
-        source("OpenStreetMap contributors", "Map data, places, speed limits and addresses. \u00a9 OpenStreetMap contributors, Open Database License (ODbL).",
+        source(c.getString(R.string.set_osm_contributors), c.getString(R.string.set_cr_osm),
             "https://www.openstreetmap.org/copyright", "https://supporting.openstreetmap.org/donate/")
-        source("OpenFreeMap \u00b7 OpenMapTiles", "The map tiles you see. \u00a9 OpenMapTiles, data \u00a9 OpenStreetMap contributors.",
+        source("OpenFreeMap \u00b7 OpenMapTiles", c.getString(R.string.set_cr_tiles),
             "https://openfreemap.org", "https://github.com/sponsors/hyperknot")
-        source("MapLibre", "The map engine drawing the map on your phone (BSD licence).",
+        source("MapLibre", c.getString(R.string.set_cr_maplibre),
             "https://maplibre.org", "https://opencollective.com/maplibre")
-        source("openrouteservice \u00b7 HeiGIT", "Routes, reroutes, reach areas and second places source.",
+        source("openrouteservice \u00b7 HeiGIT", c.getString(R.string.set_cr_ors),
             "https://openrouteservice.org", null)
-        source("Overpass API", "Searches the OpenStreetMap data for places, sights and speed limits.",
+        source("Overpass API", c.getString(R.string.set_cr_overpass),
             "https://overpass-api.de", null)
-        source("Photon \u00b7 komoot", "Address search while you type (Nominatim by the OpenStreetMap Foundation as fallback).",
+        source("Photon \u00b7 komoot", c.getString(R.string.set_cr_photon),
             "https://photon.komoot.io", null)
-        source("Wikipedia \u00b7 Wikidata \u00b7 Wikimedia", "Which places are well known, and the articles to read about them (Wikidata CC0, Wikipedia CC BY-SA).",
+        source("Wikipedia \u00b7 Wikidata \u00b7 Wikimedia", c.getString(R.string.set_cr_wiki),
             "https://www.wikidata.org", "https://donate.wikimedia.org")
-        source("Material icons \u00b7 Google", "Button icons (Go, Stop, Cancel, Resume, sound, sights, tolls). Apache License 2.0.",
+        source("Material icons \u00b7 Google", c.getString(R.string.set_cr_icons),
             "https://fonts.google.com/icons", null)
     }
 
-    private fun mapPage(p: Popup, prefs: android.content.SharedPreferences) {
-        p.section("Day / night")
-        val modes = listOf(Settings.DISPLAY_MODE_DAY to "Day", Settings.DISPLAY_MODE_NIGHT to "Night",
-            Settings.DISPLAY_MODE_AUTO to "Sunset", Settings.DISPLAY_MODE_SYSTEM to "System")
+    private fun mapPage(c: Context, p: Popup, prefs: android.content.SharedPreferences) {
+        p.section(c.getString(R.string.set_day_night))
+        val modes = listOf(Settings.DISPLAY_MODE_DAY to c.getString(R.string.set_mode_day), Settings.DISPLAY_MODE_NIGHT to c.getString(R.string.set_mode_night),
+            Settings.DISPLAY_MODE_AUTO to c.getString(R.string.set_mode_sunset), Settings.DISPLAY_MODE_SYSTEM to c.getString(R.string.set_mode_system))
         p.choices(modes, { it.second }, {
             val cur = prefs.getString(Settings.KEY_DISPLAY_MODE, Settings.DISPLAY_MODE_AUTO)
             modes.firstOrNull { it.first == cur } ?: modes[2]
         }) { prefs.edit().putString(Settings.KEY_DISPLAY_MODE, it.first).apply() }
-        p.text("Sunset: night map from sunset to sunrise where you are. Night always uses the dark map.", 11f)
-        p.section("Map style")
+        p.text(c.getString(R.string.set_day_night_help), 11f)
+        p.section(c.getString(R.string.set_map_style))
         val day = Prefs.DAY_STYLES
         p.choices(day, { it.second.first }, {
             val cur = prefs.getString(Settings.KEY_MAP_STYLE, "liberty")
             day.firstOrNull { it.first == cur } ?: day[0]
         }) { prefs.edit().putString(Settings.KEY_MAP_STYLE, it.first).apply() }
-        p.section("Night style")
+        p.section(c.getString(R.string.set_night_style))
         val night = Prefs.NIGHT_STYLES
         p.choices(night, { it.second.first }, {
             val cur = prefs.getString(Settings.KEY_NIGHT_STYLE, "dark")
             night.firstOrNull { it.first == cur } ?: night[0]
         }) { prefs.edit().putString(Settings.KEY_NIGHT_STYLE, it.first).apply() }
-        p.text("OpenFreeMap and VersaTiles: free, no account, no key. VersaTiles (Colorful, Graybeard, Eclipse) has no uptime guarantee.", 11f)
+        p.text(c.getString(R.string.set_style_help), 11f)
     }
 
     /**
@@ -407,73 +403,75 @@ object SettingsPopup {
      * with a short line and a "?" for the details.
      */
     private fun serversPage(c: Context, p: Popup, prefs: android.content.SharedPreferences, host: Host) {
-        p.section("Privacy")
-        p.text("No account, no tracking. Servers only get what they need: the trip's points (routing), " +
-            "~5 km squares (places), the road ahead (speed limits). Searches are rounded to ~1 km. Recorded trips stay on this phone.", 11f)
-        p.link("Map data © OpenStreetMap contributors (ODbL)", "https://www.openstreetmap.org/copyright")
+        p.section(c.getString(R.string.set_privacy))
+        p.text(c.getString(R.string.set_privacy_help), 11f)
+        p.link(c.getString(R.string.set_map_data_link), "https://www.openstreetmap.org/copyright")
 
-        p.section("Servers and keys")
-        p.text("Optional. Backpack works without any of this.", 11f)
+        p.section(c.getString(R.string.set_servers_keys))
+        p.text(c.getString(R.string.set_optional), 11f)
         val folded = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.VERTICAL; visibility = android.view.View.GONE }
-        val opener = p.bodyButton("Show") {}
+        val opener = p.bodyButton(c.getString(R.string.set_show)) {}
         opener.setOnClickListener {
             val open = folded.visibility != android.view.View.VISIBLE
             folded.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
-            opener.text = if (open) "Hide" else "Show"
+            opener.text = if (open) c.getString(R.string.set_hide) else c.getString(R.string.set_show)
             p.fit()
         }
         p.custom(folded)
         p.into(folded) {
-            p.section("Routing")
-            urlField(p, prefs, "Routing server (empty = openrouteservice)", Settings.KEY_ORS_URL, "https://...")
-            p.field("Own openrouteservice key", prefs.getString(Settings.KEY_ORS_KEY, "").orEmpty(),
-                "key", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) {
+            p.section(c.getString(R.string.set_routing))
+            urlField(c, p, prefs, c.getString(R.string.set_routing_server), Settings.KEY_ORS_URL, "https://...")
+            p.field(c.getString(R.string.set_own_ors_key), prefs.getString(Settings.KEY_ORS_KEY, "").orEmpty(),
+                c.getString(R.string.set_key_hint), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) {
                 prefs.edit().putString(Settings.KEY_ORS_KEY, it).apply()
             }
-            p.bodyButton("Get a free key (guide)") { host.onKeyGuide() }
-            help(c, p, "Routes come from openrouteservice (HeiGIT, non-profit). Your own free key keeps your routes on your own account, with your own daily quota. Your own server: its address, without /v2.")
+            p.bodyButton(c.getString(R.string.set_get_key)) { host.onKeyGuide() }
+            help(c, p, c.getString(R.string.set_routing_help))
 
-            p.section("Places, sights, speed limits")
-            val none = "none" to "None"
+            p.section(c.getString(R.string.set_places_servers))
+            val none = "none" to c.getString(R.string.set_provider_none)
             val providers = listOf(none) + com.backpack.app.core.OverpassProviders.ALL.map { it.id to it.label }
-            p.text("Faster server (own key)", 12f)
+            p.text(c.getString(R.string.set_faster_server), 12f)
             p.choices(providers, { it.second }, {
                 val cur = prefs.getString(Settings.KEY_OVERPASS_PROVIDER, null)
                 providers.firstOrNull { it.first == cur } ?: none
             }) { prefs.edit().putString(Settings.KEY_OVERPASS_PROVIDER, it.first).apply() }
             var keyField: android.widget.EditText? = null
-            keyField = p.field("Key for that server", prefs.getString(Settings.KEY_OVERPASS_KEY, "").orEmpty(),
-                "key", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) { text ->
+            keyField = p.field(c.getString(R.string.set_server_key), prefs.getString(Settings.KEY_OVERPASS_KEY, "").orEmpty(),
+                c.getString(R.string.set_key_hint), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) { text ->
                 if (text.isEmpty() || com.backpack.app.core.OverpassProviders.ALL.first().url(text) != null) {
                     prefs.edit().putString(Settings.KEY_OVERPASS_KEY, text.trim()).apply()
                     keyField?.error = null
-                } else keyField?.error = "Letters, digits, . _ ~ - only"
+                } else keyField?.error = c.getString(R.string.set_key_chars)
             }
-            urlField(p, prefs, "Own Overpass server (tried next)", Settings.KEY_OVERPASS_URL, "https://.../api/interpreter")
+            urlField(c, p, prefs, c.getString(R.string.set_own_overpass), Settings.KEY_OVERPASS_URL, "https://.../api/interpreter")
             help(c, p, com.backpack.app.core.OverpassProviders.ALL.joinToString(" \u00b7 ") { "${it.label}: ${it.note}" } +
-                ". The key stays on this phone and only goes to that server. Order: that server, your own, then the free " +
-                "overpass-api.de and overpass.private.coffee; a slow one gets help from the next.")
+                c.getString(R.string.set_overpass_help))
 
-            p.section("Own map style")
-            urlField(p, prefs, "Style URL (day map; empty = Map page)", Settings.KEY_CUSTOM_STYLE, "https://.../style.json")
-            help(c, p, "Any MapLibre style.json (e.g. from your own tile server). Used by day; the night style stays the one chosen on the Map page.")
+            p.section(c.getString(R.string.set_own_style))
+            urlField(c, p, prefs, c.getString(R.string.set_style_url), Settings.KEY_CUSTOM_STYLE, "https://.../style.json")
+            help(c, p, c.getString(R.string.set_style_url_help))
         }
     }
 
     /** A "?" that unfolds a longer explanation. */
     private fun help(c: Context, p: Popup, text: String) {
-        val q = p.text("?  More", 11f)
+        val q = p.text(c.getString(R.string.set_more), 11f)
         val more = p.text(text, 11f).apply { visibility = android.view.View.GONE }
         q.setTextColor(androidx.core.content.ContextCompat.getColor(c, com.backpack.app.R.color.rg_active))
         q.setOnClickListener {
             val open = more.visibility != android.view.View.VISIBLE
             more.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
-            q.text = if (open) "?  Less" else "?  More"
+            q.text = if (open) c.getString(R.string.set_less) else c.getString(R.string.set_more)
             p.fit()
         }
     }
 
     // ---------- Fields ----------
+
+    /** A text with a literal %% in the resource: formatted so it shows as one %. */
+    private fun pct(c: Context, id: Int): String = c.getString(id, *emptyArray<Any>())
+
 
     private fun floatField(p: Popup, prefs: android.content.SharedPreferences, label: String, key: String, def: Double, type: Int) {
         val e = p.field(label, prefs.getFloat(key, def.toFloat()).toString(), def.toString(), type) { text ->
@@ -489,14 +487,14 @@ object SettingsPopup {
     }
 
     /** Stored only when empty (= default) or a http(s) address; else the field says so. */
-    private fun urlField(p: Popup, prefs: android.content.SharedPreferences, label: String, key: String, hint: String) {
+    private fun urlField(c: Context, p: Popup, prefs: android.content.SharedPreferences, label: String, key: String, hint: String) {
         var field: android.widget.EditText? = null
         field = p.field(label, prefs.getString(key, "").orEmpty(), hint, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI) { text ->
             if (text.isEmpty() || text.startsWith("https://") || text.startsWith("http://")) {
                 prefs.edit().putString(key, text).apply()
                 field?.error = null
             } else {
-                field?.error = "Must start with https://"
+                field?.error = c.getString(R.string.set_must_https)
             }
         }
     }

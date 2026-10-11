@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Backpack</string>
+    <string name="locate_button_label">Centra sulla mia posizione</string>
+    <string name="mode_walk_label">A piedi</string>
+    <string name="mode_bike_label">Bici</string>
+    <string name="mode_car_label">Auto</string>
+    <string name="preference_fastest_label">Più veloce</string>
+    <string name="preference_shortest_label">Più corto</string>
+    <string name="preference_recommended_label">Bilanciato</string>
+    <string name="avoid_tolls_label">Evita pedaggi</string>
+    <string name="urgency_label">Valore del tempo</string>
+    <string name="voice_title">Ricerca vocale</string>
+    <string name="voice_handler">La tua voce è gestita da: %1$s.</string>
+    <string name="voice_handler_choose">Android chiederà quale app usare.</string>
+    <string name="voice_handler_unknown">l\'app vocale del telefono</string>
+    <string name="voice_offline_tip">Se è Google, la tua voce può andare a Google. Per tenerla sul telefono: installa FUTO Voice Input, poi Impostazioni ▸ App ▸ Google ▸ Apri per impostazione predefinita, cancella i valori. Poi scegli FUTO Voice Input ▸ Sempre.\nOppure usa il microfono della tastiera (FUTO Keyboard funziona offline).</string>
+    <string name="voice_cancel">Annulla</string>
+    <string name="voice_continue">Continua</string>
+    <string name="voice_prompt">Dove vuoi andare?</string>
+    <string name="voice_none">Nessun input vocale su questo telefono</string>
+</resources>

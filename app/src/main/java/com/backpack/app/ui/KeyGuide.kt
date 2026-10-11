@@ -10,6 +10,7 @@ import android.text.InputType
 import android.widget.EditText
 import android.widget.TextView
 import com.backpack.app.Prefs
+import com.backpack.app.R
 import com.backpack.app.Settings
 import com.backpack.app.core.OrsKey
 import com.backpack.app.route.RoutePlanner
@@ -39,28 +40,24 @@ object KeyGuide {
     fun show(c: Context, saved: () -> Unit) {
         if (isOpen) return
         onSaved = saved
-        val p = Popup(c, "Your free routing key")
-        p.text("Routes come from openrouteservice, a free non-profit service (HeiGIT, Heidelberg). " +
-            "Each person uses their own free key: your routes stay on your own account, with your own daily quota. " +
-            "Map, places, sights and the speed alarm work without it.", 13f)
-        p.section("2–3 minutes")
-        p.text("1. Get my free key: create the account (email + confirmation).\n" +
-            "2. Create a key (token) there and press its copy button.\n" +
-            "3. Come back to Backpack: the key is found and checked by itself.", 13f)
-        p.bodyButton("Get my free key") {
+        val p = Popup(c, c.getString(R.string.keyg_title))
+        p.text(c.getString(R.string.keyg_intro), 13f)
+        p.section(c.getString(R.string.keyg_minutes))
+        p.text(c.getString(R.string.keyg_steps), 13f)
+        p.bodyButton(c.getString(R.string.keyg_get)) {
             try {
                 c.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Prefs.ORS_SIGNUP_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (e: Exception) {
-                setStatus("No browser found: open ${Prefs.ORS_SIGNUP_URL}")
+                setStatus(c.getString(R.string.keyg_no_browser, Prefs.ORS_SIGNUP_URL))
             }
         }
-        field = p.field("Or paste your key here", "", "key",
+        field = p.field(c.getString(R.string.keyg_paste), "", c.getString(R.string.keyg_key_hint),
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD) { }
         status = p.text("", 13f)
-        p.button("Later") { p.dismiss() }
-        p.button("Check and save", primary = true) {
+        p.button(c.getString(R.string.keyg_later)) { p.dismiss() }
+        p.button(c.getString(R.string.keyg_check_save), primary = true) {
             val k = field?.text?.toString()?.trim().orEmpty()
-            if (!OrsKey.plausible(k)) setStatus("That doesn't look like a key (no spaces, quite long).")
+            if (!OrsKey.plausible(k)) setStatus(c.getString(R.string.keyg_not_key))
             else check(c, k)
         }
         p.dialog.setOnDismissListener { popup = null; field = null; status = null; checking = false }
@@ -87,7 +84,7 @@ object KeyGuide {
         val key = OrsKey.fromClipboard(text) ?: return
         if (key == Prefs.settings(c).getString(Settings.KEY_ORS_KEY, "")?.trim()) return
         field?.setText(key)
-        setStatus("Key found on the clipboard, checking…")
+        setStatus(c.getString(R.string.keyg_found))
         check(c, key)
     }
 
@@ -97,7 +94,7 @@ object KeyGuide {
     private fun check(c: Context, key: String) {
         if (checking) return
         checking = true
-        setStatus("Checking the key…")
+        setStatus(c.getString(R.string.keyg_checking))
         val app = c.applicationContext
         // The routing server in use (own server: its own key is tested there).
         val url = "${Prefs.orsBaseUrl(app)}/v2/directions/driving-car?start=8.681495,49.41461&end=8.687872,49.420318"
@@ -111,14 +108,14 @@ object KeyGuide {
                 when (OrsKey.checkFromHttp(code)) {
                     OrsKey.Check.OK, OrsKey.Check.QUOTA -> {
                         save(app, key)
-                        setStatus("✓ Key works, saved. You can plan routes now.")
+                        setStatus(c.getString(R.string.keyg_ok))
                         main.postDelayed({ popup?.dismiss() }, 1500L)
                         onSaved?.invoke()
                     }
-                    OrsKey.Check.REFUSED -> setStatus("openrouteservice refused this key. Copy it again from your account (the whole key).")
+                    OrsKey.Check.REFUSED -> setStatus(c.getString(R.string.keyg_refused))
                     OrsKey.Check.UNREACHABLE -> {
                         save(app, key)
-                        setStatus("Saved, but it couldn't be checked now (no connection?). It will be used for the next route.")
+                        setStatus(c.getString(R.string.keyg_unreachable))
                         onSaved?.invoke()
                     }
                 }
