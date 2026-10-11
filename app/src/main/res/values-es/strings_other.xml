@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1.6.0: on-screen texts of nav, route, places, tourist, search, net, Prefs. -->
+<resources>
+    <string name="other_overpass_timeout">Servidores de lugares muy lentos (tiempo agotado)</string>
+    <string name="other_overpass_busy">Servidores de lugares ocupados</string>
+    <string name="other_overpass_offline">Búsqueda fallida: sin conexión</string>
+    <string name="other_overpass_bad_answer">Respuesta ilegible del servidor de lugares</string>
+    <string name="other_places_some_missing">Pueden faltar lugares (%1$s)</string>
+    <string name="other_places_failed">Búsqueda de lugares fallida</string>
+    <string name="other_places_ors_fallback">Servidores ocupados: lugares cercanos de openrouteservice</string>
+    <string name="other_route_failed">Error al calcular la ruta</string>
+    <string name="other_route_no_geometry">La ruta llegó sin trazado</string>
+    <string name="other_route_failed_connection">Error al calcular la ruta. Revise la conexión</string>
+    <string name="other_search_failed_connection">Búsqueda fallida. Revise la conexión</string>
+    <string name="other_search_failed_code">Búsqueda fallida (error %1$d)</string>
+    <string name="other_address_not_found">Dirección no encontrada</string>
+    <string name="other_route_no_key">Aún no hay clave de rutas. Obtenga su clave gratis de openrouteservice (2 min)</string>
+    <string name="other_search_coordinates">Coordenadas</string>
+    <string name="other_search_failed">Búsqueda fallida</string>
+    <string name="other_search_error_http">Error de búsqueda (HTTP %1$d)</string>
+    <string name="other_notif_recalculating">Recalculando ruta…</string>
+    <string name="other_notif_navigation">Navegación</string>
+    <string name="other_notif_starting">Iniciando…</string>
+    <string name="other_notif_running">Backpack está activo</string>
+    <string name="other_notif_running_text">Avisos de velocidad activos en auto, también con la pantalla apagada. Salir cierra Backpack.</string>
+    <string name="other_notif_exit">Salir</string>
+    <string name="other_notif_stop">Detener</string>
+    <string name="other_notif_arrived">Llegada</string>
+    <string name="other_notif_off_route">Fuera de ruta</string>
+    <string name="other_notif_head_to_destination">Diríjase al destino</string>
+    <string name="other_notif_left_arrive">faltan %1$s · llegada %2$02d:%3$02d</string>
+    <string name="other_notif_channel_desc">Indicaciones paso a paso al navegar</string>
+    <string name="other_reroute_failed">Error al recalcular</string>
+    <string name="other_style_bright">Claro</string>
+    <string name="other_style_light_grey">Gris claro</string>
+    <string name="other_style_colorful">Colorido</string>
+    <string name="other_style_dark">Oscuro</string>
+</resources>

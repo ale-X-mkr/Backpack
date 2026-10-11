@@ -3,7 +3,9 @@ package com.backpack.app.places
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.backpack.app.L10n
 import com.backpack.app.Prefs
+import com.backpack.app.R
 import com.backpack.app.core.Geo
 import com.backpack.app.core.LatLon
 import com.backpack.app.core.Places
@@ -224,7 +226,7 @@ class PlacesFinder(context: Context) {
                 main.post {
                     if (gen != generation) return@post
                     if (all.isEmpty() && error != null) callback.onResult(null, error, null, true)
-                    else callback.onResult(all, null, note ?: error?.let { "Some places may be missing ($it)" }, serverFailed)
+                    else callback.onResult(all, null, note ?: error?.let { L10n.str(app, R.string.other_places_some_missing, it) }, serverFailed)
                 }
             }
         }
@@ -245,7 +247,7 @@ class PlacesFinder(context: Context) {
                 return@query
             }
             if (gen != generation) return@query
-            fallback(gen, category, center, failure?.message ?: "Places search failed", ::finish)
+            fallback(gen, category, center, failure?.message ?: L10n.str(app, R.string.other_places_failed), ::finish)
         }
     }
 
@@ -258,7 +260,7 @@ class PlacesFinder(context: Context) {
         orsPlaces(category, center, 2000) { list ->
             if (gen != generation) return@orsPlaces
             if (list == null) finish(emptyList(), error, null, true)
-            else finish(list, null, "Places servers busy -- showing openrouteservice places nearby", true)
+            else finish(list, null, L10n.str(app, R.string.other_places_ors_fallback), true)
         }
     }
 

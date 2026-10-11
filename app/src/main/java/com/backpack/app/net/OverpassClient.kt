@@ -53,11 +53,14 @@ object OverpassClient {
     /** server -> (checked at, seconds to wait then). */
     private val statusMemo = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Int?>>()
 
-    enum class Failure(val message: String) {
-        TIMEOUT("Places servers too slow right now (timeout)"),
-        BUSY("Places servers busy right now"),
-        OFFLINE("Places search failed -- no connection"),
-        BAD_ANSWER("Places servers sent an unreadable answer")
+    enum class Failure(private val key: String, private val en: String) {
+        TIMEOUT("other_overpass_timeout", "Places servers too slow right now (timeout)"),
+        BUSY("other_overpass_busy", "Places servers busy right now"),
+        OFFLINE("other_overpass_offline", "Places search failed -- no connection"),
+        BAD_ANSWER("other_overpass_bad_answer", "Places servers sent an unreadable answer");
+
+        /** 1.6.0: in the screen language (string resources, see L10n.install). */
+        val message: String get() = com.backpack.app.core.Txt.s(key, en)
     }
 
     fun servers(c: Context): List<String> {

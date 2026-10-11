@@ -44,7 +44,10 @@ object OverpassCheck {
  * Russian services (e.g. NextGIS, VK) are left out on purpose.
  */
 object OverpassProviders {
-    class Provider(val id: String, val label: String, val note: String, private val template: String) {
+    class Provider(val id: String, val label: String, private val noteKey: String, private val noteEn: String, private val template: String) {
+        /** 1.6.0: in the screen language. */
+        val note: String get() = Txt.s(noteKey, noteEn)
+
         fun url(key: String): String? {
             val k = key.trim()
             if (k.isEmpty() || !k.matches(Regex("[A-Za-z0-9._~-]+"))) return null
@@ -53,9 +56,9 @@ object OverpassProviders {
     }
 
     val ALL = listOf(
-        Provider("fairwaymapper", "FairwayMapper", "free for active OpenStreetMap contributors", "https://api.fairwaymapper.com/k/{key}/api/interpreter"),
-        Provider("geofabrik", "Geofabrik", "paid", "https://overpass.geofabrik.de/{key}/api/interpreter"),
-        Provider("tracestrack", "Tracestrack", "paid", "https://api.tracestrack.com/overpass/{key}/interpreter")
+        Provider("fairwaymapper", "FairwayMapper", "core_overpass_free_contrib", "free for active OpenStreetMap contributors", "https://api.fairwaymapper.com/k/{key}/api/interpreter"),
+        Provider("geofabrik", "Geofabrik", "core_overpass_paid", "paid", "https://overpass.geofabrik.de/{key}/api/interpreter"),
+        Provider("tracestrack", "Tracestrack", "core_overpass_paid", "paid", "https://api.tracestrack.com/overpass/{key}/interpreter")
     )
 
     fun byId(id: String?): Provider? = ALL.firstOrNull { it.id == id }

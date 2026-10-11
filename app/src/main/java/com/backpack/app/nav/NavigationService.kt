@@ -38,7 +38,7 @@ class NavigationService : Service() {
 
     private val navListener = object : NavigationEngine.Listener {
         override fun onProgress(progress: Progress, route: RouteResult) = update(progress, route)
-        override fun onRerouting() = post("Recalculating route…", "")
+        override fun onRerouting() = post(t(R.string.other_notif_recalculating), "")
         override fun onStopped() {
             if (AppRunning.open) { showRunning(); updateBackground() } else stopSelf()
         }
@@ -57,7 +57,7 @@ class NavigationService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        val n = if (NavigationEngine.isActive) build("Navigation", "Starting…") else buildRunning()
+        val n = if (NavigationEngine.isActive) build(t(R.string.other_notif_navigation), t(R.string.other_notif_starting)) else buildRunning()
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
         ServiceCompat.startForeground(this, NOTIFICATION_ID, n, type)
         NavigationEngine.addListener(navListener)
@@ -134,15 +134,15 @@ class NavigationService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_navigation_go)
-            .setContentTitle("Backpack is running")
-            .setContentText("Speed alerts stay on by car, also with the screen off. Exit closes Backpack.")
+            .setContentTitle(t(R.string.other_notif_running))
+            .setContentText(t(R.string.other_notif_running_text))
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(0, "Exit", exit)
+            .addAction(0, t(R.string.other_notif_exit), exit)
             .build()
     }
 
@@ -152,16 +152,15 @@ class NavigationService : Service() {
         val metric = Prefs.useMetric(this)
         val step = if (p.nextStepIndex >= 0) route.steps.getOrNull(p.nextStepIndex) else null
         val title = when {
-            p.arrived -> "Arrived"
-            p.offRoute -> "Off route"
+            p.arrived -> t(R.string.other_notif_arrived)
+            p.offRoute -> t(R.string.other_notif_off_route)
             step != null -> step.instruction
-            else -> "Head to your destination"
+            else -> t(R.string.other_notif_head_to_destination)
         }
         val arrival = Calendar.getInstance().apply { add(Calendar.SECOND, p.remainingS.toInt()) }
         val text = "${Speech.shortDistance(p.distanceToNextM, metric)} · " +
-            "${Speech.shortDistance(p.remainingM, metric)} left · arrive %02d:%02d".format(
-                arrival.get(Calendar.HOUR_OF_DAY), arrival.get(Calendar.MINUTE)
-            )
+            t(R.string.other_notif_left_arrive, Speech.shortDistance(p.remainingM, metric),
+                arrival.get(Calendar.HOUR_OF_DAY), arrival.get(Calendar.MINUTE))
         post(title, text)
     }
 
@@ -193,19 +192,22 @@ class NavigationService : Service() {
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(0, "Stop", stop)
-            .addAction(0, "Exit", PendingIntent.getService(
+            .addAction(0, t(R.string.other_notif_stop), stop)
+            .addAction(0, t(R.string.other_notif_exit), PendingIntent.getService(
                 this, 2, Intent(this, NavigationService::class.java).setAction(ACTION_EXIT),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
             .build()
     }
 
+    /** 1.6.0: texts in the screen language (the service context keeps the phone's). */
+    private fun t(id: Int, vararg args: Any?): String = com.backpack.app.L10n.str(this, id, *args)
+
     private fun createChannel() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Navigation", NotificationManager.IMPORTANCE_LOW).apply {
-                    description = "Turn-by-turn guidance while navigating"
+                NotificationChannel(CHANNEL_ID, t(R.string.other_notif_navigation), NotificationManager.IMPORTANCE_LOW).apply {
+                    description = t(R.string.other_notif_channel_desc)
                     setShowBadge(false)
                 }
             )

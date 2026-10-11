@@ -249,7 +249,7 @@ object NavigationEngine {
             rerouting = false
             if (!isActive) return@plan
             if (newPlan == null) {
-                for (l in listeners.toList()) l.onRerouteFailed(error ?: "Reroute failed")
+                for (l in listeners.toList()) l.onRerouteFailed(error ?: com.backpack.app.core.Txt.s("other_reroute_failed", "Reroute failed"))
                 return@plan
             }
             request = newReq

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1.6.0: on-screen texts of nav, route, places, tourist, search, net, Prefs. -->
+<resources>
+    <string name="other_overpass_timeout">Server dei luoghi troppo lenti (timeout)</string>
+    <string name="other_overpass_busy">Server dei luoghi occupati</string>
+    <string name="other_overpass_offline">Ricerca non riuscita: nessuna connessione</string>
+    <string name="other_overpass_bad_answer">Risposta illeggibile dal server dei luoghi</string>
+    <string name="other_places_some_missing">Alcuni luoghi potrebbero mancare (%1$s)</string>
+    <string name="other_places_failed">Ricerca luoghi non riuscita</string>
+    <string name="other_places_ors_fallback">Server occupati: luoghi vicini da openrouteservice</string>
+    <string name="other_route_failed">Calcolo del percorso non riuscito</string>
+    <string name="other_route_no_geometry">Percorso ricevuto senza tracciato</string>
+    <string name="other_route_failed_connection">Calcolo non riuscito. Controlla la connessione</string>
+    <string name="other_search_failed_connection">Ricerca non riuscita. Controlla la connessione</string>
+    <string name="other_search_failed_code">Ricerca non riuscita (errore %1$d)</string>
+    <string name="other_address_not_found">Indirizzo non trovato</string>
+    <string name="other_route_no_key">Nessuna chiave ancora. Ottieni la chiave gratuita openrouteservice (2 min)</string>
+    <string name="other_search_coordinates">Coordinate</string>
+    <string name="other_search_failed">Ricerca non riuscita</string>
+    <string name="other_search_error_http">Errore di ricerca (HTTP %1$d)</string>
+    <string name="other_notif_recalculating">Ricalcolo percorso…</string>
+    <string name="other_notif_navigation">Navigazione</string>
+    <string name="other_notif_starting">Avvio…</string>
+    <string name="other_notif_running">Backpack è attivo</string>
+    <string name="other_notif_running_text">Avvisi di velocità attivi in auto, anche a schermo spento. Esci chiude Backpack.</string>
+    <string name="other_notif_exit">Esci</string>
+    <string name="other_notif_stop">Ferma</string>
+    <string name="other_notif_arrived">Arrivato</string>
+    <string name="other_notif_off_route">Fuori percorso</string>
+    <string name="other_notif_head_to_destination">Vai verso la destinazione</string>
+    <string name="other_notif_left_arrive">mancano %1$s · arrivo %2$02d:%3$02d</string>
+    <string name="other_notif_channel_desc">Indicazioni passo passo durante la navigazione</string>
+    <string name="other_reroute_failed">Ricalcolo non riuscito</string>
+    <string name="other_style_bright">Chiaro</string>
+    <string name="other_style_light_grey">Grigio chiaro</string>
+    <string name="other_style_colorful">Colorato</string>
+    <string name="other_style_dark">Scuro</string>
+</resources>

@@ -130,14 +130,14 @@ object Ors {
     }
 
     fun friendlyError(httpCode: Int, body: String?): String = when (errorCode(body)) {
-        2010 -> "No road found near that point -- try tapping closer to a street"
-        2009 -> "No route possible between these points"
-        2004 -> "Route too long for the routing server"
-        2003 -> "Route option not supported for this mode"
+        2010 -> Txt.s("core_ors_no_road", "No road found near that point -- try tapping closer to a street")
+        2009 -> Txt.s("core_ors_no_route", "No route possible between these points")
+        2004 -> Txt.s("core_ors_too_long", "Route too long for the routing server")
+        2003 -> Txt.s("core_ors_option", "Route option not supported for this mode")
         else -> when (httpCode) {
-            401, 403 -> "Routing key refused or daily limit reached"
-            429 -> "Routing server busy -- try again in a minute"
-            else -> "Route request failed (error $httpCode)"
+            401, 403 -> Txt.s("core_ors_key_refused", "Routing key refused or daily limit reached")
+            429 -> Txt.s("core_ors_busy", "Routing server busy -- try again in a minute")
+            else -> Txt.s("core_ors_failed", "Route request failed (error %1\$d)", httpCode)
         }
     }
 }
@@ -166,9 +166,9 @@ object TollBalance {
         val valueOfTimeSaved = timeSavedMinutes * valuePerMinute
         val takeToll = valueOfTimeSaved >= estimatedTollCost
         val note = if (takeToll) {
-            "Toll worth it: saves ~%.0f min for an est. €%.0f".format(timeSavedMinutes, estimatedTollCost)
+            Txt.s("core_toll_worth", "Toll worth it: saves ~%1\$.0f min for an est. €%2\$.0f", timeSavedMinutes, estimatedTollCost)
         } else {
-            "Skipping toll: only saves ~%.0f min for est. €%.0f".format(timeSavedMinutes, estimatedTollCost)
+            Txt.s("core_toll_skip", "Skipping toll: only saves ~%1\$.0f min for est. €%2\$.0f", timeSavedMinutes, estimatedTollCost)
         }
         val primary = if (takeToll) withToll else withoutToll
         val secondary = if (takeToll) withoutToll else withToll
@@ -200,7 +200,7 @@ object ShorterPick {
     }
 
     fun note(fastest: RouteResult, chosen: RouteResult, metric: Boolean = true): String =
-        "Shorter: %.0f %s less for %.0f min more".format(
+        Txt.s("core_shorter_note", "Shorter: %1\$.0f %2\$s less for %3\$.0f min more",
             (fastest.distanceMeters - chosen.distanceMeters) / (if (metric) 1000.0 else 1609.344),
             if (metric) "km" else "mi",
             Math.max(1.0, (chosen.durationSeconds - fastest.durationSeconds) / 60.0)
@@ -222,7 +222,7 @@ object RoutePicker {
         }
         if (bestIndex == 0) return RoutePlan(routes, 0, null)
         val chosen = routes[bestIndex]
-        val note = "Paved preferred: %.0f%% unpaved instead of %.0f%%".format(
+        val note = Txt.s("core_paved_note", "Paved preferred: %1\$.0f%% unpaved instead of %2\$.0f%%",
             chosen.unpavedFraction * 100, base.unpavedFraction * 100
         )
         return RoutePlan(routes, bestIndex, note)

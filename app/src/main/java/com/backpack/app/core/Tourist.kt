@@ -4,20 +4,23 @@ import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-enum class TouristCategory(val label: String) {
+enum class TouristCategory(private val key: String, private val en: String) {
     /** 1.4.0: decorated caves, rock shelters, dolmens, archaeological sites. */
-    PREHISTORY("Prehistory / cave"),
-    SIGHT("Sight"),
-    MUSEUM("Museum"),
-    HISTORIC("Historic"),
-    VIEWPOINT("Viewpoint"),
-    NATURE("Nature"),
+    PREHISTORY("core_cat_prehistory", "Prehistory / cave"),
+    SIGHT("core_cat_sight", "Sight"),
+    MUSEUM("core_cat_museum", "Museum"),
+    HISTORIC("core_cat_historic", "Historic"),
+    VIEWPOINT("core_cat_viewpoint", "Viewpoint"),
+    NATURE("core_cat_nature", "Nature"),
     /** 1.1.0: waterfalls, springs, hot springs, geysers. */
-    WATER("Waterfall / spring"),
+    WATER("core_cat_water", "Waterfall / spring"),
     /** 1.1.0: national parks, nature reserves, protected areas. */
-    PARK("Nature park"),
+    PARK("core_cat_park", "Nature park"),
     /** 1.1.0: UNESCO World Heritage. */
-    HERITAGE("World Heritage")
+    HERITAGE("core_cat_heritage", "World Heritage");
+
+    /** 1.6.0: in the screen language. */
+    val label: String get() = Txt.s(key, en)
 }
 
 data class TouristPoi(
@@ -61,12 +64,15 @@ data class TouristPoi(
 }
 
 /** 1.2.0: kinds of sights (Settings > Sights), each a set of categories. */
-enum class SightGroup(val label: String, val kinds: Set<TouristCategory>) {
-    PREHISTORY("Prehistory & caves (decorated caves, rock shelters, dolmens, archaeology)", setOf(TouristCategory.PREHISTORY)),
-    HISTORIC("Historic (castles, ruins, monuments, UNESCO)", setOf(TouristCategory.HISTORIC, TouristCategory.HERITAGE)),
-    NATURE("Nature (waterfalls, springs, caves, peaks, viewpoints)", setOf(TouristCategory.NATURE, TouristCategory.WATER, TouristCategory.VIEWPOINT)),
-    PARKS("Parks (national parks, reserves)", setOf(TouristCategory.PARK)),
-    CULTURE("Culture (museums, galleries, zoos, attractions)", setOf(TouristCategory.MUSEUM, TouristCategory.SIGHT));
+enum class SightGroup(private val key: String, private val en: String, val kinds: Set<TouristCategory>) {
+    PREHISTORY("core_group_prehistory", "Prehistory & caves (decorated caves, rock shelters, dolmens, archaeology)", setOf(TouristCategory.PREHISTORY)),
+    HISTORIC("core_group_historic", "Historic (castles, ruins, monuments, UNESCO)", setOf(TouristCategory.HISTORIC, TouristCategory.HERITAGE)),
+    NATURE("core_group_nature", "Nature (waterfalls, springs, caves, peaks, viewpoints)", setOf(TouristCategory.NATURE, TouristCategory.WATER, TouristCategory.VIEWPOINT)),
+    PARKS("core_group_parks", "Parks (national parks, reserves)", setOf(TouristCategory.PARK)),
+    CULTURE("core_group_culture", "Culture (museums, galleries, zoos, attractions)", setOf(TouristCategory.MUSEUM, TouristCategory.SIGHT));
+
+    /** 1.6.0: in the screen language. */
+    val label: String get() = Txt.s(key, en)
 
     companion object {
         /** Saved "HISTORIC,NATURE" -> groups; nothing saved = all. */

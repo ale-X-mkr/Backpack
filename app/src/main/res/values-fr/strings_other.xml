@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1.6.0: on-screen texts of nav, route, places, tourist, search, net, Prefs. -->
+<resources>
+    <string name="other_overpass_timeout">Serveurs de lieux trop lents (délai dépassé)</string>
+    <string name="other_overpass_busy">Serveurs de lieux occupés</string>
+    <string name="other_overpass_offline">Recherche échouée : pas de connexion</string>
+    <string name="other_overpass_bad_answer">Réponse illisible du serveur de lieux</string>
+    <string name="other_places_some_missing">Des lieux peuvent manquer (%1$s)</string>
+    <string name="other_places_failed">Recherche de lieux échouée</string>
+    <string name="other_places_ors_fallback">Serveurs occupés : lieux proches via openrouteservice</string>
+    <string name="other_route_failed">Échec du calcul d\'itinéraire</string>
+    <string name="other_route_no_geometry">Itinéraire reçu sans tracé</string>
+    <string name="other_route_failed_connection">Échec du calcul. Vérifiez la connexion</string>
+    <string name="other_search_failed_connection">Recherche échouée. Vérifiez la connexion</string>
+    <string name="other_search_failed_code">Recherche échouée (erreur %1$d)</string>
+    <string name="other_address_not_found">Adresse introuvable</string>
+    <string name="other_route_no_key">Pas encore de clé. Obtenez votre clé openrouteservice gratuite (2 min)</string>
+    <string name="other_search_coordinates">Coordonnées</string>
+    <string name="other_search_failed">Recherche échouée</string>
+    <string name="other_search_error_http">Erreur de recherche (HTTP %1$d)</string>
+    <string name="other_notif_recalculating">Recalcul de l\'itinéraire…</string>
+    <string name="other_notif_navigation">Navigation</string>
+    <string name="other_notif_starting">Démarrage…</string>
+    <string name="other_notif_running">Backpack est actif</string>
+    <string name="other_notif_running_text">Alertes de vitesse actives en voiture, même écran éteint. Quitter ferme Backpack.</string>
+    <string name="other_notif_exit">Quitter</string>
+    <string name="other_notif_stop">Arrêter</string>
+    <string name="other_notif_arrived">Arrivé</string>
+    <string name="other_notif_off_route">Hors itinéraire</string>
+    <string name="other_notif_head_to_destination">Dirigez-vous vers la destination</string>
+    <string name="other_notif_left_arrive">reste %1$s · arrivée %2$02d:%3$02d</string>
+    <string name="other_notif_channel_desc">Guidage pas à pas pendant la navigation</string>
+    <string name="other_reroute_failed">Échec du recalcul</string>
+    <string name="other_style_bright">Clair</string>
+    <string name="other_style_light_grey">Gris clair</string>
+    <string name="other_style_colorful">Coloré</string>
+    <string name="other_style_dark">Sombre</string>
+</resources>

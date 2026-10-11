@@ -5,6 +5,7 @@ import android.os.Looper
 import com.backpack.app.core.Geocode
 import com.backpack.app.core.LatLon
 import com.backpack.app.core.Place
+import com.backpack.app.core.Txt
 import com.backpack.app.route.RoutePlanner
 import com.backpack.app.tourist.TouristFinder
 import okhttp3.Call
@@ -39,13 +40,13 @@ class SearchClient {
     fun suggest(text: String, near: LatLon?, callback: ResultCallback) {
         Geocode.parseCoordinates(text)?.let { p ->
             cancel()
-            callback.onResult(listOf(Place("%.5f, %.5f".format(p.lat, p.lon), "Coordinates", p)), null)
+            callback.onResult(listOf(Place("%.5f, %.5f".format(p.lat, p.lon), Txt.s("other_search_coordinates", "Coordinates"), p)), null)
             return
         }
         val gen = newGeneration()
         get(Geocode.photonUrl(text, near)) { body, error ->
             val places = body?.let { try { Geocode.parsePhoton(it) } catch (e: Exception) { null } }
-            post(gen) { callback.onResult(places ?: emptyList(), if (places == null) error ?: "Search failed" else null) }
+            post(gen) { callback.onResult(places ?: emptyList(), if (places == null) error ?: Txt.s("other_search_failed", "Search failed") else null) }
         }
     }
 
@@ -53,7 +54,7 @@ class SearchClient {
     fun search(text: String, near: LatLon?, callback: ResultCallback) {
         Geocode.parseCoordinates(text)?.let { p ->
             cancel()
-            callback.onResult(listOf(Place("%.5f, %.5f".format(p.lat, p.lon), "Coordinates", p)), null)
+            callback.onResult(listOf(Place("%.5f, %.5f".format(p.lat, p.lon), Txt.s("other_search_coordinates", "Coordinates"), p)), null)
             return
         }
         val gen = newGeneration()
@@ -68,8 +69,8 @@ class SearchClient {
                 val places = nBody?.let { try { Geocode.parseNominatim(it) } catch (e: Exception) { null } }
                 post(gen) {
                     when {
-                        places == null -> callback.onResult(emptyList(), nError ?: "Search failed -- check the connection")
-                        places.isEmpty() -> callback.onResult(emptyList(), "Address not found")
+                        places == null -> callback.onResult(emptyList(), nError ?: Txt.s("other_search_failed_connection", "Search failed -- check the connection"))
+                        places.isEmpty() -> callback.onResult(emptyList(), Txt.s("other_address_not_found", "Address not found"))
                         else -> callback.onResult(places, null)
                     }
                 }
@@ -95,10 +96,10 @@ class SearchClient {
         )
         inFlight = call
         call.enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) = done(null, "Search failed -- check the connection")
+            override fun onFailure(call: Call, e: IOException) = done(null, Txt.s("other_search_failed_connection", "Search failed -- check the connection"))
             override fun onResponse(call: Call, response: Response) {
                 val body = response.use { if (it.isSuccessful) it.body?.string() else null }
-                done(body, if (body == null) "Search error (HTTP ${response.code})" else null)
+                done(body, if (body == null) Txt.s("other_search_error_http", "Search error (HTTP %1\$d)", response.code) else null)
             }
         })
     }

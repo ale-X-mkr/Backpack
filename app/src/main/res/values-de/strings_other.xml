@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1.6.0: on-screen texts of nav, route, places, tourist, search, net, Prefs. -->
+<resources>
+    <string name="other_overpass_timeout">Orte-Server zu langsam (Zeitüberschreitung)</string>
+    <string name="other_overpass_busy">Orte-Server ausgelastet</string>
+    <string name="other_overpass_offline">Suche fehlgeschlagen: keine Verbindung</string>
+    <string name="other_overpass_bad_answer">Unlesbare Antwort vom Orte-Server</string>
+    <string name="other_places_some_missing">Einige Orte fehlen evtl. (%1$s)</string>
+    <string name="other_places_failed">Ortssuche fehlgeschlagen</string>
+    <string name="other_places_ors_fallback">Server ausgelastet: Orte in der Nähe von openrouteservice</string>
+    <string name="other_route_failed">Routenberechnung fehlgeschlagen</string>
+    <string name="other_route_no_geometry">Route ohne Verlauf erhalten</string>
+    <string name="other_route_failed_connection">Routenberechnung fehlgeschlagen. Verbindung prüfen</string>
+    <string name="other_search_failed_connection">Suche fehlgeschlagen. Verbindung prüfen</string>
+    <string name="other_search_failed_code">Suche fehlgeschlagen (Fehler %1$d)</string>
+    <string name="other_address_not_found">Adresse nicht gefunden</string>
+    <string name="other_route_no_key">Noch kein Schlüssel. Kostenlosen openrouteservice-Schlüssel holen (2 min)</string>
+    <string name="other_search_coordinates">Koordinaten</string>
+    <string name="other_search_failed">Suche fehlgeschlagen</string>
+    <string name="other_search_error_http">Suchfehler (HTTP %1$d)</string>
+    <string name="other_notif_recalculating">Route wird neu berechnet…</string>
+    <string name="other_notif_navigation">Navigation</string>
+    <string name="other_notif_starting">Start…</string>
+    <string name="other_notif_running">Backpack läuft</string>
+    <string name="other_notif_running_text">Tempowarnungen bleiben im Auto aktiv, auch bei ausgeschaltetem Bildschirm. Beenden schließt Backpack.</string>
+    <string name="other_notif_exit">Beenden</string>
+    <string name="other_notif_stop">Stopp</string>
+    <string name="other_notif_arrived">Angekommen</string>
+    <string name="other_notif_off_route">Abseits der Route</string>
+    <string name="other_notif_head_to_destination">Zum Ziel fahren</string>
+    <string name="other_notif_left_arrive">noch %1$s · Ankunft %2$02d:%3$02d</string>
+    <string name="other_notif_channel_desc">Abbiegehinweise während der Navigation</string>
+    <string name="other_reroute_failed">Neuberechnung fehlgeschlagen</string>
+    <string name="other_style_bright">Hell</string>
+    <string name="other_style_light_grey">Hellgrau</string>
+    <string name="other_style_colorful">Bunt</string>
+    <string name="other_style_dark">Dunkel</string>
+</resources>

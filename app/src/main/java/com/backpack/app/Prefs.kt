@@ -1,5 +1,6 @@
 package com.backpack.app
 
+import com.backpack.app.core.Txt
 import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
 import com.backpack.app.core.LatLon
@@ -41,13 +42,14 @@ object Prefs {
     const val STYLE_VT_ECLIPSE = "https://tiles.versatiles.org/assets/styles/eclipse/style.json"
 
     /** Day styles: id -> (label, URL). */
-    val DAY_STYLES = listOf(
-        "liberty" to ("Liberty" to STYLE_LIBERTY), "bright" to ("Bright" to STYLE_BRIGHT),
-        "positron" to ("Light grey" to STYLE_POSITRON), "vt_colorful" to ("Colorful" to STYLE_VT_COLORFUL),
+    /** 1.6.0: descriptive names in the screen language; proper names (Liberty, Graybeard, Fiord, Eclipse) stay. */
+    val DAY_STYLES: List<Pair<String, Pair<String, String>>> get() = listOf(
+        "liberty" to ("Liberty" to STYLE_LIBERTY), "bright" to (Txt.s("other_style_bright", "Bright") to STYLE_BRIGHT),
+        "positron" to (Txt.s("other_style_light_grey", "Light grey") to STYLE_POSITRON), "vt_colorful" to (Txt.s("other_style_colorful", "Colorful") to STYLE_VT_COLORFUL),
         "vt_graybeard" to ("Graybeard" to STYLE_VT_GRAYBEARD)
     )
-    val NIGHT_STYLES = listOf(
-        "dark" to ("Dark" to STYLE_DARK), "fiord" to ("Fiord" to STYLE_FIORD), "vt_eclipse" to ("Eclipse" to STYLE_VT_ECLIPSE)
+    val NIGHT_STYLES: List<Pair<String, Pair<String, String>>> get() = listOf(
+        "dark" to (Txt.s("other_style_dark", "Dark") to STYLE_DARK), "fiord" to ("Fiord" to STYLE_FIORD), "vt_eclipse" to ("Eclipse" to STYLE_VT_ECLIPSE)
     )
 
     fun settings(c: Context) = c.getSharedPreferences(Settings.PREFS_NAME, Context.MODE_PRIVATE)

@@ -3,30 +3,38 @@ package com.backpack.app.core
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class Vehicle(val label: String) {
-    CAR("Car"),
+enum class Vehicle(private val key: String, private val en: String) {
+    CAR("core_vehicle_car", "Car"),
     /** openrouteservice has no motorbike profile: routed as a car. */
-    MOTORBIKE("Motorbike")
+    MOTORBIKE("core_vehicle_motorbike", "Motorbike");
+
+    val label: String get() = Txt.s(key, en)
 }
 
-enum class BikeType(val orsProfile: String, val label: String) {
-    REGULAR("cycling-regular", "City"),
-    ROAD("cycling-road", "Road"),
-    MOUNTAIN("cycling-mountain", "Mountain"),
-    ELECTRIC("cycling-electric", "E-bike")
+enum class BikeType(val orsProfile: String, private val key: String, private val en: String) {
+    REGULAR("cycling-regular", "core_bike_regular", "City"),
+    ROAD("cycling-road", "core_bike_road", "Road"),
+    MOUNTAIN("cycling-mountain", "core_bike_mountain", "Mountain"),
+    ELECTRIC("cycling-electric", "core_bike_electric", "E-bike");
+
+    val label: String get() = Txt.s(key, en)
 }
 
-enum class WalkType(val orsProfile: String, val label: String) {
-    WALK("foot-walking", "Walk"),
-    HIKE("foot-hiking", "Hike")
+enum class WalkType(val orsProfile: String, private val key: String, private val en: String) {
+    WALK("foot-walking", "core_walk_walk", "Walk"),
+    HIKE("foot-hiking", "core_walk_hike", "Hike");
+
+    val label: String get() = Txt.s(key, en)
 }
 
 /** Bike hill tolerance -> ORS steepness_difficulty (0 = avoid hills ... 3 = any). */
-enum class Hills(val steepnessDifficulty: Int, val label: String) {
-    FLAT(0, "Flat"),
-    SOME(1, "Some"),
-    HILLY(2, "Hilly"),
-    ANY(3, "Any")
+enum class Hills(val steepnessDifficulty: Int, private val key: String, private val en: String) {
+    FLAT(0, "core_hills_flat", "Flat"),
+    SOME(1, "core_hills_some", "Some"),
+    HILLY(2, "core_hills_hilly", "Hilly"),
+    ANY(3, "core_hills_any", "Any");
+
+    val label: String get() = Txt.s(key, en)
 }
 
 /**
@@ -108,24 +116,24 @@ data class RouteOptions(
         when (mode) {
             TravelMode.DRIVING -> {
                 if (vehicle != Vehicle.CAR) parts.add(vehicle.label)
-                if (carAvoidMotorways) parts.add("No motorways")
-                if (carAvoidFerries) parts.add("No ferries")
-                if (carAvoidFords) parts.add("No fords")
-                if (carPreferPaved) parts.add("Paved")
+                if (carAvoidMotorways) parts.add(Txt.s("core_opt_no_motorways", "No motorways"))
+                if (carAvoidFerries) parts.add(Txt.s("core_opt_no_ferries", "No ferries"))
+                if (carAvoidFords) parts.add(Txt.s("core_opt_no_fords", "No fords"))
+                if (carPreferPaved) parts.add(Txt.s("core_opt_paved", "Paved"))
             }
             TravelMode.CYCLING -> {
                 parts.add(bikeType.label)
-                parts.add("Hills: ${bikeHills.label}")
-                if (bikeAvoidSteps) parts.add("No steps")
-                if (bikeAvoidFerries) parts.add("No ferries")
-                if (bikePreferPaved) parts.add("Paved")
+                parts.add(Txt.s("core_opt_hills", "Hills: %1\$s", bikeHills.label))
+                if (bikeAvoidSteps) parts.add(Txt.s("core_opt_no_steps", "No steps"))
+                if (bikeAvoidFerries) parts.add(Txt.s("core_opt_no_ferries", "No ferries"))
+                if (bikePreferPaved) parts.add(Txt.s("core_opt_paved", "Paved"))
             }
             TravelMode.WALKING -> {
                 parts.add(walkType.label)
-                if (walkGreen) parts.add("Green")
-                if (walkQuiet) parts.add("Quiet")
-                if (walkAvoidSteps) parts.add("No steps")
-                if (walkAvoidFerries) parts.add("No ferries")
+                if (walkGreen) parts.add(Txt.s("core_opt_green", "Green"))
+                if (walkQuiet) parts.add(Txt.s("core_opt_quiet", "Quiet"))
+                if (walkAvoidSteps) parts.add(Txt.s("core_opt_no_steps", "No steps"))
+                if (walkAvoidFerries) parts.add(Txt.s("core_opt_no_ferries", "No ferries"))
             }
         }
         return parts.joinToString(" · ")

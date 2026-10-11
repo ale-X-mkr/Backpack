@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 1.6.0: on-screen texts of nav, route, places, tourist, search, net, Prefs. -->
+<resources>
+    <string name="other_overpass_timeout">Places servers too slow right now (timeout)</string>
+    <string name="other_overpass_busy">Places servers busy right now</string>
+    <string name="other_overpass_offline">Places search failed -- no connection</string>
+    <string name="other_overpass_bad_answer">Places servers sent an unreadable answer</string>
+    <string name="other_places_some_missing">Some places may be missing (%1$s)</string>
+    <string name="other_places_failed">Places search failed</string>
+    <string name="other_places_ors_fallback">Places servers busy -- showing openrouteservice places nearby</string>
+    <string name="other_route_failed">Route request failed</string>
+    <string name="other_route_no_geometry">Route returned no geometry</string>
+    <string name="other_route_failed_connection">Route request failed -- check the connection</string>
+    <string name="other_search_failed_connection">Search failed -- check the connection</string>
+    <string name="other_search_failed_code">Search failed (error %1$d)</string>
+    <string name="other_address_not_found">Address not found</string>
+    <string name="other_route_no_key">No routing key yet -- get your free openrouteservice key (2 min)</string>
+    <string name="other_search_coordinates">Coordinates</string>
+    <string name="other_search_failed">Search failed</string>
+    <string name="other_search_error_http">Search error (HTTP %1$d)</string>
+    <string name="other_notif_recalculating">Recalculating route…</string>
+    <string name="other_notif_navigation">Navigation</string>
+    <string name="other_notif_starting">Starting…</string>
+    <string name="other_notif_running">Backpack is running</string>
+    <string name="other_notif_running_text">Speed alerts stay on by car, also with the screen off. Exit closes Backpack.</string>
+    <string name="other_notif_exit">Exit</string>
+    <string name="other_notif_stop">Stop</string>
+    <string name="other_notif_arrived">Arrived</string>
+    <string name="other_notif_off_route">Off route</string>
+    <string name="other_notif_head_to_destination">Head to your destination</string>
+    <string name="other_notif_left_arrive">%1$s left · arrive %2$02d:%3$02d</string>
+    <string name="other_notif_channel_desc">Turn-by-turn guidance while navigating</string>
+    <string name="other_reroute_failed">Reroute failed</string>
+    <string name="other_style_bright">Bright</string>
+    <string name="other_style_light_grey">Light grey</string>
+    <string name="other_style_colorful">Colorful</string>
+    <string name="other_style_dark">Dark</string>
+</resources>

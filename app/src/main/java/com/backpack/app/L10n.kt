@@ -30,6 +30,10 @@ object L10n {
         return c.createConfigurationContext(cfg)
     }
 
+    /** A string resource in the screen language (also from the app context or a service). */
+    fun str(c: Context, id: Int, vararg args: Any?): String =
+        if (args.isEmpty()) context(c).getString(id) else context(c).getString(id, *args)
+
     /** Core texts read from the string resources in the screen language. */
     fun install(c: Context) {
         val app = c.applicationContext

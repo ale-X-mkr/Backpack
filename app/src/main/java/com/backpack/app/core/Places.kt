@@ -128,32 +128,32 @@ object Places {
         tags.optString("amenity", "").ifBlank { tags.optString("tourism", "") }.ifBlank { tags.optString("shop", "") }
 
     fun kindLabel(kind: String): String = when (kind) {
-        "fuel" -> "Fuel station"
-        "charging_station" -> "Charging station"
-        "restaurant" -> "Restaurant"
-        "cafe" -> "Café"
-        "fast_food" -> "Fast food"
-        "hotel" -> "Hotel"
-        "guest_house" -> "Guest house"
-        "motel" -> "Motel"
-        "parking" -> "Parking"
-        "toilets" -> "Toilets"
-        "hospital" -> "Hospital"
-        "police" -> "Police"
-        "fire_station" -> "Fire station"
-        "drinking_water" -> "Drinking water"
-        "hostel" -> "Hostel"
-        "camp_site" -> "Campsite"
-        "alpine_hut", "wilderness_hut" -> "Mountain hut"
-        "caravan_site" -> "Caravan site"
-        "laundry" -> "Laundry"
-        "dry_cleaning" -> "Dry cleaning"
-        "pharmacy" -> "Pharmacy"
-        "atm" -> "ATM"
-        "bureau_de_change" -> "Money exchange"
-        "bank" -> "Bank"
-        "bicycle" -> "Bike shop / repair"
-        "" -> "Place"
+        "fuel" -> Txt.s("core_kind_fuel", "Fuel station")
+        "charging_station" -> Txt.s("core_kind_charging_station", "Charging station")
+        "restaurant" -> Txt.s("core_kind_restaurant", "Restaurant")
+        "cafe" -> Txt.s("core_kind_cafe", "Café")
+        "fast_food" -> Txt.s("core_kind_fast_food", "Fast food")
+        "hotel" -> Txt.s("core_kind_hotel", "Hotel")
+        "guest_house" -> Txt.s("core_kind_guest_house", "Guest house")
+        "motel" -> Txt.s("core_kind_motel", "Motel")
+        "parking" -> Txt.s("core_kind_parking", "Parking")
+        "toilets" -> Txt.s("core_kind_toilets", "Toilets")
+        "hospital" -> Txt.s("core_kind_hospital", "Hospital")
+        "police" -> Txt.s("core_kind_police", "Police")
+        "fire_station" -> Txt.s("core_kind_fire_station", "Fire station")
+        "drinking_water" -> Txt.s("core_kind_drinking_water", "Drinking water")
+        "hostel" -> Txt.s("core_kind_hostel", "Hostel")
+        "camp_site" -> Txt.s("core_kind_camp_site", "Campsite")
+        "alpine_hut", "wilderness_hut" -> Txt.s("core_kind_hut", "Mountain hut")
+        "caravan_site" -> Txt.s("core_kind_caravan_site", "Caravan site")
+        "laundry" -> Txt.s("core_kind_laundry", "Laundry")
+        "dry_cleaning" -> Txt.s("core_kind_dry_cleaning", "Dry cleaning")
+        "pharmacy" -> Txt.s("core_kind_pharmacy", "Pharmacy")
+        "atm" -> Txt.s("core_kind_atm", "ATM")
+        "bureau_de_change" -> Txt.s("core_kind_bureau_de_change", "Money exchange")
+        "bank" -> Txt.s("core_kind_bank", "Bank")
+        "bicycle" -> Txt.s("core_kind_bicycle", "Bike shop / repair")
+        "" -> Txt.s("core_kind_place", "Place")
         else -> kind.replace('_', ' ').replaceFirstChar { it.uppercase() }
     }
 

@@ -3,7 +3,9 @@ package com.backpack.app.route
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.backpack.app.L10n
 import com.backpack.app.Prefs
+import com.backpack.app.R
 import com.backpack.app.core.LatLon
 import com.backpack.app.core.Ors
 import com.backpack.app.core.RouteOptions
@@ -111,7 +113,7 @@ class RoutePlanner(context: Context) {
                 cb.onResult(null, when {
                     wt.noKey -> NO_KEY
                     code != null -> Ors.friendlyError(code, wt.body ?: wo.body)
-                    else -> "Route request failed"
+                    else -> L10n.str(app, R.string.other_route_failed)
                 })
             } else {
                 cb.onResult(plan, null)
@@ -160,8 +162,8 @@ class RoutePlanner(context: Context) {
                     planSingle(req, alternatives = false, cb)
                 o.noKey -> cb.onResult(null, NO_KEY)
                 o.httpCode != null -> cb.onResult(null, Ors.friendlyError(o.httpCode, o.body))
-                routes != null -> cb.onResult(null, "Route returned no geometry")
-                else -> cb.onResult(null, "Route request failed -- check the connection")
+                routes != null -> cb.onResult(null, L10n.str(app, R.string.other_route_no_geometry))
+                else -> cb.onResult(null, L10n.str(app, R.string.other_route_failed_connection))
             }
         }
     }
@@ -243,7 +245,7 @@ class RoutePlanner(context: Context) {
         val url = "$search?text=$encoded&size=1$focusPart$keyPart"
         http.newCall(Request.Builder().url(url).build()).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                main.post { callback.onResult(null, null, "Search failed -- check the connection") }
+                main.post { callback.onResult(null, null, L10n.str(app, R.string.other_search_failed_connection)) }
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -253,7 +255,7 @@ class RoutePlanner(context: Context) {
                     return
                 }
                 if (!response.isSuccessful || body == null) {
-                    main.post { callback.onResult(null, null, "Search failed (error ${response.code})") }
+                    main.post { callback.onResult(null, null, L10n.str(app, R.string.other_search_failed_code, response.code)) }
                     return
                 }
                 var point: LatLon? = null
@@ -268,7 +270,7 @@ class RoutePlanner(context: Context) {
                     }
                 } catch (e: Exception) { }
                 main.post {
-                    if (point == null) callback.onResult(null, null, "Address not found")
+                    if (point == null) callback.onResult(null, null, L10n.str(app, R.string.other_address_not_found))
                     else callback.onResult(point, label, null)
                 }
             }
@@ -276,7 +278,13 @@ class RoutePlanner(context: Context) {
     }
 
     companion object {
-        const val NO_KEY = "No routing key yet -- get your free openrouteservice key (2 min)"
+        /** 1.6.0: the "no key" error, in the screen language. RoutePlanner returns
+         *  exactly this text and callers compare with `error == NO_KEY` (both read
+         *  in the same moment, so the language is the same); [isNoKey] also
+         *  accepts the English text. */
+        val NO_KEY: String get() = com.backpack.app.core.Txt.s("other_route_no_key", NO_KEY_EN)
+        private const val NO_KEY_EN = "No routing key yet -- get your free openrouteservice key (2 min)"
+        fun isNoKey(error: String?): Boolean = error != null && (error == NO_KEY || error == NO_KEY_EN)
 
         val http: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)

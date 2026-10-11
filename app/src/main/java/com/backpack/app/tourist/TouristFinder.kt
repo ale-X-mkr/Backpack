@@ -3,6 +3,8 @@ package com.backpack.app.tourist
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.backpack.app.L10n
+import com.backpack.app.R
 import com.backpack.app.core.LatLon
 import com.backpack.app.core.Polyline
 import com.backpack.app.core.Reach
@@ -167,7 +169,7 @@ class TouristFinder(context: Context) {
                         // 1.2.1: Overpass failed: what Wikipedia gave is enough.
                         val list = parsed ?: wiki.ifEmpty { null }
                         if (list == null) {
-                            deliver(null, if (body == null) failure?.message ?: "Places search failed" else OverpassClient.Failure.BAD_ANSWER.message)
+                            deliver(null, if (body == null) failure?.message ?: L10n.str(app, R.string.other_places_failed) else OverpassClient.Failure.BAD_ANSWER.message)
                             return@execute
                         }
                         val inside = (wiki + list).distinctBy { it.identity }.filter { Reach.contains(ring, it.point) }
@@ -434,7 +436,7 @@ class TouristFinder(context: Context) {
                 store.execute {
                     val parsed = body?.let { try { Tourist.parseOverpass(it) } catch (e: Exception) { null } }
                     if (parsed == null) {
-                        outcome.set(if (body == null) failure?.message ?: "Places search failed" else OverpassClient.Failure.BAD_ANSWER.message)
+                        outcome.set(if (body == null) failure?.message ?: L10n.str(app, R.string.other_places_failed) else OverpassClient.Failure.BAD_ANSWER.message)
                     } else {
                         for ((t, list) in Tourist.byTile(parsed, tiles)) {
                             if (extras) cacheX.put(t, Tourist.toJson(list))
