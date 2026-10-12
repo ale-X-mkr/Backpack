@@ -11,7 +11,7 @@ OpenStreetMap maps, nothing from Google, no account, no tracking, no ads.
 - **Maps:** OpenFreeMap / VersaTiles vector maps, day and night styles.
 - **Routes:** avoid motorways, ferries, fords, steps; bike type and hills;
   walk or hike; prefer paved roads; tolls weighed against the value of your
-  time (Weekend / Work / Emergency); a shorter route when it costs only a
+  time (Weekend / Work / Emergency); a shorter or no toll route when it costs only a
   few minutes more.
 - **Speed:** speed ring with the road's limit and alarms, optional fixed
   speed cameras (sound only; France: danger zones only; silent where
