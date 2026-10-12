@@ -110,6 +110,33 @@ object Prefs {
         return (listOf(own) + builtIn).filter { it.isNotEmpty() }.distinct()
     }
 
+    // ---------- 1.7.0: shared starter key (share build), a trial for new users ----------
+
+    private const val KEY_TRIAL = "starter_trial"
+
+    private fun today(): Long = java.time.LocalDate.now().toEpochDay()
+
+    private fun trialState(c: Context) = com.backpack.app.core.StarterTrial.decode(settings(c).getString(KEY_TRIAL, null))
+
+    /** True when routes would go through the shared starter key (no own / built-in key). */
+    fun usesStarterKey(c: Context): Boolean =
+        BuildConfig.ORS_SHARED.isNotEmpty() && orsBaseUrl(c) == DEFAULT_ORS_URL && orsKeys(c).isEmpty()
+
+    fun starterVerdict(c: Context) = com.backpack.app.core.StarterTrial.verdict(trialState(c), today())
+
+    /** One route planned with the starter key. */
+    fun noteStarterRoute(c: Context) {
+        val s = com.backpack.app.core.StarterTrial.after(trialState(c), today())
+        settings(c).edit().putString(KEY_TRIAL, com.backpack.app.core.StarterTrial.encode(s)).apply()
+    }
+
+    /** Keys for route requests: own / built-in ones, else the starter key while the trial lasts. */
+    fun routingKeys(c: Context): List<String> {
+        val keys = orsKeys(c)
+        if (keys.isNotEmpty() || !usesStarterKey(c)) return keys
+        return if (starterVerdict(c) == com.backpack.app.core.StarterTrial.Verdict.OK) listOf(BuildConfig.ORS_SHARED) else emptyList()
+    }
+
     fun routeOptions(c: Context): RouteOptions = RouteOptions.fromJson(toggles(c).getString(KEY_ROUTE_OPTIONS, null))
 
     fun saveRouteOptions(c: Context, o: RouteOptions) {

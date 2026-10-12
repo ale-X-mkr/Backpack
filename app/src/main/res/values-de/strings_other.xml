@@ -35,4 +35,7 @@
     <string name="other_style_light_grey">Hellgrau</string>
     <string name="other_style_colorful">Bunt</string>
     <string name="other_style_dark">Dunkel</string>
+    <string name="other_trial_busy">Testschlüssel ist ausgelastet: eigenen Gratis-Schlüssel holen (2 Min.)</string>
+    <string name="other_trial_daily">Test-Routen für heute aufgebraucht: eigenen Gratis-Schlüssel holen (2 Min.)</string>
+    <string name="other_trial_done">Testphase vorbei: eigenen Gratis-Schlüssel holen (2 Min.)</string>
 </resources>

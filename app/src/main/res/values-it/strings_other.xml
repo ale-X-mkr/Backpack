@@ -35,4 +35,7 @@
     <string name="other_style_light_grey">Grigio chiaro</string>
     <string name="other_style_colorful">Colorato</string>
     <string name="other_style_dark">Scuro</string>
+    <string name="other_trial_busy">Chiave di prova occupata: ottieni la tua chiave gratuita (2 min)</string>
+    <string name="other_trial_daily">Percorsi di prova di oggi esauriti: ottieni la tua chiave gratuita (2 min)</string>
+    <string name="other_trial_done">Prova finita: ottieni la tua chiave gratuita (2 min)</string>
 </resources>

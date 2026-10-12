@@ -315,9 +315,10 @@ class MainActivity : AppCompatActivity() {
 
         setupAddressSearch()
         // 1.5.0: first start without any routing key: the key guide, once.
-        if (Prefs.orsKeys(this).isEmpty() && !Prefs.settings(this).getBoolean(KEY_GUIDE_SHOWN, false)) {
+        // 1.7.0: not while the shared starter key's trial lasts (the guide comes when it ends).
+        if (Prefs.routingKeys(this).isEmpty() && !Prefs.settings(this).getBoolean(KEY_GUIDE_SHOWN, false)) {
             handler.postDelayed({
-                if (!isFinishing && Prefs.orsKeys(this).isEmpty()) {
+                if (!isFinishing && Prefs.routingKeys(this).isEmpty()) {
                     Prefs.settings(this).edit().putBoolean(KEY_GUIDE_SHOWN, true).apply()
                     showKeyGuide()
                 }

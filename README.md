@@ -1,4 +1,4 @@
-# Backpack 1.6.0
+# Backpack 1.7.0
 
 Private GPS navigation for Android, for travellers and backpackers.
 OpenStreetMap maps, nothing from Google, no account, no tracking, no ads.
@@ -32,8 +32,10 @@ culture, parks and viewpoints, with your own detour and distance settings.
 
 ## Routing key
 Routes come from [openrouteservice](https://openrouteservice.org) (HeiGIT,
-non-profit). Each person uses their own free key: the app's key guide opens
-the sign-up page, picks up the copied key and checks it (2–3 minutes).
+non-profit). New users of the shared APK get a starter trial (30 days or
+200 routes, 40 a day); after that each person uses their own free key: the
+app's key guide opens the sign-up page, picks up the copied key and checks
+it (2–3 minutes).
 Settings ▸ Advanced also accepts your own routing server.
 
 ## Building

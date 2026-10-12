@@ -35,4 +35,7 @@
     <string name="other_style_light_grey">Gris clair</string>
     <string name="other_style_colorful">Coloré</string>
     <string name="other_style_dark">Sombre</string>
+    <string name="other_trial_busy">Clé d\'essai occupée : obtenez votre clé gratuite (2 min)</string>
+    <string name="other_trial_daily">Itinéraires d\'essai du jour épuisés : obtenez votre clé gratuite (2 min)</string>
+    <string name="other_trial_done">Essai terminé : obtenez votre clé gratuite (2 min)</string>
 </resources>

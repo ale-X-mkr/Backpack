@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.backpack.app.L10n
+import com.backpack.app.BuildConfig
 import com.backpack.app.Prefs
 import com.backpack.app.R
 import com.backpack.app.core.LatLon
@@ -52,10 +53,20 @@ class RoutePlanner(context: Context) {
 
     fun cancel() { generation++ }
 
+    /** 1.7.0: a reroute mid-trip may use the starter key past the trial (never strand a driver). */
+    @Volatile private var starterReroute = false
+
     fun plan(req: RouteRequest, callback: PlanCallback) {
         val gen = ++generation
         val deliver = PlanCallback { plan, error ->
             main.post { if (gen == generation) callback.onResult(plan, error) }
+        }
+        starterReroute = false
+        // 1.7.0: the shared starter key: counted per route; past the trial, the key guide.
+        if (Prefs.usesStarterKey(app)) {
+            val v = Prefs.starterVerdict(app)
+            if (v != com.backpack.app.core.StarterTrial.Verdict.OK) { deliver.onResult(null, trialMessage(v)); return }
+            Prefs.noteStarterRoute(app)
         }
         if (req.mode == TravelMode.DRIVING && req.preference == RoutePreference.RECOMMENDED && !req.avoidTolls) {
             planBalanced(req, deliver)
@@ -76,10 +87,27 @@ class RoutePlanner(context: Context) {
         }
         val balanced = req.mode == TravelMode.DRIVING && req.preference == RoutePreference.RECOMMENDED && !req.avoidTolls
         val r = if (balanced) req.copy(avoidTolls = !followedHasTolls) else req
+        starterReroute = true
+        if (Prefs.usesStarterKey(app)) Prefs.noteStarterRoute(app)
         planSingle(r, alternatives = false, deliver)
     }
 
-    private class Outcome(val routes: List<RouteResult>?, val httpCode: Int?, val body: String?, val failed: Boolean = false, val noKey: Boolean = false)
+    private class Outcome(val routes: List<RouteResult>?, val httpCode: Int?, val body: String?, val failed: Boolean = false, val noKey: Boolean = false,
+        /** 1.7.0: the shared starter key was refused or busy. */
+        val starterBusy: Boolean = false)
+
+    /** No usable key: why, in words (starter key busy / trial over / no key at all). */
+    private fun noKeyMessage(o: Outcome): String = when {
+        o.starterBusy -> L10n.str(app, R.string.other_trial_busy)
+        Prefs.usesStarterKey(app) -> trialMessage(Prefs.starterVerdict(app))
+        else -> NO_KEY
+    }
+
+    private fun trialMessage(v: com.backpack.app.core.StarterTrial.Verdict): String = when (v) {
+        com.backpack.app.core.StarterTrial.Verdict.DAILY_LIMIT -> L10n.str(app, R.string.other_trial_daily)
+        com.backpack.app.core.StarterTrial.Verdict.OK -> NO_KEY
+        else -> L10n.str(app, R.string.other_trial_done)
+    }
 
     private fun planBalanced(req: RouteRequest, cb: PlanCallback) {
         val lock = Any()
@@ -111,7 +139,7 @@ class RoutePlanner(context: Context) {
             if (plan == null) {
                 val code = wt.httpCode ?: wo.httpCode
                 cb.onResult(null, when {
-                    wt.noKey -> NO_KEY
+                    wt.noKey -> noKeyMessage(wt)
                     code != null -> Ors.friendlyError(code, wt.body ?: wo.body)
                     else -> L10n.str(app, R.string.other_route_failed)
                 })
@@ -160,7 +188,7 @@ class RoutePlanner(context: Context) {
                 }
                 alternatives && !o.failed && o.httpCode != null && o.httpCode !in setOf(401, 403, 429) ->
                     planSingle(req, alternatives = false, cb)
-                o.noKey -> cb.onResult(null, NO_KEY)
+                o.noKey -> cb.onResult(null, noKeyMessage(o))
                 o.httpCode != null -> cb.onResult(null, Ors.friendlyError(o.httpCode, o.body))
                 routes != null -> cb.onResult(null, L10n.str(app, R.string.other_route_no_geometry))
                 else -> cb.onResult(null, L10n.str(app, R.string.other_route_failed_connection))
@@ -176,7 +204,9 @@ class RoutePlanner(context: Context) {
         keyIndex: Int = 0,
         done: (Outcome) -> Unit
     ) {
-        val keys = Prefs.orsKeys(app)
+        val keys = Prefs.routingKeys(app).ifEmpty {
+            if (starterReroute && Prefs.usesStarterKey(app)) listOf(BuildConfig.ORS_SHARED) else emptyList()
+        }
         val baseUrl = Prefs.orsBaseUrl(app)
         // A self-hosted ORS server may need no key at all.
         if (keys.isEmpty() && baseUrl == Prefs.DEFAULT_ORS_URL) {
@@ -214,6 +244,12 @@ class RoutePlanner(context: Context) {
                 // Key refused or daily quota used: try the next key.
                 if ((response.code == 401 || response.code == 403) && keyIndex + 1 < keys.size) {
                     fetch(req, preference, avoidTolls, alternatives, keyIndex + 1, done)
+                    return
+                }
+                // 1.7.0: the shared starter key refused, out of quota or busy: own key.
+                val usedStarter = keys.getOrNull(keyIndex) == BuildConfig.ORS_SHARED && BuildConfig.ORS_SHARED.isNotEmpty()
+                if (usedStarter && response.code in setOf(401, 403, 429)) {
+                    done(Outcome(null, null, text, failed = true, noKey = true, starterBusy = true))
                     return
                 }
                 if (!response.isSuccessful || text == null) {
@@ -284,7 +320,13 @@ class RoutePlanner(context: Context) {
          *  accepts the English text. */
         val NO_KEY: String get() = com.backpack.app.core.Txt.s("other_route_no_key", NO_KEY_EN)
         private const val NO_KEY_EN = "No routing key yet -- get your free openrouteservice key (2 min)"
-        fun isNoKey(error: String?): Boolean = error != null && (error == NO_KEY || error == NO_KEY_EN)
+        fun isNoKey(error: String?): Boolean = error != null && (error == NO_KEY || error == NO_KEY_EN ||
+            error == com.backpack.app.core.Txt.s("other_trial_busy", TRIAL_BUSY_EN) ||
+            error == com.backpack.app.core.Txt.s("other_trial_daily", TRIAL_DAILY_EN) ||
+            error == com.backpack.app.core.Txt.s("other_trial_done", TRIAL_DONE_EN))
+        private const val TRIAL_BUSY_EN = "The shared starter key is busy right now -- get your own free key (2 min)"
+        private const val TRIAL_DAILY_EN = "Today\u2019s free trial routes are used up -- get your own free key (2 min)"
+        private const val TRIAL_DONE_EN = "Your free trial is over -- get your own free key (2 min)"
 
         val http: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)

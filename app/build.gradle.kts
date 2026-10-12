@@ -23,10 +23,12 @@ android {
         applicationId = "com.backpack.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 32
-        versionName = "1.6.0"
+        versionCode = 33
+        versionName = "1.7.0"
         buildConfigField("String", "ORS_KEY_1", "\"${localProp("ors.key1")}\"")
         buildConfigField("String", "ORS_KEY_2", "\"${localProp("ors.key2")}\"")
+        // 1.7.0: shared starter key, only in the "share" build (trial for new users).
+        buildConfigField("String", "ORS_SHARED", "\"\"")
     }
 
     buildFeatures {
@@ -68,6 +70,8 @@ android {
             matchingFallbacks += listOf("release")
             buildConfigField("String", "ORS_KEY_1", "\"\"")
             buildConfigField("String", "ORS_KEY_2", "\"\"")
+            // 1.7.0: the shared starter key (local.properties: ors.shared=...), trial only.
+            buildConfigField("String", "ORS_SHARED", "\"${localProp("ors.shared")}\"")
         }
     }
 

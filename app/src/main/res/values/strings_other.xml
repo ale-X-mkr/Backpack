@@ -35,4 +35,7 @@
     <string name="other_style_light_grey">Light grey</string>
     <string name="other_style_colorful">Colorful</string>
     <string name="other_style_dark">Dark</string>
+    <string name="other_trial_busy">The shared starter key is busy right now -- get your own free key (2 min)</string>
+    <string name="other_trial_daily">Today\u2019s free trial routes are used up -- get your own free key (2 min)</string>
+    <string name="other_trial_done">Your free trial is over -- get your own free key (2 min)</string>
 </resources>
