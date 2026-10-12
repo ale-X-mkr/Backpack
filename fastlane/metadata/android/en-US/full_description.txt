@@ -1,12 +1,14 @@
-Backpack is a private turn-by-turn navigation app for walking, cycling and driving.
+Backpack is a private turn-by-turn navigation app for walking, cycling and driving, made for travellers and backpackers.
 
-* Maps: OpenFreeMap vector maps (OpenStreetMap data), day and night styles.
+* Maps: OpenFreeMap / VersaTiles vector maps (OpenStreetMap data), day and night styles.
 * Position: the phone's GPS chip only. No Google Play Services, no Google servers.
-* Routing: openrouteservice (your own free key, or your own server).
+* Spoken instructions and screen in English, Spanish, French, Italian and German.
+* Routing: openrouteservice with your own free key (an in-app guide gets it in 2-3 minutes), or your own server.
 * Route options: avoid motorways, ferries, fords, steps; bike type and hills; walk or hike; prefer paved roads.
 * Tolls: estimated toll cost weighed against the value of your time (Weekend / Work / Emergency).
-* Speed sign with the road's limit and alarms, loaded for the road ahead of your route.
-* Well-known places along your route (Wikidata-ranked), add them as a stop or a short detour.
-* Everyday places: fuel and charging, food, lodging, parking, toilets, emergency.
+* Speed ring with the road's limit and alarms; optional fixed speed cameras (sound only, following each country's law).
+* Well-known places along your route (Wikipedia / Wikidata), voice tips and readings, add them as a stop.
+* Everyday services: fuel and charging, food, lodging, parking, toilets, water, pharmacy, emergency.
+* Resume a stopped navigation, record your track, save trips as GPX.
 * Places are fetched per ~5 km map square and kept on the phone: servers never see your route line.
 * No account, no tracking, no ads.
