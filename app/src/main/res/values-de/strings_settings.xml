@@ -156,4 +156,5 @@
     <string name="keyg_ok">✓ Schlüssel gültig, gespeichert. Routen jetzt möglich.</string>
     <string name="keyg_refused">openrouteservice lehnt den Schlüssel ab. Bitte vollständig neu kopieren.</string>
     <string name="keyg_unreachable">Gespeichert, nicht geprüft (keine Verbindung?). Gilt ab der nächsten Route.</string>
+    <string name="set_cr_license">Backpack ist freie Software (GNU GPL v3): Quellcode auf GitHub.</string>
 </resources>

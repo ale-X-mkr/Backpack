@@ -349,6 +349,8 @@ object SettingsPopup {
      */
     private fun creditsPage(c: Context, p: Popup) {
         p.text(c.getString(R.string.set_credits_intro))
+        // 1.6.0: Backpack's own licence and source.
+        p.link(c.getString(R.string.set_cr_license), "https://github.com/ale-X-mkr/Backpack", 12f)
         fun source(name: String, what: String, site: String, donate: String?) {
             p.section(name)
             p.text(what, 12f)

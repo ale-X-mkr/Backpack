@@ -156,4 +156,5 @@
     <string name="keyg_ok">✓ Key works, saved. You can plan routes now.</string>
     <string name="keyg_refused">openrouteservice refused this key. Copy it again from your account (the whole key).</string>
     <string name="keyg_unreachable">Saved, but it couldn\'t be checked now (no connection?). It will be used for the next route.</string>
+    <string name="set_cr_license">Backpack is free software under the GNU GPL version 3: source code on GitHub.</string>
 </resources>

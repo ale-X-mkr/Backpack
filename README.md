@@ -39,6 +39,11 @@ Android Studio, JDK 17. Keys are never in the source: put them in
 `local.properties` (`ors.key1=...`, `ors.key2=...`). The **share** build
 variant builds an APK without your keys (for giving to others).
 
+## Licence
+Backpack is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License version 3 (or, at your option,
+any later version). See [LICENSE](LICENSE).
+
 ## Credits
 Map data © OpenStreetMap contributors (ODbL). MapLibre, OpenFreeMap,
 VersaTiles, openrouteservice, Overpass API, Photon, Wikipedia / Wikidata,

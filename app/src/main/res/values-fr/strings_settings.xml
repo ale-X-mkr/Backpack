@@ -156,4 +156,5 @@
     <string name="keyg_ok">✓ Clé valide, enregistrée. Vous pouvez planifier.</string>
     <string name="keyg_refused">openrouteservice a refusé la clé. Recopiez-la en entier.</string>
     <string name="keyg_unreachable">Enregistrée, non vérifiée (pas de connexion ?). Utilisée au prochain itinéraire.</string>
+    <string name="set_cr_license">Backpack est un logiciel libre (GNU GPL v3) : code sur GitHub.</string>
 </resources>

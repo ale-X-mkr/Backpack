@@ -156,4 +156,5 @@
     <string name="keyg_ok">✓ Chiave valida, salvata. Puoi pianificare percorsi.</string>
     <string name="keyg_refused">openrouteservice ha rifiutato la chiave. Ricopiala intera.</string>
     <string name="keyg_unreachable">Salvata, non verificata (niente rete?). Sarà usata al prossimo percorso.</string>
+    <string name="set_cr_license">Backpack è software libero (GNU GPL v3): codice su GitHub.</string>
 </resources>

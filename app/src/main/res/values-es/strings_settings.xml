@@ -156,4 +156,5 @@
     <string name="keyg_ok">✓ Clave válida y guardada. Ya puede planear rutas.</string>
     <string name="keyg_refused">openrouteservice rechazó la clave. Cópiela de nuevo completa.</string>
     <string name="keyg_unreachable">Guardada, sin comprobar (¿sin conexión?). Se usará en la próxima ruta.</string>
+    <string name="set_cr_license">Backpack es software libre (GNU GPL v3): código en GitHub.</string>
 </resources>
