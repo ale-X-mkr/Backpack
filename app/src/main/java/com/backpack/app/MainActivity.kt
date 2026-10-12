@@ -1393,7 +1393,7 @@ class MainActivity : AppCompatActivity() {
     // ---------- Tourist mode ----------
 
     private val touristFinder by lazy { TouristFinder(this) }
-    private val detourPlanner by lazy { RoutePlanner(this) }
+    private val detourPlanner by lazy { RoutePlanner(this).apply { countsForTrial = false } }
     /** Well-known places are shown in Weekend mode or with the Sights POI category. */
     private val touristOn: Boolean
         // 1.0.9: Weekend's default layer, or the Sights category; never in Emergency (no distractions).
@@ -4054,8 +4054,8 @@ class MainActivity : AppCompatActivity() {
     private var altReviewRequests: Map<Int, RouteRequest>
         get() = TripState.altReviewRequests
         set(v) { TripState.altReviewRequests = v }
-    private val altPlannerA by lazy { RoutePlanner(this) }
-    private val altPlannerB by lazy { RoutePlanner(this) }
+    private val altPlannerA by lazy { RoutePlanner(this).apply { countsForTrial = false } }
+    private val altPlannerB by lazy { RoutePlanner(this).apply { countsForTrial = false } }
 
     private fun setupAltRouteButton() {
         findViewById<ImageButton>(R.id.alt_route_button).apply {

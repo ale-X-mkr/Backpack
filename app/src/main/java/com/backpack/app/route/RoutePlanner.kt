@@ -55,18 +55,35 @@ class RoutePlanner(context: Context) {
 
     /** 1.7.0: a reroute mid-trip may use the starter key past the trial (never strand a driver). */
     @Volatile private var starterReroute = false
+    /** 1.7.0: this plan was admitted to the starter key's trial (decided once, in [plan]). */
+    @Volatile private var starterAdmitted = false
+    /** 1.7.0: false for background planners (detour estimates, "find alternative"):
+     *  they may use the starter key during the trial but never count against it. */
+    var countsForTrial = true
 
     fun plan(req: RouteRequest, callback: PlanCallback) {
         val gen = ++generation
-        val deliver = PlanCallback { plan, error ->
-            main.post { if (gen == generation) callback.onResult(plan, error) }
-        }
         starterReroute = false
-        // 1.7.0: the shared starter key: counted per route; past the trial, the key guide.
+        starterAdmitted = false
+        var count = false
+        // 1.7.0: the shared starter key: one route counted per route found; past the trial, the key guide.
         if (Prefs.usesStarterKey(app)) {
             val v = Prefs.starterVerdict(app)
-            if (v != com.backpack.app.core.StarterTrial.Verdict.OK) { deliver.onResult(null, trialMessage(v)); return }
-            Prefs.noteStarterRoute(app)
+            if (v != com.backpack.app.core.StarterTrial.Verdict.OK) {
+                val msg = trialMessage(v)
+                main.post { if (gen == generation) callback.onResult(null, msg) }
+                return
+            }
+            starterAdmitted = true
+            count = countsForTrial
+        }
+        val deliver = PlanCallback { plan, error ->
+            main.post {
+                if (gen == generation) {
+                    if (count && plan != null) Prefs.noteStarterRoute(app)
+                    callback.onResult(plan, error)
+                }
+            }
         }
         if (req.mode == TravelMode.DRIVING && req.preference == RoutePreference.RECOMMENDED && !req.avoidTolls) {
             planBalanced(req, deliver)
@@ -82,13 +99,18 @@ class RoutePlanner(context: Context) {
      */
     fun reroute(req: RouteRequest, followedHasTolls: Boolean, callback: PlanCallback) {
         val gen = ++generation
+        val count = Prefs.usesStarterKey(app)
         val deliver = PlanCallback { plan, error ->
-            main.post { if (gen == generation) callback.onResult(plan, error) }
+            main.post {
+                if (gen == generation) {
+                    if (count && plan != null) Prefs.noteStarterRoute(app)
+                    callback.onResult(plan, error)
+                }
+            }
         }
         val balanced = req.mode == TravelMode.DRIVING && req.preference == RoutePreference.RECOMMENDED && !req.avoidTolls
         val r = if (balanced) req.copy(avoidTolls = !followedHasTolls) else req
         starterReroute = true
-        if (Prefs.usesStarterKey(app)) Prefs.noteStarterRoute(app)
         planSingle(r, alternatives = false, deliver)
     }
 
@@ -204,8 +226,8 @@ class RoutePlanner(context: Context) {
         keyIndex: Int = 0,
         done: (Outcome) -> Unit
     ) {
-        val keys = Prefs.routingKeys(app).ifEmpty {
-            if (starterReroute && Prefs.usesStarterKey(app)) listOf(BuildConfig.ORS_SHARED) else emptyList()
+        val keys = Prefs.orsKeys(app).ifEmpty {
+            if ((starterAdmitted || starterReroute) && Prefs.usesStarterKey(app)) listOf(BuildConfig.ORS_SHARED) else emptyList()
         }
         val baseUrl = Prefs.orsBaseUrl(app)
         // A self-hosted ORS server may need no key at all.
