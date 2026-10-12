@@ -2,6 +2,8 @@
 
 Private GPS navigation for Android, for travellers and backpackers.
 OpenStreetMap maps, nothing from Google, no account, no tracking, no ads.
+Live suggestions on the road and on the map: prehistory, history, nature,
+culture, parks and viewpoints, with your own detour and distance settings.
 
 ## What it does
 - **Navigation** for walking, cycling and driving, with spoken turn-by-turn
@@ -11,7 +13,7 @@ OpenStreetMap maps, nothing from Google, no account, no tracking, no ads.
 - **Maps:** OpenFreeMap / VersaTiles vector maps, day and night styles.
 - **Routes:** avoid motorways, ferries, fords, steps; bike type and hills;
   walk or hike; prefer paved roads; tolls weighed against the value of your
-  time (Weekend / Work / Emergency); a shorter or no toll route when it costs only a
+  time (Weekend / Work / Emergency); a shorter or toll-free route when it costs only a
   few minutes more.
 - **Speed:** speed ring with the road's limit and alarms, optional fixed
   speed cameras (sound only; France: danger zones only; silent where
