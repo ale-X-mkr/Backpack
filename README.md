@@ -1,4 +1,4 @@
-# Backpack 1.7.0
+# Backpack 1.7.2
 
 Private GPS navigation for Android, for travellers and backpackers.
 OpenStreetMap maps, nothing from Google, no account, no tracking, no ads.
@@ -15,11 +15,13 @@ culture, parks and viewpoints, with your own detour and distance settings.
   walk or hike; prefer paved roads; tolls weighed against the value of your
   time (Weekend / Work / Emergency); a shorter or toll-free route when it costs only a
   few minutes more.
-- **Speed:** speed ring with the road's limit and alarms, optional fixed
-  speed cameras (sound only; France: danger zones only; silent where
+- **Speed:** speed ring with the road's limit; the ring flashes red with the
+  over-speed beep and blue with the too-slow buzz on fast roads; optional
+  fixed speed cameras (sound only; France: danger zones only; silent where
   warnings are illegal).
 - **Sights:** well-known places along your route (Wikipedia / Wikidata),
-  tips while driving, Wikipedia readings, add a sight as a stop.
+  tips while driving with a card to go there or hear the place read aloud
+  (also for the summaries of several places), add a sight as a stop.
 - **Services:** fuel and charging, food, lodging, parking, toilets, water,
   pharmacy, emergency… along the route or around you.
 - **Trips:** resume a navigation you stopped, record your track, save as GPX.

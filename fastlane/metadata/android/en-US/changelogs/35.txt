@@ -1,0 +1,5 @@
+* Bigger buttons (+15 %), speed circle and messages (+10 %); messages centred.
+* Route choices on the right, growing upward.
+* Speed circle fitted in the corner of the rounded instruction box.
+* Speed ring flashes red with the over-speed beep, blue with the too-slow buzz; continuous when far off.
+* Sight summaries with Read aloud; sight card time 10 / 15 / 20 s (Settings > Sights).
