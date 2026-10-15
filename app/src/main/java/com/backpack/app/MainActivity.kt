@@ -2703,7 +2703,8 @@ class MainActivity : AppCompatActivity() {
         )
         if (navUiActive) {
             routeInfo.background = null
-            routeInfo.setPadding(0, 0, 0, 0)
+            // 1.7.2: clear of the box's round bottom corners.
+            routeInfo.setPadding(dp(12), 0, dp(12), 0)
         } else {
             lp.topMargin = dp(4)
             lp.gravity = android.view.Gravity.CENTER_HORIZONTAL
@@ -2980,8 +2981,9 @@ class MainActivity : AppCompatActivity() {
             statusStrip.maxLines = 1
         }
 
-        // Speed circle: fitted in the box's top-right corner (39 dp corners =
-        // circle radius 35 + frame 4); 1.7.2: the same spot without the box.
+        // Speed circle: fitted in the box's top-right corner (outer curve 39 dp
+        // = circle radius 35 + frame 4; the drawable's 37 dp is the stroke's
+        // centre line); 1.7.2: the same spot without the box.
         val boxTop = if (circleInBox && boxShown) (navBox.top / density).toInt() else NAV_BOX_TOP_DP
         setMargins(R.id.speed_widget, top = boxTop + 4, end = circleEnd)
         placeLimitSign(signTopDp = 0)
