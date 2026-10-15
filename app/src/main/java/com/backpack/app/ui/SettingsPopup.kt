@@ -319,6 +319,16 @@ object SettingsPopup {
         }
         intField(p, prefs, c.getString(R.string.set_headsup_min), Settings.KEY_SIGHT_HEADSUP_MIN, Settings.DEFAULT_SIGHT_HEADSUP_MIN, 1, 15)
         p.text(c.getString(R.string.set_headsup_help), 11f)
+        // 1.7.1: how long the card stays; summaries as a card with Read aloud.
+        p.text(c.getString(R.string.set_card_time), 13f)
+        val secs = Settings.SIGHT_CARD_CHOICES.map { it to "$it s" }
+        p.choices(secs, { it.second }, {
+            val cur = prefs.getInt(Settings.KEY_SIGHT_CARD_S, Settings.DEFAULT_SIGHT_CARD_S)
+            secs.firstOrNull { it.first == cur } ?: secs[1]
+        }) { prefs.edit().putInt(Settings.KEY_SIGHT_CARD_S, it.first).apply() }
+        p.toggle(c.getString(R.string.set_summary_read), { prefs.getBoolean(Settings.KEY_SIGHT_SUMMARY_READ, true) }) {
+            prefs.edit().putBoolean(Settings.KEY_SIGHT_SUMMARY_READ, it).apply()
+        }
         p.section(c.getString(R.string.set_sights_route))
         intField(p, prefs, pct(c, R.string.set_sights_max), Settings.KEY_SIGHTS_MAX_PCT, Settings.DEFAULT_SIGHTS_MAX_PCT, 0, 100)
         p.text(c.getString(R.string.set_sights_max_help), 11f)

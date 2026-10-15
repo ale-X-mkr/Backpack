@@ -192,4 +192,7 @@
     <string name="main_route_changed_meanwhile">Itinéraire modifié : touchez à nouveau</string>
     <string name="main_no_other_route">Aucun autre itinéraire</string>
     <string name="main_nav_paused_compare">Navigation en pause · touchez un itinéraire pour comparer, Go pour partir</string>
+    <string name="main_card_go">Y aller</string>
+    <string name="main_card_read">▶ Lire</string>
+    <string name="main_card_stop">■ Arrêter</string>
 </resources>

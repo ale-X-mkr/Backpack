@@ -176,19 +176,19 @@
         android:orientation="vertical">
 
         <FrameLayout
-            android:layout_width="72dp"
-            android:layout_height="38dp"
+            android:layout_width="78dp"
+            android:layout_height="44dp"
             android:clipChildren="false">
 
             <ImageButton
                 android:id="@+id/mode_toggle_button"
                 android:scaleType="fitCenter"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:layout_gravity="start"
                 android:src="@drawable/ic_mode_walking"
                 android:background="@drawable/icon_backdrop"
-                android:padding="4dp"
+                android:padding="5dp"
                 android:contentDescription="Travel mode"
                 android:elevation="0dp"
                 android:stateListAnimator="@null" />
@@ -196,10 +196,10 @@
             <ImageButton
                 android:id="@+id/toll_toggle"
                 android:scaleType="fitCenter"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:layout_gravity="start|center_vertical"
-                android:layout_marginStart="39dp"
+                android:layout_marginStart="45dp"
                 android:src="@drawable/ic_toll_on"
                 android:background="@drawable/icon_backdrop"
                 android:padding="3dp"
@@ -214,20 +214,20 @@
              right turns sights on or off (like the toll switch next to Car). -->
         <FrameLayout
             android:id="@+id/urgency_row"
-            android:layout_width="72dp"
-            android:layout_height="38dp"
+            android:layout_width="78dp"
+            android:layout_height="44dp"
             android:layout_marginTop="15dp"
             android:clipChildren="false">
 
             <ImageButton
                 android:id="@+id/urgency_button"
                 android:scaleType="fitCenter"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:layout_gravity="start"
                 android:src="@drawable/ic_urgency_weekend"
                 android:background="@drawable/icon_backdrop"
-                android:padding="4dp"
+                android:padding="5dp"
                 android:contentDescription="@string/urgency_label"
                 android:elevation="0dp"
                 android:stateListAnimator="@null" />
@@ -235,10 +235,10 @@
             <ImageButton
                 android:id="@+id/sights_toggle"
                 android:scaleType="fitCenter"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
                 android:layout_gravity="start|center_vertical"
-                android:layout_marginStart="39dp"
+                android:layout_marginStart="45dp"
                 android:src="@drawable/ic_sights_off"
                 android:background="@drawable/icon_backdrop"
                 android:padding="3dp"
@@ -252,20 +252,20 @@
         <!-- 1.2.0 Backpack = services (multi-select); a small count of those on. -->
         <FrameLayout
             android:id="@+id/poi_row"
-            android:layout_width="72dp"
-            android:layout_height="38dp"
+            android:layout_width="78dp"
+            android:layout_height="44dp"
             android:layout_marginTop="15dp"
             android:clipChildren="false">
 
             <ImageButton
                 android:id="@+id/poi_toggle_button"
                 android:scaleType="fitCenter"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:layout_gravity="start"
                 android:src="@drawable/ic_backpack"
                 android:background="@drawable/icon_backdrop"
-                android:padding="4dp"
+                android:padding="5dp"
                 android:contentDescription="Backpack: services"
                 android:elevation="0dp"
                 android:stateListAnimator="@null" />
@@ -275,7 +275,7 @@
                 android:layout_width="16dp"
                 android:layout_height="16dp"
                 android:layout_gravity="start|top"
-                android:layout_marginStart="27dp"
+                android:layout_marginStart="33dp"
                 android:layout_marginTop="-3dp"
                 android:background="@drawable/count_badge"
                 android:gravity="center"
@@ -310,7 +310,7 @@
             android:maxLines="2"
             android:ellipsize="end"
             android:textColor="@color/backpack_ink"
-            android:textSize="16sp"
+            android:textSize="17.5sp"
             android:textStyle="bold" />
 
         <TextView
@@ -318,8 +318,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
+            android:maxLines="2"
+            android:ellipsize="end"
             android:textColor="@color/backpack_ink"
-            android:textSize="13sp" />
+            android:textSize="14.5sp" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -334,9 +336,9 @@
                 android:background="@drawable/route_pill_background"
                 android:paddingHorizontal="14dp"
                 android:paddingVertical="7dp"
-                android:text="Go there"
+                android:text="@string/main_card_go"
                 android:textColor="@color/backpack_ink"
-                android:textSize="14sp"
+                android:textSize="15.5sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -347,9 +349,9 @@
                 android:background="@drawable/route_pill_background"
                 android:paddingHorizontal="14dp"
                 android:paddingVertical="7dp"
-                android:text="▶ Read aloud"
+                android:text="@string/main_card_read"
                 android:textColor="@color/backpack_ink"
-                android:textSize="14sp"
+                android:textSize="15.5sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
@@ -360,14 +362,14 @@
     <ImageButton
         android:id="@+id/locate_button"
         android:scaleType="fitCenter"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="113dp"
         android:layout_marginEnd="8dp"
         android:src="@drawable/ic_location_marker"
         android:background="@drawable/icon_backdrop"
-        android:padding="7dp"
+        android:padding="8dp"
         android:contentDescription="@string/locate_button_label"
         android:elevation="0dp"
         android:stateListAnimator="@null" />
@@ -376,14 +378,14 @@
     <ImageButton
         android:id="@+id/waypoint_button"
         android:scaleType="fitCenter"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="166dp"
         android:layout_marginEnd="8dp"
         android:src="@drawable/ic_waypoint"
         android:background="@drawable/icon_backdrop"
-        android:padding="4dp"
+        android:padding="5dp"
         android:contentDescription="Add a stop along the route"
         android:elevation="0dp"
         android:stateListAnimator="@null" />
@@ -392,14 +394,14 @@
     <ImageButton
         android:id="@+id/preference_toggle_button"
         android:scaleType="fitCenter"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="219dp"
         android:layout_marginEnd="8dp"
         android:src="@drawable/ic_pref_fastest"
         android:background="@drawable/icon_backdrop"
-        android:padding="4dp"
+        android:padding="5dp"
         android:contentDescription="Route preference"
         android:elevation="0dp"
         android:stateListAnimator="@null" />
@@ -409,14 +411,14 @@
     <ImageButton
         android:id="@+id/route_options_button"
         android:scaleType="fitCenter"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:layout_gravity="top|start"
         android:layout_marginTop="272dp"
         android:layout_marginStart="8dp"
         android:src="@drawable/ic_route_options"
         android:background="@drawable/icon_backdrop"
-        android:padding="6dp"
+        android:padding="7dp"
         android:contentDescription="Settings"
         android:elevation="0dp"
         android:stateListAnimator="@null" />
@@ -425,14 +427,14 @@
     <ImageButton
         android:id="@+id/alt_route_button"
         android:scaleType="fitCenter"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="219dp"
         android:layout_marginEnd="8dp"
         android:src="@drawable/ic_alt_route"
         android:background="@drawable/icon_backdrop"
-        android:padding="6dp"
+        android:padding="7dp"
         android:contentDescription="Find an alternative route"
         android:elevation="0dp"
         android:stateListAnimator="@null"
@@ -442,27 +444,27 @@
     <ImageButton
         android:id="@+id/overview_button"
         android:scaleType="fitCenter"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="166dp"
         android:layout_marginEnd="8dp"
         android:src="@drawable/ic_overview"
         android:background="@drawable/icon_backdrop"
-        android:padding="6dp"
+        android:padding="7dp"
         android:contentDescription="Route overview"
         android:elevation="0dp"
         android:stateListAnimator="@null"
         android:visibility="gone" />
 
-    <!-- Route chips A / B / C: one row at the top centre, between the two
-         columns (under the instruction bar while navigating); scrolls
-         sideways if they don't all fit. Top margin set in code. -->
-    <HorizontalScrollView
+    <!-- Route chips A / B / C (1.7.1): stacked on the right side, just over
+         the messages, growing upward; scrolls when more than fit (margins
+         set in code). -->
+    <ScrollView
         android:id="@+id/route_options_scroll"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|center_horizontal"
+        android:layout_gravity="bottom|end"
         android:layout_marginTop="12dp"
         android:layout_marginStart="56dp"
         android:layout_marginEnd="56dp"
@@ -472,11 +474,11 @@
             android:id="@+id/route_options_row"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:orientation="horizontal"
+            android:gravity="end"
+            android:orientation="vertical"
             android:visibility="gone" />
 
-    </HorizontalScrollView>
+    </ScrollView>
 
     <!-- ===== ZONE: communication area, bottom: buttons, route info, search
          bar, and the messages just over the search bar (over the route info
@@ -519,7 +521,7 @@
                 android:layout_height="wrap_content"
                 android:text="Searching places…"
                 android:textColor="@color/backpack_ink"
-                android:textSize="12sp" />
+                android:textSize="13sp" />
 
         </LinearLayout>
 
@@ -530,12 +532,12 @@
             android:layout_marginBottom="4dp"
             android:background="@drawable/message_bubble_background"
             android:textColor="@color/backpack_ink"
-            android:textSize="15sp"
+            android:textSize="16.5sp"
             android:gravity="center"
             android:paddingHorizontal="10dp"
             android:paddingVertical="3dp"
             android:maxLines="2"
-            android:maxWidth="280dp"
+            android:maxWidth="308dp"
             android:ellipsize="end"
             android:alpha="0"
             android:visibility="gone" />
@@ -546,12 +548,12 @@
             android:layout_height="wrap_content"
             android:background="@drawable/message_bubble_background"
             android:textColor="@color/backpack_ink"
-            android:textSize="15sp"
+            android:textSize="16.5sp"
             android:gravity="center"
             android:paddingHorizontal="10dp"
             android:paddingVertical="3dp"
             android:maxLines="2"
-            android:maxWidth="280dp"
+            android:maxWidth="308dp"
             android:ellipsize="end"
             android:alpha="0"
             android:visibility="gone" />
@@ -577,7 +579,7 @@
     <LinearLayout
         android:id="@+id/bottom_bar"
         android:layout_width="match_parent"
-        android:layout_height="50dp"
+        android:layout_height="58dp"
         android:layout_gravity="bottom"
         android:layout_marginBottom="14dp"
         android:clipChildren="false"
@@ -593,8 +595,8 @@
             <ImageButton
                 android:id="@+id/clear_route_button"
                 android:scaleType="fitCenter"
-                android:layout_width="50dp"
-                android:layout_height="50dp"
+                android:layout_width="58dp"
+                android:layout_height="58dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_clear"
                 android:background="@drawable/icon_backdrop"
@@ -607,8 +609,8 @@
             <ImageButton
                 android:id="@+id/resume_button"
                 android:scaleType="fitCenter"
-                android:layout_width="50dp"
-                android:layout_height="50dp"
+                android:layout_width="58dp"
+                android:layout_height="58dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_resume"
                 android:background="@drawable/icon_backdrop"
@@ -629,8 +631,8 @@
             <ImageButton
                 android:id="@+id/nav_go_button"
                 android:scaleType="fitCenter"
-                android:layout_width="50dp"
-                android:layout_height="50dp"
+                android:layout_width="58dp"
+                android:layout_height="58dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_go"
                 android:background="@drawable/icon_backdrop"
@@ -651,8 +653,8 @@
             <ImageButton
                 android:id="@+id/sound_button"
                 android:scaleType="fitCenter"
-                android:layout_width="50dp"
-                android:layout_height="50dp"
+                android:layout_width="58dp"
+                android:layout_height="58dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_sound_alerts"
                 android:background="@drawable/icon_backdrop"
@@ -668,13 +670,13 @@
 
     <!-- Current speed circle at the top right: inside the instruction bar
          while navigating (right end, centred on its background), same spot
-         otherwise. Ring colour = speed vs limit; 1.4.1: the road's limit sign
-         to the circle's left, a little above its middle (ring and the
-         box's last line stay free). -->
+         otherwise. Ring colour = speed vs limit; 1.7.1: the road's limit sign
+         to the circle's left, touching the circle (and, in the box, the
+         box's top frame) without overlapping; placed in code. -->
     <FrameLayout
         android:id="@+id/speed_widget"
-        android:layout_width="102dp"
-        android:layout_height="64dp"
+        android:layout_width="106dp"
+        android:layout_height="70dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="12dp"
         android:layout_marginEnd="14dp"
@@ -684,8 +686,8 @@
 
         <FrameLayout
             android:id="@+id/speed_sign"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="70dp"
+            android:layout_height="70dp"
             android:layout_gravity="top|end"
             android:background="@drawable/speed_sign_background">
 
@@ -702,7 +704,7 @@
                 android:includeFontPadding="false"
                 android:text="0"
                 android:textColor="#FF1A1A1A"
-                android:textSize="22sp"
+                android:textSize="24sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -710,11 +712,11 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="bottom|center_horizontal"
-                android:layout_marginBottom="9dp"
+                android:layout_marginBottom="10dp"
                 android:includeFontPadding="false"
                 android:text="km/h"
                 android:textColor="#FF555555"
-                android:textSize="9sp" />
+                android:textSize="10sp" />
 
         </FrameLayout>
 
@@ -778,14 +780,14 @@
     <ImageButton
         android:id="@+id/search_button"
         android:scaleType="fitCenter"
-        android:layout_width="38dp"
-        android:layout_height="38dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="272dp"
         android:layout_marginEnd="8dp"
         android:src="@drawable/ic_search"
         android:background="@drawable/icon_backdrop"
-        android:padding="4dp"
+        android:padding="5dp"
         android:contentDescription="Search for an address"
         android:elevation="0dp"
         android:stateListAnimator="@null" />

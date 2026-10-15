@@ -157,4 +157,6 @@
     <string name="keyg_refused">openrouteservice refused this key. Copy it again from your account (the whole key).</string>
     <string name="keyg_unreachable">Saved, but it couldn\'t be checked now (no connection?). It will be used for the next route.</string>
     <string name="set_cr_license">Backpack is free software under the GNU GPL version 3: source code on GitHub.</string>
+    <string name="set_card_time">Sight card on screen</string>
+    <string name="set_summary_read">Summaries with Read aloud</string>
 </resources>

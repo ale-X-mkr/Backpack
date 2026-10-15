@@ -192,4 +192,7 @@
     <string name="main_route_changed_meanwhile">Route geändert: erneut tippen für Alternativen</string>
     <string name="main_no_other_route">Keine andere Route gefunden</string>
     <string name="main_nav_paused_compare">Navigation pausiert · Route antippen zum Vergleichen, Go zum Starten</string>
+    <string name="main_card_go">Hinfahren</string>
+    <string name="main_card_read">▶ Vorlesen</string>
+    <string name="main_card_stop">■ Stopp</string>
 </resources>

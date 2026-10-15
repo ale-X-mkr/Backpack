@@ -192,4 +192,7 @@
     <string name="main_route_changed_meanwhile">Route changed meanwhile -- tap again for alternatives</string>
     <string name="main_no_other_route">No other route found</string>
     <string name="main_nav_paused_compare">Navigation paused · touch a route to compare, Go to start</string>
+    <string name="main_card_go">Go there</string>
+    <string name="main_card_read">▶ Read aloud</string>
+    <string name="main_card_stop">■ Stop</string>
 </resources>

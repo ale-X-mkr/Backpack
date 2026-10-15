@@ -45,6 +45,12 @@ object Settings {
     /** 1.2.0: heads-up this many minutes before the sight (route's average speed). */
     const val KEY_SIGHT_HEADSUP_MIN = "sight_headsup_minutes"
     const val DEFAULT_SIGHT_HEADSUP_MIN = 3
+    /** 1.7.1: seconds a sight card stays on screen (10 / 15 / 20). */
+    const val KEY_SIGHT_CARD_S = "sight_card_seconds"
+    const val DEFAULT_SIGHT_CARD_S = 15
+    val SIGHT_CARD_CHOICES = listOf(10, 15, 20)
+    /** 1.7.1: summaries (start, arrival, 3+ ahead) as a card with Read aloud (default on). */
+    const val KEY_SIGHT_SUMMARY_READ = "sight_summary_read"
     /** 1.1.1: last destinations searched (JSON, phone only) and the voice-input notice. */
     const val KEY_RECENT_SEARCHES = "recent_searches"
     /** 1.5.1: new text (FUTO Voice Input, no Sayboard): shown once again. */

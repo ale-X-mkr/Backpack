@@ -168,6 +168,24 @@ class MainActivity : AppCompatActivity() {
     private val PILLS_ABOVE_BAND_DP = 96
     /** 1.2.1: fixed top (dp) of both button columns. */
     private val COLUMNS_TOP_DP = 100
+    /** 1.7.1: portrait columns under the box grown with the 70 dp circle. */
+    private val COLUMNS_TOP_PORTRAIT_DP = 106
+    /** 1.7.1: landscape on a short screen: never higher than this (speed circle above). */
+    private val COLUMNS_MIN_TOP_DP = 86
+    /** 1.7.1 (Alex): buttons 15 % bigger. */
+    private val BTN_DP = 44
+    /** The columns as last fitted without the keyboard (dp), and for which orientation. */
+    private var columnsTop = 0
+    private var columnsStep = 0
+    private var columnsFor: Boolean? = null
+    private val BOTTOM_ROW_DP = 58
+    private val BOTTOM_ROW_BOTTOM_DP = 14
+    private val MESSAGES_BOTTOM_DP = 76
+    /** Edge + column + margin: what a side column takes (landscape messages / chips stay inside). */
+    private val COLUMN_ZONE_DP = 60
+    private val SPEED_CIRCLE_DP = 70
+    private val LIMIT_SIGN_DP = 36
+    private val SPEED_WIDGET_W_DP = 106
     private var currentPreference = PreferenceUi.RECOMMENDED
     private var avoidTolls = false
     private var urgencyMode = UrgencyMode.WEEKEND
@@ -1681,26 +1699,95 @@ class MainActivity : AppCompatActivity() {
         }
         override fun onSeveral(pois: List<TouristPoi>) {
             if (isDestroyed) return
-            showMessage(getString(R.string.main_several_sights, pois.size), showMs = 8000L)
+            val text = getString(R.string.main_several_sights, pois.size)
+            // 1.7.1: a card with Read aloud (Settings > Sights), else the message as before.
+            if (Prefs.settings(this@MainActivity).getBoolean(Settings.KEY_SIGHT_SUMMARY_READ, true)) showSummaryCard(pois, text)
+            else showMessage(text, showMs = 8000L)
         }
     }
 
     private val hideSightCard = Runnable { findViewById<View>(R.id.sight_card)?.visibility = View.GONE }
 
+    /** 1.7.1: how long a sight card stays (Settings > Sights: 10 / 15 / 20 s). */
+    private fun sightCardMs(): Long =
+        Prefs.settings(this).getInt(Settings.KEY_SIGHT_CARD_S, Settings.DEFAULT_SIGHT_CARD_S).toLong() * 1000L
+
     /** 1.4.0: name, kind, extra time; Go there / Read aloud. Top in portrait,
-     *  left in landscape (the road ahead stays visible); 10 s. */
+     *  left in landscape (the road ahead stays visible); 1.7.1: 10-20 s. */
     private fun showSightCard(poi: TouristPoi, detourLabel: String) {
         val card = findViewById<View>(R.id.sight_card) ?: return
         findViewById<TextView>(R.id.sight_card_title).text = poi.name
         findViewById<TextView>(R.id.sight_card_detail).text = "${poi.category.label} \u00b7 \u2248 +$detourLabel"
-        findViewById<View>(R.id.sight_card_go).setOnClickListener {
-            hideSightCard.run(); handler.removeCallbacks(hideSightCard)
-            addStopFlow(poi.point, poi.name)
+        findViewById<View>(R.id.sight_card_go).apply {
+            visibility = View.VISIBLE
+            setOnClickListener {
+                hideSightCard.run(); handler.removeCallbacks(hideSightCard)
+                addStopFlow(poi.point, poi.name)
+            }
         }
-        findViewById<View>(R.id.sight_card_read).setOnClickListener {
-            hideSightCard.run(); handler.removeCallbacks(hideSightCard)
-            readAloud(poi)
+        findViewById<TextView>(R.id.sight_card_read).apply {
+            text = getString(R.string.main_card_read)
+            setOnClickListener {
+                hideSightCard.run(); handler.removeCallbacks(hideSightCard)
+                readAloud(poi)
+            }
         }
+        placeSightCard(card)
+    }
+
+    /**
+     * 1.7.1: a summary (start, arrival, 3+ sights ahead) as a card: the
+     * message, the places' names and Read aloud, which reads them one after
+     * another; the button then turns into Stop.
+     */
+    private fun showSummaryCard(pois: List<TouristPoi>, text: String) {
+        val card = findViewById<View>(R.id.sight_card) ?: return
+        findViewById<TextView>(R.id.sight_card_title).text = text
+        findViewById<TextView>(R.id.sight_card_detail).text = pois.joinToString(" \u00b7 ") { it.name }
+        findViewById<View>(R.id.sight_card_go).visibility = View.GONE
+        val read = findViewById<TextView>(R.id.sight_card_read)
+        read.text = getString(R.string.main_card_read)
+        var started = false
+        read.setOnClickListener {
+            if (started) {
+                readChainId++
+                NavigationEngine.stopReading()
+                hideSightCard.run(); handler.removeCallbacks(hideSightCard)
+            } else if (readAll(pois)) {
+                started = true
+                read.text = getString(R.string.main_card_stop)
+                handler.removeCallbacks(hideSightCard)
+                handler.postDelayed(hideSightCard, sightCardMs())
+            }
+        }
+        placeSightCard(card)
+    }
+
+    /** One "read them all" at a time: a new one or Stop ends the one going on. */
+    private var readChainId = 0
+
+    /** Each place's Wikipedia summary, queued in order (one fetch after another). */
+    private fun readAll(pois: List<TouristPoi>): Boolean {
+        if (!Prefs.voiceOn(this)) { showMessage(getString(R.string.main_voice_off)); return false }
+        if (!readingsAllowed() || pois.isEmpty()) return false
+        val id = ++readChainId
+        val lang = Prefs.voiceLanguage(this)
+        fun next(i: Int) {
+            if (isDestroyed || id != readChainId || i >= pois.size) return
+            val poi = pois[i]
+            showMessage(getString(R.string.main_looking_up, poi.name))
+            com.backpack.app.tourist.WikiSummary.forPoi(poi, lang) { text, textLang ->
+                if (isDestroyed || id != readChainId) return@forPoi
+                if (text != null) NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
+                    com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text", textLang.takeIf { it != lang }), this)
+                next(i + 1)
+            }
+        }
+        next(0)
+        return true
+    }
+
+    private fun placeSightCard(card: View) {
         val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val lp = card.layoutParams as FrameLayout.LayoutParams
         val screenW = findViewById<View>(android.R.id.content).width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
@@ -1717,7 +1804,7 @@ class MainActivity : AppCompatActivity() {
         card.layoutParams = lp
         card.visibility = View.VISIBLE
         handler.removeCallbacks(hideSightCard)
-        handler.postDelayed(hideSightCard, 10_000L)
+        handler.postDelayed(hideSightCard, sightCardMs())
     }
 
     /** 1.4.0: zoom out to you + the sight (blinking ring) for 10 s, then back to driving. */
@@ -2747,13 +2834,15 @@ class MainActivity : AppCompatActivity() {
         p.show()
     }
 
-    /** Message band: full width in portrait, compact bottom-left in landscape. */
+    /** Message band: full width in portrait; landscape compact, centred
+     *  between the two button columns (1.7.1). */
     private fun shapeMessageBand(land: Boolean) {
         val band = findViewById<View>(R.id.message_band)
         val lp = band.layoutParams as FrameLayout.LayoutParams
         val w = if (land) FrameLayout.LayoutParams.WRAP_CONTENT else FrameLayout.LayoutParams.MATCH_PARENT
         if (lp.width != w) { lp.width = w; band.layoutParams = lp }
-        val maxW = if (land) dp(280) else Int.MAX_VALUE
+        val screenW = findViewById<View>(android.R.id.content).width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val maxW = if (land) minOf(dp(308), screenW - 2 * dp(COLUMN_ZONE_DP)) else Int.MAX_VALUE
         for (b in listOf(messageBubble, errorBubble)) {
             val blp = b.layoutParams
             if (blp.width != bw(land)) { blp.width = bw(land); b.layoutParams = blp }
@@ -2807,19 +2896,40 @@ class MainActivity : AppCompatActivity() {
         navBox.setPadding(dp(12), dp(4), dp(12), dp(4))
         // 1.4.1: the circle (and the limit sign left of it, driving) sits beside
         // the turn row only; the last line (time, distance, arrival, cost)
-        // takes the box's full width under them.
-        navInstructionBar.setPadding(0, 0, if (!circleInBox) 0 else if (driving) dp(99) else dp(61), 0)
-        navInstructionBar.minimumHeight = if (circleInBox) dp(64) else 0
+        // takes the box's full width under them. 1.7.1: circle 70 dp.
+        navInstructionBar.setPadding(0, 0, if (!circleInBox) 0 else if (driving) dp(101) else dp(67), 0)
+        navInstructionBar.minimumHeight = if (circleInBox) dp(SPEED_CIRCLE_DP) else 0
         // Planning while driving: box and chips centred left of the speed
         // circle (top right), never under it.
         val circleTopRight = driving && !circleInBox
-        setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) 120 else 0)
+        setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) 126 else 0)
         val boxShown = navBox.visibility == View.VISIBLE && navBox.height > 0
+
+        // 1.7.1: the columns' top and spacing (bigger buttons): portrait under
+        // the full-width box; landscape (box 80 % wide, columns beside it)
+        // fitted to the screen height so the 4th button stays clear of the
+        // bottom row -- first the gaps shrink (down to 4 dp), then, only if
+        // still needed, the columns start higher (never under the speed circle).
+        // The keyboard shrinks the screen: the columns keep where they were.
+        var top0 = if (land) COLUMNS_TOP_DP else COLUMNS_TOP_PORTRAIT_DP
+        var step = BTN_DP + if (land) 9 else 17
+        if (keyboardOpen && columnsFor == land) {
+            top0 = columnsTop; step = columnsStep
+        } else {
+            val screenH = (findViewById<View>(android.R.id.content).height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels) / density
+            val bottomLimit = screenH - (BOTTOM_ROW_BOTTOM_DP + BOTTOM_ROW_DP) - 6
+            if (top0 + 3 * step + BTN_DP > bottomLimit) {
+                step = maxOf(BTN_DP + 4, ((bottomLimit - BTN_DP - top0) / 3).toInt())
+                if (top0 + 3 * step + BTN_DP > bottomLimit) top0 = maxOf(COLUMNS_MIN_TOP_DP, (bottomLimit - BTN_DP - 3 * step).toInt())
+            }
+            if (!keyboardOpen) { columnsTop = top0; columnsStep = step; columnsFor = land }
+        }
+
         // 1.2.1: the columns never move, so the box keeps above them: a long
         // street name gets one line instead of two when it would reach them.
-        // 1.4.2: the turn row is at least the circle's 64 dp: two lines fit in it,
+        // 1.4.2: the turn row is at least the circle's size: two lines fit in it,
         // so only a row grown past that (large font) is cut to one line.
-        if (navUiActive && boxShown && navInstructionBar.height > dp(66) && navBox.bottom / density > COLUMNS_TOP_DP - 4 && statusStrip.maxLines > 1) {
+        if (navUiActive && boxShown && !land && navInstructionBar.height > dp(SPEED_CIRCLE_DP + 2) && navBox.bottom / density > top0 - 4 && statusStrip.maxLines > 1) {
             statusStrip.maxLines = 1
         }
 
@@ -2830,16 +2940,15 @@ class MainActivity : AppCompatActivity() {
             val boxTop = (navBox.top / density).toInt()
             // 1.4.1: level with the turn row, inside the frame.
             setMargins(R.id.speed_widget, top = boxTop + 4, end = endInset + 7)
+            placeLimitSign(signTopDp = 0)
         } else {
             setMargins(R.id.speed_widget, top = 12, end = 14)
+            placeLimitSign(signTopDp = 8)
         }
 
-        // 1.2.1 (Alex): the columns never move -- always at the car-mode
-        // height, in every mode, planning or navigating; the speed circle
-        // and the instruction box fit above them.
-        val top0 = COLUMNS_TOP_DP
-        val step = if (land) 46 else 53
-        val gap = step - 38
+        // 1.2.1 (Alex): the columns never move with the mode -- the same
+        // height in every mode, planning or navigating (top0 / step above).
+        val gap = step - BTN_DP
         fun shown(id: Int) = findViewById<View>(id).visibility == View.VISIBLE
 
         // Left column (planning), 1.2.0 four buttons: mode (+ toll), urgency
@@ -2867,16 +2976,11 @@ class MainActivity : AppCompatActivity() {
             rightRows = 4
         }
 
-        // Route chips (1.0.8): stacked, left-aligned (letters in a line),
-        // bottom-left just over the messages (placed below, once the message
-        // band is placed); hidden while the search box is open (kept).
-        val row = findViewById<LinearLayout>(R.id.route_options_row)
-        if (row.orientation != LinearLayout.VERTICAL) {
-            row.orientation = LinearLayout.VERTICAL
-            row.gravity = android.view.Gravity.START
-            for (i in 0 until row.childCount) chipSpacing(row.getChildAt(i))
-        }
-        moveTo(R.id.route_options_scroll, android.view.Gravity.BOTTOM or android.view.Gravity.START)
+        // Route chips (1.7.1, Alex): a route-choosing action, so on the right
+        // side, right-aligned, just over the messages and growing upward
+        // (placed below, once the message band is placed); hidden while the
+        // search box is open (kept).
+        moveTo(R.id.route_options_scroll, android.view.Gravity.BOTTOM or android.view.Gravity.END)
         findViewById<View>(R.id.route_options_scroll).visibility = if (searchOpen) View.GONE else View.VISIBLE
 
         // While typing, the bottom buttons and the credit step aside; only
@@ -2889,36 +2993,64 @@ class MainActivity : AppCompatActivity() {
             hiddenForKeyboard.clear()
         }
 
-        // Bottom: the action row (14..64) -> messages (68). The floating search
-        // box sits in the messages' place (just over the keyboard while
+        // Bottom: the action row (14..72, 1.7.1) -> messages (76). The floating
+        // search box sits in the messages' place (just over the keyboard while
         // typing), the messages and suggestions over it.
-        val searchBottom = if (keyboardOpen) 8 else 68
+        val searchBottom = if (keyboardOpen) 8 else MESSAGES_BOTTOM_DP
         setMargins(R.id.search_input, bottom = searchBottom, start = 8, end = 8)
         setMargins(R.id.search_mic, bottom = searchBottom, end = 10)
         setMargins(R.id.search_results_scroll, bottom = searchBottom + 33, start = 8, end = 8)
-        val bandBottom = if (searchOpen) searchBottom + 33 else 68
-        // Landscape: bottom-left, never over the position arrow (screen centre).
-        moveTo(R.id.message_band, android.view.Gravity.BOTTOM or if (land) android.view.Gravity.START else android.view.Gravity.CENTER_HORIZONTAL)
+        val bandBottom = if (searchOpen) searchBottom + 33 else MESSAGES_BOTTOM_DP
+        // 1.7.1 (Alex): centred in portrait and landscape; in landscape kept
+        // between the two button columns.
+        moveTo(R.id.message_band, android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL)
         shapeMessageBand(land)
         // Search open: the route line steps aside (it would cover the lowest suggestion).
         val hideInfo = searchOpen && routeInfo.parent === findViewById<View>(R.id.message_band)
         if (hideInfo && routeInfo.visibility == View.VISIBLE) routeInfo.visibility = View.INVISIBLE
         else if (!hideInfo && routeInfo.visibility == View.INVISIBLE) routeInfo.visibility = View.VISIBLE
-        setMargins(R.id.message_band, bottom = bandBottom, start = if (land) 56 else 8, end = if (land) 0 else 8)
+        val sideDp = if (land) COLUMN_ZONE_DP else 8
+        setMargins(R.id.message_band, bottom = bandBottom, start = sideDp, end = sideDp)
         // 1.2.0: route chips at a fixed height (room for the route line and a
         // two-line message under them): a message appearing no longer moves
         // them while you are choosing.
         // Only an unusually tall band (two wrapped bubbles) lifts them, so it never covers a chip.
         val band = findViewById<View>(R.id.message_band)
         val bandH = if (band.visibility == View.VISIBLE) (band.height / resources.displayMetrics.density).toInt() else 0
-        setMargins(R.id.route_options_scroll, bottom = bandBottom + maxOf(PILLS_ABOVE_BAND_DP, bandH + 6), start = if (land) 88 else 8, end = 56, top = 0)
+        // Portrait: against the right edge, up to just under the right column;
+        // landscape (no room under it): just left of the column, up to its top.
+        // More chips than fit: the stack scrolls.
+        val columnBottom = top0 + (rightRows - 1) * step + BTN_DP
+        setMargins(R.id.route_options_scroll, bottom = bandBottom + maxOf(PILLS_ABOVE_BAND_DP, bandH + 6),
+            start = if (land) COLUMN_ZONE_DP else 8, end = if (land) COLUMN_ZONE_DP else 8, top = if (land) top0 else columnBottom + 8)
 
         // Guards: columns (with a little margin around) and the bottom buttons.
         setMargins(R.id.guard_left, top = top0 - 6)
-        setSize(R.id.guard_left, height = if (leftRows == 0) 0 else leftRows * step + 4, width = 88)
+        setSize(R.id.guard_left, height = if (leftRows == 0) 0 else leftRows * step + 4, width = 94)
         setMargins(R.id.guard_right, top = top0 - 6)
-        setSize(R.id.guard_right, height = rightRows * step + 4, width = 56)
-        setSize(R.id.guard_bottom, height = if (keyboardOpen) 0 else 66)
+        setSize(R.id.guard_right, height = rightRows * step + 4, width = 62)
+        setSize(R.id.guard_bottom, height = if (keyboardOpen) 0 else BOTTOM_ROW_BOTTOM_DP + BOTTOM_ROW_DP + 2)
+    }
+
+    /**
+     * 1.7.1 (Alex): the limit sign touches the speed circle's edge (and, at
+     * [signTopDp] 0 in the box, the box's top frame), never overlapping:
+     * the two discs' centres are exactly one radius sum apart.
+     */
+    private fun placeLimitSign(signTopDp: Int) {
+        val d = resources.displayMetrics.density
+        val bigR = SPEED_CIRCLE_DP / 2f * d
+        val r = LIMIT_SIGN_DP / 2f * d
+        val dy = bigR - (signTopDp * d + r)
+        val dx = Math.sqrt(((bigR + r) * (bigR + r) - dy * dy).toDouble()).toFloat()
+        val left = Math.floor((SPEED_WIDGET_W_DP * d - bigR - dx - r).toDouble()).toInt().coerceAtLeast(0)
+        val top = Math.round(signTopDp * d)
+        val lp = speedLimitSign.layoutParams as FrameLayout.LayoutParams
+        if (lp.marginStart != left || lp.topMargin != top) {
+            lp.marginStart = left
+            lp.topMargin = top
+            speedLimitSign.layoutParams = lp
+        }
     }
 
     /** Changes a view's gravity inside the main frame (no-op if unchanged). */
@@ -3939,12 +4071,12 @@ class MainActivity : AppCompatActivity() {
             val root = findViewById<View>(android.R.id.content)
             val w = root.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
             val h = root.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
-            // Bottom: Go/Clear (68), the route line (~30) and, with several
+            // Bottom: Go/Clear (76), the route line (~30) and, with several
             // routes, the stacked chips (~30 each) -- estimated, as they are
             // only being laid out at this moment.
             val chips = if (results.size >= 2) minOf(results.size, 4) * 30 + 6 else 0
-            val bottomUi = dp(68 + 30 + chips)
-            val left = dp(54); val right = dp(54)
+            val bottomUi = dp(MESSAGES_BOTTOM_DP + 30 + chips)
+            val left = dp(COLUMN_ZONE_DP); val right = dp(COLUMN_ZONE_DP)
             val top = if (currentMode == ModeUi.DRIVING) dp(100) else dp(56)
             val freeW = (w - left - right).coerceAtLeast(dp(100))
             val freeH = (h - top - bottomUi).coerceAtLeast(dp(100))

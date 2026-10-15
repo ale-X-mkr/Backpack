@@ -192,4 +192,7 @@
     <string name="main_route_changed_meanwhile">Percorso cambiato: tocca di nuovo per alternative</string>
     <string name="main_no_other_route">Nessun altro percorso</string>
     <string name="main_nav_paused_compare">Navigazione in pausa · tocca un percorso per confrontare, Go per partire</string>
+    <string name="main_card_go">Vai lì</string>
+    <string name="main_card_read">▶ Leggi</string>
+    <string name="main_card_stop">■ Ferma</string>
 </resources>
