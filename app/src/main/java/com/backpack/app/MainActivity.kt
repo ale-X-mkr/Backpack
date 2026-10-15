@@ -1694,14 +1694,16 @@ class MainActivity : AppCompatActivity() {
         override fun onHeadsUp(poi: TouristPoi, detourLabel: String) {
             if (isDestroyed) return
             wakeDisplay()
-            showSightCard(poi, detourLabel)
+            // 1.7.1: summaries being read keep their card (and its Stop).
+            if (readAllActive) showMessage("${poi.name} \u00b7 \u2248 +$detourLabel", showMs = 8000L)
+            else showSightCard(poi, detourLabel)
             showSightOnMap(poi)
         }
         override fun onSeveral(pois: List<TouristPoi>) {
             if (isDestroyed) return
             val text = getString(R.string.main_several_sights, pois.size)
             // 1.7.1: a card with Read aloud (Settings > Sights), else the message as before.
-            if (Prefs.settings(this@MainActivity).getBoolean(Settings.KEY_SIGHT_SUMMARY_READ, true)) showSummaryCard(pois, text)
+            if (!readAllActive && Prefs.settings(this@MainActivity).getBoolean(Settings.KEY_SIGHT_SUMMARY_READ, true)) showSummaryCard(pois, text)
             else showMessage(text, showMs = 8000L)
         }
     }
@@ -1747,17 +1749,19 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.sight_card_go).visibility = View.GONE
         val read = findViewById<TextView>(R.id.sight_card_read)
         read.text = getString(R.string.main_card_read)
-        var started = false
         read.setOnClickListener {
-            if (started) {
+            if (readAllActive) {
                 readChainId++
+                readAllActive = false
                 NavigationEngine.stopReading()
+                handler.removeCallbacks(hideWhenReadingDone)
                 hideSightCard.run(); handler.removeCallbacks(hideSightCard)
             } else if (readAll(pois)) {
-                started = true
                 read.text = getString(R.string.main_card_stop)
+                // Stays (with Stop) until the last place has been read.
                 handler.removeCallbacks(hideSightCard)
-                handler.postDelayed(hideSightCard, sightCardMs())
+                handler.removeCallbacks(hideWhenReadingDone)
+                handler.postDelayed(hideWhenReadingDone, 2000L)
             }
         }
         placeSightCard(card)
@@ -1765,16 +1769,25 @@ class MainActivity : AppCompatActivity() {
 
     /** One "read them all" at a time: a new one or Stop ends the one going on. */
     private var readChainId = 0
+    /** The summary card is reading (its button is Stop); new tips are messages meanwhile. */
+    private var readAllActive = false
+    /** Lookups still coming (the card waits for them, at most this long). */
+    private var readAllLookupUntil = 0L
 
     /** Each place's Wikipedia summary, queued in order (one fetch after another). */
     private fun readAll(pois: List<TouristPoi>): Boolean {
         if (!Prefs.voiceOn(this)) { showMessage(getString(R.string.main_voice_off)); return false }
         if (!readingsAllowed() || pois.isEmpty()) return false
+        // Whatever was being read gives way to this list.
+        NavigationEngine.stopReading()
         val id = ++readChainId
+        readAllActive = true
         val lang = Prefs.voiceLanguage(this)
         fun next(i: Int) {
-            if (isDestroyed || id != readChainId || i >= pois.size) return
+            if (isDestroyed || id != readChainId) return
+            if (i >= pois.size) { readAllLookupUntil = 0L; return }
             val poi = pois[i]
+            readAllLookupUntil = System.currentTimeMillis() + 30_000L
             showMessage(getString(R.string.main_looking_up, poi.name))
             com.backpack.app.tourist.WikiSummary.forPoi(poi, lang) { text, textLang ->
                 if (isDestroyed || id != readChainId) return@forPoi
@@ -1798,13 +1811,27 @@ class MainActivity : AppCompatActivity() {
         } else {
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.START
             val boxBottom = if (navBox.visibility == View.VISIBLE) navBox.bottom else dp(60)
-            lp.setMargins(dp(10), boxBottom + dp(8), 0, 0)
+            // 1.7.1: never under the right column.
+            lp.setMargins(dp(10), boxBottom + dp(8), dp(COLUMN_ZONE_DP), 0)
             lp.width = FrameLayout.LayoutParams.WRAP_CONTENT
         }
         card.layoutParams = lp
         card.visibility = View.VISIBLE
         handler.removeCallbacks(hideSightCard)
+        handler.removeCallbacks(hideWhenReadingDone)
         handler.postDelayed(hideSightCard, sightCardMs())
+    }
+
+    /** 1.7.1: a summary card being read keeps its Stop until the last reading ends. */
+    private val hideWhenReadingDone = object : Runnable {
+        override fun run() {
+            if (readAllActive && NavigationEngine.pendingInfo(com.backpack.app.core.VoiceQueue.Kind.READING) > 0) {
+                handler.postDelayed(this, 2000L); return
+            }
+            if (readAllActive && System.currentTimeMillis() < readAllLookupUntil) { handler.postDelayed(this, 2000L); return }
+            readAllActive = false
+            hideSightCard.run()
+        }
     }
 
     /** 1.4.0: zoom out to you + the sight (blinking ring) for 10 s, then back to driving. */
@@ -2916,11 +2943,17 @@ class MainActivity : AppCompatActivity() {
         if (keyboardOpen && columnsFor == land) {
             top0 = columnsTop; step = columnsStep
         } else {
-            val screenH = (findViewById<View>(android.R.id.content).height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels) / density
+            val content = findViewById<View>(android.R.id.content)
+            var screenH = (content.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels) / density
+            // Turned with the keyboard open: fit to the height without it.
+            if (keyboardOpen) androidx.core.view.ViewCompat.getRootWindowInsets(content)?.let {
+                screenH += it.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom / density
+            }
             val bottomLimit = screenH - (BOTTOM_ROW_BOTTOM_DP + BOTTOM_ROW_DP) - 6
             if (top0 + 3 * step + BTN_DP > bottomLimit) {
                 step = maxOf(BTN_DP + 4, ((bottomLimit - BTN_DP - top0) / 3).toInt())
-                if (top0 + 3 * step + BTN_DP > bottomLimit) top0 = maxOf(COLUMNS_MIN_TOP_DP, (bottomLimit - BTN_DP - 3 * step).toInt())
+                // Higher only in landscape (portrait: the full-width box is above).
+                if (land && top0 + 3 * step + BTN_DP > bottomLimit) top0 = maxOf(COLUMNS_MIN_TOP_DP, (bottomLimit - BTN_DP - 3 * step).toInt())
             }
             if (!keyboardOpen) { columnsTop = top0; columnsStep = step; columnsFor = land }
         }
@@ -3022,7 +3055,8 @@ class MainActivity : AppCompatActivity() {
         // More chips than fit: the stack scrolls.
         val columnBottom = top0 + (rightRows - 1) * step + BTN_DP
         setMargins(R.id.route_options_scroll, bottom = bandBottom + maxOf(PILLS_ABOVE_BAND_DP, bandH + 6),
-            start = if (land) COLUMN_ZONE_DP else 8, end = if (land) COLUMN_ZONE_DP else 8, top = if (land) top0 else columnBottom + 8)
+            start = if (land) COLUMN_ZONE_DP else 8, end = if (land) COLUMN_ZONE_DP else 8,
+            top = if (!land) columnBottom + 8 else if (boxShown) maxOf(top0, (navBox.bottom / density).toInt() + 4) else top0)
 
         // Guards: columns (with a little margin around) and the bottom buttons.
         setMargins(R.id.guard_left, top = top0 - 6)
