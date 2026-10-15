@@ -1790,7 +1790,8 @@ class MainActivity : AppCompatActivity() {
             readAllLookupUntil = System.currentTimeMillis() + 30_000L
             showMessage(getString(R.string.main_looking_up, poi.name))
             com.backpack.app.tourist.WikiSummary.forPoi(poi, lang) { text, textLang ->
-                if (isDestroyed || id != readChainId) return@forPoi
+                // Ended (Stop, or the card gave up waiting): nothing more is queued without a Stop.
+                if (isDestroyed || id != readChainId || !readAllActive) return@forPoi
                 if (text != null) NavigationEngine.speakInfo(com.backpack.app.core.VoiceQueue.Item(
                     com.backpack.app.core.VoiceQueue.Kind.READING, "${poi.name}. $text", textLang.takeIf { it != lang }), this)
                 next(i + 1)
@@ -2947,7 +2948,10 @@ class MainActivity : AppCompatActivity() {
             var screenH = (content.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels) / density
             // Turned with the keyboard open: fit to the height without it.
             if (keyboardOpen) androidx.core.view.ViewCompat.getRootWindowInsets(content)?.let {
-                screenH += it.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom / density
+                // The keyboard inset includes the navigation bar, already outside the content.
+                val ime = it.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom
+                val bars = it.getInsets(androidx.core.view.WindowInsetsCompat.Type.navigationBars()).bottom
+                screenH += maxOf(0, ime - bars) / density
             }
             val bottomLimit = screenH - (BOTTOM_ROW_BOTTOM_DP + BOTTOM_ROW_DP) - 6
             if (top0 + 3 * step + BTN_DP > bottomLimit) {
