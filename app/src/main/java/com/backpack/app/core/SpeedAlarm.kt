@@ -7,10 +7,12 @@ package com.backpack.app.core
  * blinking red + the high "priiip" beyond 5 over, the same beep repeated
  * without pause beyond 20 over; on roads of 100+: blue + a low buzz below
  * 70 % of the limit, red + low buzz when stopped.
+ * 1.7.2 (Alex, symmetrical to the high beep): more than 20 km/h under that
+ * 70 %, the low buzz repeats without pause.
  */
 object SpeedAlarm {
     enum class Ring { GREY, GREEN, YELLOW, RED, BLINK_RED, BLUE, STOPPED_RED }
-    enum class Beep { NONE, HIGH, LOW, CONTINUOUS }
+    enum class Beep { NONE, HIGH, LOW, CONTINUOUS, LOW_CONTINUOUS }
     data class State(val ring: Ring, val beep: Beep)
 
     fun state(speedKmh: Int, hasRealMovement: Boolean, limit: Int?): State {
@@ -19,6 +21,7 @@ object SpeedAlarm {
         return when {
             !hasRealMovement && limit >= 100 -> State(Ring.STOPPED_RED, Beep.LOW)
             !hasRealMovement -> State(Ring.GREY, Beep.NONE)
+            limit >= 100 && speedKmh < limit * 0.7 - 20 -> State(Ring.BLUE, Beep.LOW_CONTINUOUS)
             limit >= 100 && speedKmh < limit * 0.7 -> State(Ring.BLUE, Beep.LOW)
             diff > 20 -> State(Ring.BLINK_RED, Beep.CONTINUOUS)
             diff > 5 -> State(Ring.BLINK_RED, Beep.HIGH)

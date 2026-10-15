@@ -13,8 +13,9 @@ import com.backpack.app.core.SpeedAlarm
  * 1.4.0: the speed circle's ring as a gauge (Alex). Grey ring; a coloured
  * arc grows clockwise from the lower left with your speed: blue, green at
  * the top (half the limit), yellow near it, the limit at the lower right.
- * Over the limit the arc goes on in red and the whole ring turns red;
- * blinking (set from outside) flashes it red / white.
+ * Over the limit the arc goes on in red, growing with your speed.
+ * 1.7.2 (Alex): the ring itself turns red / blue only while an alarm
+ * sound plays ([flashColor], set in step with each beep or buzz).
  */
 class SpeedGaugeView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
 
@@ -26,17 +27,15 @@ class SpeedGaugeView @JvmOverloads constructor(context: Context, attrs: Attribut
 
     private var speedKmh = 0.0
     private var limit: Int? = null
-    private var over = false
     /** Ring colour when no gauge is drawn (walking / cycling, no limit known). */
     private var plainColor = 0xFF9E9E9E.toInt()
-    /** null = no blinking; true / false = the two phases. */
-    var blinkPhase: Boolean? = null
-        set(v) { field = v; invalidate() }
+    /** The ring's colour while an alarm sound plays; null = the usual ring. */
+    var flashColor: Int? = null
+        set(v) { if (field != v) { field = v; invalidate() } }
 
     fun show(speedKmh: Double, limit: Int?, plain: Int = 0xFF9E9E9E.toInt()) {
         this.speedKmh = speedKmh
         this.limit = limit
-        this.over = limit != null && speedKmh > limit
         this.plainColor = plain
         invalidate()
     }
@@ -45,15 +44,9 @@ class SpeedGaugeView @JvmOverloads constructor(context: Context, attrs: Attribut
         val inset = ringW / 2 + 0.5f
         box.set(inset, inset, width - inset, height - inset)
         val l = limit
-        val blink = blinkPhase
-        ring.color = when {
-            blink != null -> if (blink) 0xFFC0392B.toInt() else Color.WHITE
-            over -> 0xFFC0392B.toInt()
-            l == null -> plainColor
-            else -> 0xFFBDBDBD.toInt()
-        }
+        ring.color = flashColor ?: if (l == null) plainColor else 0xFFBDBDBD.toInt()
         canvas.drawOval(box, ring)
-        if (l == null || blink == false) return
+        if (l == null) return
         val (legal, overSweep) = SpeedAlarm.sweep(speedKmh, l)
         // Coloured by position: each small step its own colour (a gradient along the arc).
         var a = 0f

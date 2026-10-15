@@ -37,6 +37,17 @@ object SpeedGuard {
     fun addListener(l: Listener) { if (l !in listeners) listeners.add(l) }
     fun removeListener(l: Listener) { listeners.remove(l) }
 
+    /** 1.7.2: each alarm sound as it plays (the ring flashes [color] for [ms], in step). */
+    fun interface SoundListener { fun onSound(color: Int, ms: Long) }
+    private val soundListeners = mutableListOf<SoundListener>()
+    fun addSoundListener(l: SoundListener) { if (l !in soundListeners) soundListeners.add(l) }
+    fun removeSoundListener(l: SoundListener) { soundListeners.remove(l) }
+    val FLASH_RED = 0xFFC0392B.toInt()
+    val FLASH_BLUE = 0xFF1565C0.toInt()
+    private fun flash(color: Int, ms: Long) {
+        main.post { for (l in soundListeners.toList()) l.onSound(color, ms) }
+    }
+
     private val fixListener = LocationHub.Listener { location, plausible -> if (plausible) onFix(location) }
 
     /** Idempotent: from the screen and from the background service. */
@@ -88,8 +99,10 @@ object SpeedGuard {
         val beeped = when (st.beep) {
             SpeedAlarm.Beep.NONE -> { stopContinuous(); false }
             SpeedAlarm.Beep.HIGH -> { stopContinuous(); beep(c, true) }
-            SpeedAlarm.Beep.LOW -> { stopContinuous(); buzz(c) }
-            SpeedAlarm.Beep.CONTINUOUS -> { startContinuous(c); true }
+            // Stopped on a fast road: the same buzz, the ring flashing red.
+            SpeedAlarm.Beep.LOW -> { stopContinuous(); buzz(c, if (st.ring == SpeedAlarm.Ring.STOPPED_RED) FLASH_RED else FLASH_BLUE) }
+            SpeedAlarm.Beep.CONTINUOUS -> { startContinuous(c, high = true); true }
+            SpeedAlarm.Beep.LOW_CONTINUOUS -> { startContinuous(c, high = false); true }
         }
         for (l in listeners.toList()) l.onSpeed(location, limit, st, beeped)
     }
@@ -99,18 +112,22 @@ object SpeedGuard {
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private var continuousUntilMs = 0L
     private var continuousOn = false
+    /** 1.7.2: the high "priiip" (20+ over) or the low buzz (far too slow) without pause. */
+    private var continuousHigh = true
     private val continuous = object : Runnable {
         override fun run() {
             val c = app ?: return
             // A fix every second keeps it going; GPS lost -> it stops by itself.
             if (System.currentTimeMillis() > continuousUntilMs || !Prefs.alarmSound(c)) { continuousOn = false; return }
-            playHigh()
-            main.postDelayed(this, 450L)
+            if (continuousHigh) { playHigh(); main.postDelayed(this, 450L) }
+            else { playBuzz(FLASH_BLUE); main.postDelayed(this, 550L) }
         }
     }
 
-    private fun startContinuous(c: Context) {
+    private fun startContinuous(c: Context, high: Boolean) {
         continuousUntilMs = System.currentTimeMillis() + 2500L
+        if (continuousOn && continuousHigh != high) { main.removeCallbacks(continuous); continuousOn = false }
+        continuousHigh = high
         if (continuousOn || !Prefs.alarmSound(c)) return
         continuousOn = true
         main.post(continuous)
@@ -125,6 +142,7 @@ object SpeedGuard {
         try {
             if (tone == null) tone = ToneGenerator(AudioManager.STREAM_ALARM, 80)
             tone?.startTone(ToneGenerator.TONE_CDMA_HIGH_L, 200)
+            flash(FLASH_RED, 300L)
         } catch (e: Exception) { }
     }
 
@@ -132,19 +150,23 @@ object SpeedGuard {
     private var buzzTrack: android.media.AudioTrack? = null
 
     /** Low-speed / stopped warning: a real low buzz (~250 Hz), at most every 3 s. */
-    private fun buzz(c: Context): Boolean {
+    private fun buzz(c: Context, color: Int): Boolean {
         if (!Prefs.alarmSound(c)) return false
         val now = System.currentTimeMillis()
         if (now - lastBuzzAtMs < 3000L) return false
         lastBuzzAtMs = now
-        return try {
-            val t = buzzTrack ?: makeBuzz().also { buzzTrack = it }
-            t.stop()
-            t.reloadStaticData()
-            t.play()
-            true
-        } catch (e: Exception) { false }
+        return playBuzz(color)
     }
+
+    /** The low buzz now; the ring flashes [color] while it sounds. */
+    private fun playBuzz(color: Int): Boolean = try {
+        val t = buzzTrack ?: makeBuzz().also { buzzTrack = it }
+        t.stop()
+        t.reloadStaticData()
+        t.play()
+        flash(color, 350L)
+        true
+    } catch (e: Exception) { false }
 
     /** 350 ms at 250 Hz with a little 500 Hz (heard on phone speakers too), soft edges. */
     private fun makeBuzz(): android.media.AudioTrack {

@@ -32,4 +32,15 @@ class SpeedAlarmTest {
         assertEquals(SpeedAlarm.State(Ring.BLINK_RED, Beep.CONTINUOUS), s(141, true, 120)) // 1.4.0: +20
         assertEquals(SpeedAlarm.State(Ring.BLINK_RED, Beep.HIGH), s(140, true, 120))
     }
+
+    @Test fun lowBuzzContinuousFar() {
+        // 1.7.2: 70 % of 130 = 91; more than 20 under that (< 71) -> continuous.
+        assertEquals(SpeedAlarm.State(Ring.BLUE, Beep.LOW), s(71, true, 130))
+        assertEquals(SpeedAlarm.State(Ring.BLUE, Beep.LOW_CONTINUOUS), s(70, true, 130))
+        assertEquals(SpeedAlarm.State(Ring.BLUE, Beep.LOW), s(50, true, 100))
+        assertEquals(SpeedAlarm.State(Ring.BLUE, Beep.LOW_CONTINUOUS), s(49, true, 100))
+        // Not on slower roads, and stopped stays its own case.
+        assertEquals(SpeedAlarm.State(Ring.GREEN, Beep.NONE), s(20, true, 90))
+        assertEquals(SpeedAlarm.State(Ring.STOPPED_RED, Beep.LOW), s(0, false, 130))
+    }
 }

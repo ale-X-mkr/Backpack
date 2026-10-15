@@ -186,6 +186,8 @@ class MainActivity : AppCompatActivity() {
     private val SPEED_CIRCLE_DP = 70
     private val LIMIT_SIGN_DP = 36
     private val SPEED_WIDGET_W_DP = 106
+    /** The navigation box's top margin (layout). */
+    private val NAV_BOX_TOP_DP = 4
     private var currentPreference = PreferenceUi.RECOMMENDED
     private var avoidTolls = false
     private var urgencyMode = UrgencyMode.WEEKEND
@@ -211,7 +213,7 @@ class MainActivity : AppCompatActivity() {
 
     // Speed limit (loaded per route by SpeedLimitLookup).
     private val handler = Handler(Looper.getMainLooper())
-    private var blinkOn = true
+    /** The speed alarm is sounding (keeps the screen from dimming). */
     private var isBlinking = false
 
     // POIs.
@@ -402,6 +404,7 @@ class MainActivity : AppCompatActivity() {
         // 1.3.0: open until expressly exited; the service keeps the rest going in the background.
         com.backpack.app.speed.SpeedGuard.start(this)
         com.backpack.app.speed.SpeedGuard.addListener(speedListener)
+        com.backpack.app.speed.SpeedGuard.addSoundListener(speedSoundListener)
         com.backpack.app.tourist.SightHeadsUp.ui = headsUpUi
         com.backpack.app.nav.AppRunning.onExit = { finishAndRemoveTask() }
         com.backpack.app.nav.AppRunning.markUiVisible(true)
@@ -472,6 +475,7 @@ class MainActivity : AppCompatActivity() {
         LocationHub.removeListener(uiFixListener)
         NavigationEngine.removeListener(navListener)
         com.backpack.app.speed.SpeedGuard.removeListener(speedListener)
+        com.backpack.app.speed.SpeedGuard.removeSoundListener(speedSoundListener)
         if (com.backpack.app.tourist.SightHeadsUp.ui === headsUpUi) com.backpack.app.tourist.SightHeadsUp.ui = null
         // GPS keeps running only if navigation (or, by car, the background service) holds its own lease.
         LocationHub.release(this, LocationHub.LEASE_UI)
@@ -2921,16 +2925,22 @@ class MainActivity : AppCompatActivity() {
         if (boxLp.width != boxW) { boxLp.width = boxW; navBox.layoutParams = boxLp }
         // Room for the speed circle at the box's right end (driving, navigating).
         val circleInBox = navUiActive // 1.1.0: speed shown in every mode while navigating
-        navBox.setPadding(dp(12), dp(4), dp(12), dp(4))
+        // 1.7.2: 16 dp sides, clear of the 39 dp corners.
+        navBox.setPadding(dp(16), dp(4), dp(16), dp(4))
         // 1.4.1: the circle (and the limit sign left of it, driving) sits beside
         // the turn row only; the last line (time, distance, arrival, cost)
-        // takes the box's full width under them. 1.7.1: circle 70 dp.
-        navInstructionBar.setPadding(0, 0, if (!circleInBox) 0 else if (driving) dp(101) else dp(67), 0)
+        // takes the box's full width under them. 1.7.1: circle 70 dp; 1.7.2: the
+        // circle 4 dp from the box's top and right edges (widget 4..110 dp in).
+        navInstructionBar.setPadding(0, 0, if (!circleInBox) 0 else if (driving) dp(96) else dp(60), 0)
         navInstructionBar.minimumHeight = if (circleInBox) dp(SPEED_CIRCLE_DP) else 0
         // Planning while driving: box and chips centred left of the speed
         // circle (top right), never under it.
         val circleTopRight = driving && !circleInBox
-        setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) 126 else 0)
+        // 1.7.2: the circle always where it sits in the navigation box (top right,
+        // 4 dp inside the box's corner), with or without the box.
+        val navBoxW = ((screenW - dp(8)) * (if (land) 0.8f else 1f)).toInt()
+        val circleEnd = ((screenW - navBoxW) / 2 / density).toInt() + 4
+        setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) circleEnd + SPEED_WIDGET_W_DP + 6 else 0)
         val boxShown = navBox.visibility == View.VISIBLE && navBox.height > 0
 
         // 1.7.1: the columns' top and spacing (bigger buttons): portrait under
@@ -2970,18 +2980,11 @@ class MainActivity : AppCompatActivity() {
             statusStrip.maxLines = 1
         }
 
-        // Speed circle: inside the box at its right end, centred on its
-        // height; otherwise top right.
-        if (circleInBox && boxShown) {
-            val endInset = ((screenW - boxW) / 2 / density).toInt()
-            val boxTop = (navBox.top / density).toInt()
-            // 1.4.1: level with the turn row, inside the frame.
-            setMargins(R.id.speed_widget, top = boxTop + 4, end = endInset + 7)
-            placeLimitSign(signTopDp = 0)
-        } else {
-            setMargins(R.id.speed_widget, top = 12, end = 14)
-            placeLimitSign(signTopDp = 8)
-        }
+        // Speed circle: fitted in the box's top-right corner (39 dp corners =
+        // circle radius 35 + frame 4); 1.7.2: the same spot without the box.
+        val boxTop = if (circleInBox && boxShown) (navBox.top / density).toInt() else NAV_BOX_TOP_DP
+        setMargins(R.id.speed_widget, top = boxTop + 4, end = circleEnd)
+        placeLimitSign(signTopDp = 0)
 
         // 1.2.1 (Alex): the columns never move with the mode -- the same
         // height in every mode, planning or navigating (top0 / step above).
@@ -3862,32 +3865,29 @@ class MainActivity : AppCompatActivity() {
             speedLimitSign.visibility = View.VISIBLE
             speedLimitSign.text = (if (useMetric) limit else Math.round(limit * 0.621371).toInt()).toString()
         }
-        // 1.4.0: the ring is a gauge (speed against the limit); stopped on a fast road = red ring.
-        val gauge = findViewById<com.backpack.app.ui.SpeedGaugeView>(R.id.speed_gauge)
-        gauge?.show(location.speed * 3.6, limit, if (state.ring == SpeedRing.STOPPED_RED) 0xFFC0392B.toInt() else 0xFF9E9E9E.toInt())
-        if (state.ring == SpeedRing.STOPPED_RED) gauge?.show(location.speed * 3.6, null, 0xFFC0392B.toInt())
-        if (state.ring == SpeedRing.BLINK_RED) startBlinking() else stopBlinking()
+        // 1.4.0: the ring is a gauge (speed against the limit). 1.7.2: red / blue
+        // only while an alarm sound plays ([speedSoundListener]); stopped on a
+        // fast road the plain ring flashes red with each buzz.
+        findViewById<com.backpack.app.ui.SpeedGaugeView>(R.id.speed_gauge)?.show(location.speed * 3.6,
+            if (state.ring == SpeedRing.STOPPED_RED) null else limit)
+        isBlinking = state.beep != com.backpack.app.core.SpeedAlarm.Beep.NONE
     }
 
-    private val blinkRunnable = object : Runnable {
-        override fun run() {
-            findViewById<com.backpack.app.ui.SpeedGaugeView>(R.id.speed_gauge)?.blinkPhase = blinkOn
-            blinkOn = !blinkOn
-            handler.postDelayed(this, 400L)
-        }
+    /** 1.7.2 (Alex): the ring flashes in step with each beep / buzz, only while it sounds. */
+    private val speedSoundListener = com.backpack.app.speed.SpeedGuard.SoundListener { color, ms ->
+        if (isDestroyed) return@SoundListener
+        val gauge = findViewById<com.backpack.app.ui.SpeedGaugeView>(R.id.speed_gauge) ?: return@SoundListener
+        gauge.flashColor = color
+        handler.removeCallbacks(endSpeedFlash)
+        handler.postDelayed(endSpeedFlash, ms)
     }
 
-    private fun startBlinking() {
-        if (isBlinking) return
-        isBlinking = true
-        handler.post(blinkRunnable)
-    }
+    private val endSpeedFlash = Runnable { findViewById<com.backpack.app.ui.SpeedGaugeView>(R.id.speed_gauge)?.flashColor = null }
 
     private fun stopBlinking() {
-        if (!isBlinking) return
         isBlinking = false
-        handler.removeCallbacks(blinkRunnable)
-        findViewById<com.backpack.app.ui.SpeedGaugeView>(R.id.speed_gauge)?.blinkPhase = null
+        handler.removeCallbacks(endSpeedFlash)
+        endSpeedFlash.run()
     }
 
     // ---------- Map taps ----------
