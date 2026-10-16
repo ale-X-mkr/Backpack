@@ -171,16 +171,27 @@ class NavigationTracker(
             val nowDist = max(minNow(), speed * 7.0)
             val flags = announced[next] ?: 0
             val step = route.steps[next]
+            // 1.8.0 (Alex): on a roundabout the next step starts at your exit:
+            // nothing about it while going round, then "Exit now" ~4.5 s
+            // before the exit (speed adaptive: covers the GPS delay).
+            val inRoundabout = next > 0 && route.steps[next - 1].maneuver == Maneuver.ROUNDABOUT_ENTER
 
-            if (!isShort && stepAdvanced && distToNext > max(1000.0, earlyDist * 3) && flags and 1 == 0) {
+            if (inRoundabout) {
+                if (distToNext <= max(EXIT_MIN_M, speed * EXIT_LEAD_S) && flags and 4 == 0) {
+                    announced[next] = flags or 6
+                    speech = text.exitNow()
+                }
+            } else if (!isShort && stepAdvanced && distToNext > max(1000.0, earlyDist * 3) && flags and 1 == 0) {
                 announced[next] = flags or 1
                 speech = text.continueFor(text.distance(distToNext, metric))
             } else if (distToNext <= nowDist && flags and 4 == 0) {
                 announced[next] = flags or 6
                 speech = say(step)
-                // A second maneuver right after this one: say both now.
+                // A second maneuver right after this one: say both now
+                // (1.8.0: not after entering a roundabout -- its exit comes first).
                 val after = next + 1
-                if (after < route.steps.size && stepStart[after] - stepStart[next] < nowDist * 2) {
+                if (step.maneuver != Maneuver.ROUNDABOUT_ENTER &&
+                    after < route.steps.size && stepStart[after] - stepStart[next] < nowDist * 2) {
                     speech = text.then(speech, say(route.steps[after]))
                     announced[after] = (announced[after] ?: 0) or 2
                 }
@@ -234,6 +245,9 @@ class NavigationTracker(
     fun spokenDistance(m: Double): String = Speech.distance(m, metric)
 
     companion object {
+        /** 1.8.0: "Exit now" this long before a roundabout exit (at your speed), at least this far. */
+        const val EXIT_LEAD_S = 4.5
+        const val EXIT_MIN_M = 10.0
         const val PASSED_MARGIN_M = 8.0
         const val ARRIVE_RADIUS_M = 25.0
         const val ARRIVE_ALONG_M = 150.0

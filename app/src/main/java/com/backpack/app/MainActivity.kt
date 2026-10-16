@@ -2489,7 +2489,10 @@ class MainActivity : AppCompatActivity() {
         if (!navUiActive) startNavigationUi()
         refreshNorthMark() // the arrow shows your heading when north up
         if (p.arrived) return
-        val step = if (p.nextStepIndex >= 0) route.steps.getOrNull(p.nextStepIndex) else null
+        var step = if (p.nextStepIndex >= 0) route.steps.getOrNull(p.nextStepIndex) else null
+        // 1.8.0: going round a roundabout, its circle (and exit number) stays
+        // until you leave it; the distance counts down to your exit.
+        route.steps.getOrNull(p.nextStepIndex - 1)?.takeIf { it.maneuver == Maneuver.ROUNDABOUT_ENTER }?.let { step = it }
         // 1.8.0 (Alex): what is said shows in the box for a few seconds, then
         // fades into the street name; never in the message area.
         p.speech?.let { showInstruction(it) }

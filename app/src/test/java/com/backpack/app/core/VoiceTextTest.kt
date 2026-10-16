@@ -49,4 +49,28 @@ class VoiceTextTest {
         while (d < 1000.0) { t.update(Fix(Geo.project(o, 0.0, d).lat, Geo.project(o, 0.0, d).lon, 10f, null, 5f, d.toLong())).speech?.let { said.add(it) }; d += 20.0 }
         assertEquals("En 300 metros, gire a la derecha en Calle B", said[0])
     }
+
+    /** 1.8.0: a roundabout: the exit alone, "Exit now" ~4.5 s before it, nothing early about the next step. */
+    @Test fun roundaboutExitNow() {
+        val o = LatLon(45.0, 6.0)
+        // 0-500 m to the roundabout, 60 m round it, then straight on 1 km.
+        val pts = (0..60).map { Geo.project(o, 0.0, it * 10.0) } + (1..100).map { Geo.project(o, 0.0, 600.0 + it * 10.0) }
+        val steps = listOf(NavStep("Head north", Maneuver.DEPART, 500.0, 50.0, 0, 50),
+            NavStep("Enter the roundabout and take the 2nd exit", Maneuver.ROUNDABOUT_ENTER, 100.0, 10.0, 50, 60, exitNumber = 2),
+            NavStep("Continue straight onto Road C", Maneuver.STRAIGHT, 1000.0, 100.0, 60, 160),
+            NavStep("Arrive", Maneuver.GOAL, 0.0, 0.0, 160, 160))
+        val t = NavigationTracker(RouteResult(pts, 1600.0, 160.0, steps = steps), TravelMode.DRIVING, true, false, en)
+        val said = ArrayList<Pair<Double, String>>()
+        var d = 0.0
+        while (d < 900.0) {
+            val p = Geo.project(o, 0.0, d)
+            t.update(Fix(p.lat, p.lon, 8f, null, 5f, d.toLong())).speech?.let { said.add(d to it) }
+            d += 2.0
+        }
+        assertTrue(said.toString(), said.none { it.second.contains("Road C") && it.first < 600.0 })
+        val exit = said.first { it.second == "Exit now" }
+        // 8 m/s x 4.5 s = 36 m before the exit at 600 m.
+        assertTrue(exit.toString(), exit.first in 560.0..570.0)
+        assertTrue(said.toString(), said.none { !it.second.contains("Exit") && it.second.contains("then") })
+    }
 }

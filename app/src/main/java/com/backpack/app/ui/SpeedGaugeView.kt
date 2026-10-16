@@ -10,9 +10,10 @@ import android.view.View
 import com.backpack.app.core.SpeedAlarm
 
 /**
- * 1.4.0: the speed circle's ring as a gauge (Alex). Grey ring; a coloured
- * arc grows clockwise from the lower left with your speed: blue, green at
- * the top (half the limit), yellow near it, the limit at the lower right.
+ * 1.4.0: the speed circle's ring as a gauge (Alex). Grey ring; an arc grows
+ * clockwise from the lower left with your speed, the limit at the lower
+ * right; 1.8.0: the arc is one colour, your speed's (blue, green at half the
+ * limit, yellow near it, red from the limit).
  * Over the limit the arc goes on in red, growing with your speed.
  * 1.7.2 (Alex): the ring itself turns red / blue only while an alarm
  * sound plays ([flashColor], set in step with each beep or buzz).
@@ -48,17 +49,9 @@ class SpeedGaugeView @JvmOverloads constructor(context: Context, attrs: Attribut
         canvas.drawOval(box, ring)
         if (l == null) return
         val (legal, overSweep) = SpeedAlarm.sweep(speedKmh, l)
-        // Coloured by position: each small step its own colour (a gradient along the arc).
-        var a = 0f
-        while (a < legal) {
-            val step = minOf(6f, legal - a)
-            arc.color = SpeedAlarm.colorAt(((a + step / 2) / SpeedAlarm.LEGAL_SWEEP).toDouble())
-            canvas.drawArc(box, SpeedAlarm.START_DEG + a, step + 0.6f, false, arc)
-            a += step
-        }
-        if (overSweep > 0f) {
-            arc.color = 0xFFB71C1C.toInt()
-            canvas.drawArc(box, SpeedAlarm.START_DEG + SpeedAlarm.LEGAL_SWEEP, overSweep, false, arc)
-        }
+        // 1.8.0 (Alex): the whole arc in ONE colour, your speed's: blue -> green
+        // -> yellow towards the limit, red from the limit on (the arc keeps growing).
+        arc.color = if (speedKmh > l) 0xFFB71C1C.toInt() else SpeedAlarm.colorAt(legal / SpeedAlarm.LEGAL_SWEEP.toDouble())
+        if (legal + overSweep > 0f) canvas.drawArc(box, SpeedAlarm.START_DEG, legal + overSweep, false, arc)
     }
 }
