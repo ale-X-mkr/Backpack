@@ -187,7 +187,6 @@ class MainActivity : AppCompatActivity() {
     private val COLUMN_ZONE_DP = 56
     private val SPEED_CIRCLE_DP = 70
     private val LIMIT_SIGN_DP = 36
-    private val SPEED_WIDGET_W_DP = 70
     /** 1.8.0: a spoken instruction stays in the box this long, then the street name. */
     private val INSTRUCTION_SHOWN_MS = 6000L
     /** 1.8.0: full brightness this long after something to see; checked this often. */
@@ -787,7 +786,7 @@ class MainActivity : AppCompatActivity() {
         setPlanFollow(f)
     }
 
-    /** 1.8.0: the last follow mode chosen (Waze-like default: your direction up, 3D). */
+    /** 1.8.0: the last follow mode chosen, kept (Waze-like default: your direction up, 3D). */
     private var lastPlanFollow = PlanFollow.HEADING
     /** Last time the map was moved by hand (no automatic following for a while). */
     private var lastMapGestureMs = 0L
@@ -813,7 +812,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun setPlanFollow(f: PlanFollow) {
         planFollow = f
-        if (f != PlanFollow.OFF) lastPlanFollow = f
+        if (f != PlanFollow.OFF && f != lastPlanFollow) {
+            lastPlanFollow = f
+            getSharedPreferences("backpack_toggle_state", MODE_PRIVATE).edit().putString("plan_follow", f.name).apply()
+        }
         findViewById<ImageButton>(R.id.locate_button)?.let { setIconActive(it, f != PlanFollow.OFF) }
         refreshNorthMark()
     }
@@ -880,7 +882,9 @@ class MainActivity : AppCompatActivity() {
             map?.locationComponent?.cameraMode = CameraMode.NONE
             if (planFollow == PlanFollow.HEADING) flattenOnIdle = true
         }
-        // setPlanFollow(OFF) keeps lastPlanFollow (the mode to come back to).
+        // setPlanFollow(OFF) keeps lastPlanFollow (the mode to come back to);
+        // the app moved the map for you: no automatic following for a while.
+        lastMapGestureMs = System.currentTimeMillis()
         planFollow = PlanFollow.OFF
         findViewById<ImageButton>(R.id.locate_button)?.let { setIconActive(it, false) }
         refreshNorthMark()
@@ -905,6 +909,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadToggleState() {
         val prefs = getSharedPreferences("backpack_toggle_state", MODE_PRIVATE)
+        lastPlanFollow = if (prefs.getString("plan_follow", null) == PlanFollow.NORTH.name) PlanFollow.NORTH else PlanFollow.HEADING
         currentMode = enumOr(prefs.getString("mode", null), currentMode)
         currentPreference = enumOr(prefs.getString("preference", null), currentPreference)
         urgencyMode = enumOr(prefs.getString("urgency", null), urgencyMode)
@@ -1838,15 +1843,17 @@ class MainActivity : AppCompatActivity() {
         val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val lp = card.layoutParams as FrameLayout.LayoutParams
         val screenW = findViewById<View>(android.R.id.content).width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        // 1.8.0: while navigating the left column (travel mode, urgency) stays: the card beside it.
+        val startDp = if (navUiActive) COLUMN_ZONE_DP + 32 else 10
         if (land) {
             lp.gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
-            lp.setMargins(dp(12), 0, 0, 0)
+            lp.setMargins(dp(startDp), 0, 0, 0)
             lp.width = (screenW * 0.36).toInt()
         } else {
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.START
             val boxBottom = if (navBox.visibility == View.VISIBLE) navBox.bottom else dp(60)
             // 1.7.1: never under the right column.
-            lp.setMargins(dp(10), boxBottom + dp(8), dp(COLUMN_ZONE_DP), 0)
+            lp.setMargins(dp(startDp), boxBottom + dp(8), dp(COLUMN_ZONE_DP), 0)
             lp.width = FrameLayout.LayoutParams.WRAP_CONTENT
         }
         card.layoutParams = lp
@@ -2445,6 +2452,8 @@ class MainActivity : AppCompatActivity() {
         wakeDisplay()
         findViewById<ImageButton>(R.id.nav_go_button).setImageResource(R.drawable.ic_btn_go)
         setNavigationDeclutter(false)
+        statusStrip.animate().cancel()
+        statusStrip.alpha = 1f
         statusStrip.text = ""
         instructionShownUntil = 0L
         navDistanceText.text = ""
@@ -2494,6 +2503,8 @@ class MainActivity : AppCompatActivity() {
             refreshResumeButton()
             navDistanceText.text = ""
             instructionShownUntil = 0L
+            statusStrip.animate().cancel()
+            statusStrip.alpha = 1f
             statusStrip.text = getString(R.string.main_arrived)
             showTurnIcon(R.drawable.ic_nav_arrive)
             wakeDisplay()
@@ -3245,7 +3256,8 @@ class MainActivity : AppCompatActivity() {
         val moving = fix != null && fix.hasSpeed() && fix.speed > 1.5f && now - lastRealLocationAtMs < 10_000L
         val charging = (getSystemService(BATTERY_SERVICE) as? android.os.BatteryManager)?.isCharging == true
         val level = when {
-            now < fullUntilMs || isGpsDegraded || isBlinking -> 1.0f
+            // A popup or the keyboard in front (their touches never reach this window).
+            now < fullUntilMs || isGpsDegraded || isBlinking || keyboardOpen || !hasWindowFocus() -> 1.0f
             moving -> 0.6f
             charging || navUiActive -> 0.3f
             else -> 0.01f
