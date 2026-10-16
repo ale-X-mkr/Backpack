@@ -27,10 +27,14 @@ import com.backpack.app.nav.NavigationEngine
 object FreeSightTips {
 
     private const val CONE_DEG = 30.0
+    /** At least this long between two tips. */
+    private const val GAP_MS = 120_000L
     private val said = HashSet<String>()
+    private var lastTipAtMs = 0L
 
     fun onFix(c: Context, location: Location) {
         if (NavigationEngine.isActive || TripState.plan != null) return
+        if (System.currentTimeMillis() - lastTipAtMs < GAP_MS) return
         if (!location.hasBearing() || !location.hasSpeed() || location.speed < 1.0f) return
         val toggles = c.getSharedPreferences("backpack_toggle_state", Context.MODE_PRIVATE)
         val prefs = Prefs.settings(c)
@@ -66,6 +70,7 @@ object FreeSightTips {
             }
             .maxByOrNull { Tourist.score(it.poi) } ?: return
         said.add(best.poi.key)
+        lastTipAtMs = System.currentTimeMillis()
         if (said.size > 2000) said.clear()
         val poi = best.poi
         val detour = Tourist.estimateDetourSeconds(best.off, mode)
@@ -78,10 +83,14 @@ object FreeSightTips {
         NavigationEngine.speakInfo(VoiceQueue.Item(
             VoiceQueue.Kind.HEADS_UP,
             text = {
-                val inMin = Math.round(best.dist / speed.coerceAtLeast(0.5) / 60.0).toInt().coerceAtLeast(1)
+                // Worded when said: from where you are then.
+                val f = com.backpack.app.location.LocationHub.lastGoodFix
+                val dist = f?.let { Geo.distance(LatLon(it.latitude, it.longitude), poi.point) } ?: best.dist
+                val v = f?.takeIf { it.hasSpeed() && it.speed > 0.5f }?.speed?.toDouble() ?: speed
+                val inMin = Math.round(dist / v.coerceAtLeast(0.5) / 60.0).toInt().coerceAtLeast(1)
                 words.headsUp(inMin, poi.name, poi.category, Math.round(detour / 60.0).toInt().coerceAtLeast(1))
             },
-            valid = { !NavigationEngine.isActive && stillAhead() },
+            valid = { !NavigationEngine.isActive && TripState.plan == null && stillAhead() },
             onStart = { SightHeadsUp.ui?.onHeadsUp(poi, Tourist.minutesLabel(detour)) }
         ), c)
     }

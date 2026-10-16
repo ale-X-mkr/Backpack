@@ -29,9 +29,9 @@ object TollExitWatch {
     private val main = Handler(Looper.getMainLooper())
     private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
 
-    // With a route: toll start (m along) -> its last exit (m along; NaN = none / not known yet).
+    // With a route: toll start (m along) -> its last exit (m along + where; null point = none).
     private var forRoute: RouteResult? = null
-    private val lastExitOf = HashMap<Double, Double>()
+    private val lastExitOf = HashMap<Double, Pair<Double, LatLon?>>()
     private val loading = HashSet<Double>()
     private var failedAtMs = 0L
 
@@ -62,8 +62,8 @@ object TollExitWatch {
             if (start - alongM > TollExits.LOOK_BACK_M + 20_000.0) continue
             val exit = lastExitOf[start]
             if (exit == null) { load(c, route, start); continue }
-            if (exit.isNaN()) continue
-            announce(c, "r${start.toLong()}", exit - alongM, speed)
+            val at = exit.second ?: continue
+            announce(c, TollExits.key(at), exit.first - alongM, speed)
         }
     }
 
@@ -80,13 +80,14 @@ object TollExitWatch {
                 OverpassClient.query(app, query, background = true) { body, _ ->
                     worker.execute {
                         val nodes = body?.let { try { TollExits.parse(it) } catch (e: Exception) { null } }
-                        // Where each exit lies along the route (on it: within 40 m).
-                        val along = nodes?.mapNotNull { n -> route.line.snap(n.p)?.takeIf { it.offsetM <= 40.0 }?.alongM }
+                        // Where each exit lies along the route (on it: within 15 m).
+                        val along = nodes?.mapNotNull { n -> route.line.snap(n.p)?.takeIf { it.offsetM <= 15.0 }?.let { it.alongM to n.p } }
                         main.post {
                             loading.remove(start)
                             if (route !== forRoute) return@post
                             if (along == null) { failedAtMs = System.currentTimeMillis(); return@post }
-                            lastExitOf[start] = TollExits.lastExitAlong(along, start) ?: Double.NaN
+                            val last = TollExits.lastExitAlong(along.map { it.first }, start)
+                            lastExitOf[start] = if (last == null) Double.NaN to null else last to along.first { it.first == last }.second
                         }
                     }
                 }
@@ -101,7 +102,9 @@ object TollExitWatch {
         val me = LatLon(location.latitude, location.longitude)
         val now = System.currentTimeMillis()
         val center = freeCenter
-        if (!freeInFlight && (center == null || com.backpack.app.core.Geo.distance(center, me) > 6000.0 || now - freeAtMs > 120_000L)) {
+        // Again after 6 km or 2 min; after a failure not before a minute (never on every fix).
+        if (!freeInFlight && now - freeAtMs >= 60_000L &&
+            (center == null || com.backpack.app.core.Geo.distance(center, me) > 6000.0 || now - freeAtMs > 120_000L)) {
             freeInFlight = true
             freeAtMs = now
             OverpassClient.query(c.applicationContext, TollExits.pointQuery(me), background = true) { body, _ ->
@@ -115,7 +118,7 @@ object TollExitWatch {
             }
         }
         val (exit, dist) = TollExits.lastExitAhead(me, location.bearing.toDouble(), freeNodes) ?: return
-        announce(c, "n${exit.id}", dist, speed)
+        announce(c, TollExits.key(exit.p), dist, speed)
     }
 
     // ---------- saying it ----------

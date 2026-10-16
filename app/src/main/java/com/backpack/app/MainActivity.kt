@@ -701,8 +701,8 @@ class MainActivity : AppCompatActivity() {
             if (puckActive()) map?.locationComponent?.forceLocationUpdate(withHeading(location))
             keepArrowOnScreen(location)
             maybeAutoFollow(location)
-            // 1.8.1: sights ahead without a route (by car SpeedGuard does it too, screen off).
-            com.backpack.app.tourist.FreeSightTips.onFix(this, location)
+            // 1.8.1: sights ahead without a route (by car SpeedGuard does it, screen off too).
+            if (currentMode != ModeUi.DRIVING) com.backpack.app.tourist.FreeSightTips.onFix(this, location)
             // Car: SpeedGuard watches and reports (speedListener); else your speed only.
             if (currentMode != ModeUi.DRIVING && navUiActive) updateSpeedOnly(location)
             if (navUiActive) adaptTrackingZoom(location)

@@ -18,9 +18,11 @@ object TollExits {
 
     /** How far before a toll start an exit still counts. */
     const val LOOK_BACK_M = 30_000.0
-    /** No route: a barrier this far ahead at most, within this angle of your heading. */
+    /** No route: a barrier this far ahead at most, within this angle of your
+     *  heading and this far sideways (the same road, not a parallel one). */
     const val FREE_AHEAD_M = 12_000.0
-    const val FREE_CONE_DEG = 12.0
+    const val FREE_CONE_DEG = 20.0
+    const val FREE_SIDE_M = 250.0
     /** No route: only at motorway speed (m/s, ~60 km/h). */
     const val FREE_MIN_SPEED = 16.7f
 
@@ -32,15 +34,18 @@ object TollExits {
         ranges.map { line.alongAt(it.first) }
 
     /** Exits within [radiusM] of a stretch of route. */
-    fun corridorQuery(points: List<LatLon>, radiusM: Int = 25): String {
+    fun corridorQuery(points: List<LatLon>, radiusM: Int = 12): String {
         val coords = points.joinToString(",") { "%.5f,%.5f".format(java.util.Locale.ROOT, it.lat, it.lon) }
         return "[out:json][timeout:25];node(around:$radiusM,$coords)[\"highway\"=\"motorway_junction\"];out;"
     }
 
-    /** Exits and toll barriers around one position (no route). */
+    /** Exits and toll barriers around one position (no route). Barriers only
+     *  across a motorway / trunk itself (not the booths on exit ramps of a
+     *  closed toll system, where you already pay). */
     fun pointQuery(p: LatLon, radiusM: Int = FREE_AHEAD_M.toInt() + 1000): String {
         val at = "around:$radiusM,%.5f,%.5f".format(java.util.Locale.ROOT, p.lat, p.lon)
-        return "[out:json][timeout:25];(node($at)[\"highway\"=\"motorway_junction\"];node($at)[\"barrier\"=\"toll_booth\"];);out;"
+        return "[out:json][timeout:25];way($at)[\"highway\"~\"^(motorway|trunk)$\"]->.m;" +
+            "(node(w.m)[\"barrier\"=\"toll_booth\"];node($at)[\"highway\"=\"motorway_junction\"];);out;"
     }
 
     fun parse(body: String): List<Node> {
@@ -71,6 +76,9 @@ object TollExits {
     fun lastExitAlong(exitsAlongM: List<Double>, tollStartM: Double): Double? =
         exitsAlongM.filter { it < tollStartM - 100.0 && it > tollStartM - LOOK_BACK_M }.maxOrNull()
 
+    /** A stable name for an exit (so a reroute never announces it again). */
+    fun key(p: LatLon): String = "%.4f,%.4f".format(java.util.Locale.ROOT, p.lat, p.lon)
+
     /**
      * Without a route: (exit, metres to it) for the last exit straight ahead
      * before the nearest toll barrier straight ahead; null when there is no
@@ -80,7 +88,9 @@ object TollExits {
         fun ahead(n: Node): Double? {
             val d = Geo.distance(me, n.p)
             if (d < 30.0 || d > FREE_AHEAD_M) return null
-            return if (Geo.angleDiff(Geo.bearing(me, n.p), headingDeg) <= FREE_CONE_DEG) d else null
+            val angle = Geo.angleDiff(Geo.bearing(me, n.p), headingDeg)
+            if (angle > FREE_CONE_DEG || d * Math.sin(Math.toRadians(angle)) > FREE_SIDE_M) return null
+            return d
         }
         val barrier = nodes.filter { it.kind == Kind.BARRIER }.mapNotNull { n -> ahead(n)?.let { n to it } }.minByOrNull { it.second }
             ?: return null
