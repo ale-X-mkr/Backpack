@@ -185,12 +185,14 @@ class MainActivity : AppCompatActivity() {
     /** Edge + column + margin: what a side column takes (landscape messages / chips stay inside).
      *  1.8.0: columns 4 dp from the screen edges. */
     private val COLUMN_ZONE_DP = 56
-    private val COLUMN_EDGE_DP = 4
     private val SPEED_CIRCLE_DP = 70
     private val LIMIT_SIGN_DP = 36
     private val SPEED_WIDGET_W_DP = 70
     /** 1.8.0: a spoken instruction stays in the box this long, then the street name. */
     private val INSTRUCTION_SHOWN_MS = 6000L
+    /** 1.8.0: full brightness this long after something to see; checked this often. */
+    private val WAKE_MS = 10_000L
+    private val BRIGHTNESS_TICK_MS = 2000L
     /** The navigation box's top margin (layout). */
     private val NAV_BOX_TOP_DP = 4
     private var currentPreference = PreferenceUi.RECOMMENDED
@@ -213,7 +215,6 @@ class MainActivity : AppCompatActivity() {
     private var lastRealLocationAtMs = 0L
     private var deadReckoningActive = false
     private var isGpsDegraded = false
-    private var isDisplayDimmed = false
     private var lastTrackingZoom = 0.0
 
     // Speed limit (loaded per route by SpeedLimitLookup).
@@ -463,11 +464,20 @@ class MainActivity : AppCompatActivity() {
         if (LocationHub.hasPermission(this) && !LocationHub.isGpsEnabled(this)) {
             showError(getString(R.string.main_gps_off))
         }
+        // 1.8.0 (Alex): the map screen never sleeps while it is in front; the
+        // brightness follows what is going on (see applyBrightness).
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        wakeDisplay()
+        handler.removeCallbacks(brightnessTick)
+        handler.postDelayed(brightnessTick, BRIGHTNESS_TICK_MS)
     }
 
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(nightCheckRunnable)
+        handler.removeCallbacks(brightnessTick)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        setWindowBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
         map?.cameraPosition?.let { cp ->
             cp.target?.let { Prefs.saveCamera(this, it.latitude, it.longitude, cp.zoom) }
         }
@@ -957,6 +967,7 @@ class MainActivity : AppCompatActivity() {
         }
         messageBubble.text = text
         messageBubble.visibility = View.VISIBLE
+        wakeDisplay()
         messageBubble.animate().cancel()
         messageBubble.alpha = 0f
         messageBubble.animate().alpha(1f).setDuration(200).start()
@@ -975,6 +986,7 @@ class MainActivity : AppCompatActivity() {
      *  With [retry], the bubble says "tap to retry" and stays a little longer. */
     private fun showError(text: String, retry: (() -> Unit)? = null) {
         errorFadeOutRunnable?.let { handler.removeCallbacks(it) }
+        wakeDisplay()
         errorBubble.text = if (retry != null) getString(R.string.main_tap_to_retry, text) else text
         if (retry != null) {
             errorBubble.isClickable = true
@@ -1839,6 +1851,7 @@ class MainActivity : AppCompatActivity() {
         }
         card.layoutParams = lp
         card.visibility = View.VISIBLE
+        wakeDisplay()
         handler.removeCallbacks(hideSightCard)
         handler.removeCallbacks(hideWhenReadingDone)
         handler.postDelayed(hideSightCard, sightCardMs())
@@ -2428,11 +2441,8 @@ class MainActivity : AppCompatActivity() {
         map?.uiSettings?.isTiltGesturesEnabled = false
         deadReckoningActive = false
         handler.removeCallbacks(deadReckoningRunnable)
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val params = window.attributes
-        params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-        window.attributes = params
-        isDisplayDimmed = false
+        // 1.8.0: the screen stays on (the map screen's own rule), brightness by applyBrightness.
+        wakeDisplay()
         findViewById<ImageButton>(R.id.nav_go_button).setImageResource(R.drawable.ic_btn_go)
         setNavigationDeclutter(false)
         statusStrip.text = ""
@@ -2550,7 +2560,6 @@ class MainActivity : AppCompatActivity() {
         // Live remaining distance and arrival time.
         routeInfoDist.text = navInfo(getString(R.string.main_dist), navDistance(p.remainingM), " \u00b7")
         routeInfoEta.text = navInfo(getString(R.string.main_eta), etaLabel(p.remainingS).removePrefix(getString(R.string.main_eta) + " "))
-        LocationHub.lastGoodFix?.let { dimDisplayIfIdle(p.distanceToNextM, it) }
     }
 
     private fun updateNavBar(step: NavStep?, distance: Double?) {
@@ -3214,29 +3223,56 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Full brightness on any warning, alert, or right after each turn. */
+    /**
+     * 1.8.0 (Alex): screen brightness while the map screen is in front (it
+     * never sleeps there):
+     * - something to see (alert, sight card, message, instruction, speed
+     *   alarm, a touch, weak GPS): full for [WAKE_MS];
+     * - moving: 60 %;
+     * - not moving: 30 % when charging or navigating, almost off on battery.
+     */
     private fun wakeDisplay() {
-        if (!navUiActive) return
-        isDisplayDimmed = false
+        fullUntilMs = System.currentTimeMillis() + WAKE_MS
+        applyBrightness()
+    }
+
+    private var fullUntilMs = 0L
+    private var shownBrightness = -2f
+
+    private fun applyBrightness() {
+        val now = System.currentTimeMillis()
+        val fix = LocationHub.lastGoodFix
+        val moving = fix != null && fix.hasSpeed() && fix.speed > 1.5f && now - lastRealLocationAtMs < 10_000L
+        val charging = (getSystemService(BATTERY_SERVICE) as? android.os.BatteryManager)?.isCharging == true
+        val level = when {
+            now < fullUntilMs || isGpsDegraded || isBlinking -> 1.0f
+            moving -> 0.6f
+            charging || navUiActive -> 0.3f
+            else -> 0.01f
+        }
+        setWindowBrightness(level)
+    }
+
+    private fun setWindowBrightness(level: Float) {
+        if (level == shownBrightness) return
+        shownBrightness = level
         val params = window.attributes
-        params.screenBrightness = 1.0f
+        params.screenBrightness = level
         window.attributes = params
     }
 
-    /** 50 % brightness on long boring stretches (60+ s to the next turn),
-     *  never while GPS is degraded or the speed alarm is active. */
-    private fun dimDisplayIfIdle(distanceToNextTurn: Double, location: Location) {
-        if (!navUiActive || isDisplayDimmed) return
-        if (isGpsDegraded) return
-        if (isBlinking) return
-        val hasReliableSpeed = location.hasSpeed() && location.speed > 1.0
-        val etaSeconds = if (hasReliableSpeed) distanceToNextTurn / location.speed else Double.MAX_VALUE
-        if (etaSeconds > 60.0) {
-            isDisplayDimmed = true
-            val params = window.attributes
-            params.screenBrightness = 0.5f
-            window.attributes = params
+    private val brightnessTick = object : Runnable {
+        override fun run() {
+            if (isDestroyed) return
+            applyBrightness()
+            handler.postDelayed(this, BRIGHTNESS_TICK_MS)
         }
+    }
+
+    /** A touch anywhere: full brightness for a while. */
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) wakeDisplay()
+        return super.dispatchTouchEvent(ev)
     }
 
     /** Border blue (far) -> green -> yellow -> red (close to the turn). */
