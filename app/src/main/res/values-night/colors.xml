@@ -6,6 +6,8 @@
     <!-- 1.4.1 night buttons: darkened faint red backdrop, white icon = on, faint white = off. -->
     <color name="rg_control_backdrop">#A0451C1C</color>
     <color name="rg_control_edge">#40FFFFFF</color>
+    <color name="rg_control_backdrop_faint">#50451C1C</color>
+    <color name="rg_control_edge_faint">#20FFFFFF</color>
     <color name="rg_icon_on">#FFFFFFFF</color>
     <color name="rg_icon_off">#73FFFFFF</color>
     <color name="rg_text">#FFEEEEEE</color>

@@ -1,6 +1,7 @@
 <!-- 1.4.4: the compass needle on the centre button, red, never tinted
-     (pointing up = north, or your heading when the map is north up). -->
+     (pointing up = north, or your heading when the map is north up).
+     1.8.0: bigger. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:height="24dp" android:width="24dp"
     android:viewportHeight="24" android:viewportWidth="24">
-    <path android:fillColor="@color/compass_n" android:pathData="M12,5.4 L14.4,16.8 L12,15.1 L9.6,16.8 Z"/>
+    <path android:fillColor="@color/compass_n" android:pathData="M12,2.6 L15.6,20 L12,17.4 L8.4,20 Z"/>
 </vector>

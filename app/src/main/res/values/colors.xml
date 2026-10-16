@@ -10,6 +10,9 @@
     <!-- Map controls: 50 % mid-light grey backdrop (1.0.8, was 35 %), faint dark-grey edge. -->
     <color name="rg_control_backdrop">#80BDBDBD</color>
     <color name="rg_control_edge">#40303030</color>
+    <!-- 1.8.0: the bottom row's backdrop, about half as visible. -->
+    <color name="rg_control_backdrop_faint">#40BDBDBD</color>
+    <color name="rg_control_edge_faint">#20303030</color>
     <color name="rg_text">#FF1A1A1A</color>
     <color name="rg_text_secondary">#FF555555</color>
     <color name="rg_popup_bg">#F5DCDCDC</color>

@@ -188,7 +188,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_marginTop="113dp"
-        android:layout_marginStart="8dp"
+        android:layout_marginStart="4dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:orientation="vertical">
@@ -314,11 +314,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
-        android:background="@drawable/message_bubble_background"
+        android:background="@drawable/msg_alert_background"
         android:elevation="10dp"
         android:orientation="vertical"
-        android:paddingHorizontal="14dp"
-        android:paddingVertical="10dp"
+        android:paddingHorizontal="15dp"
+        android:paddingVertical="11dp"
         android:visibility="gone">
 
         <TextView
@@ -327,8 +327,8 @@
             android:layout_height="wrap_content"
             android:maxLines="2"
             android:ellipsize="end"
-            android:textColor="@color/backpack_ink"
-            android:textSize="17.5sp"
+            android:textColor="#FF1A1A1A"
+            android:textSize="19sp"
             android:textStyle="bold" />
 
         <TextView
@@ -338,8 +338,8 @@
             android:layout_marginTop="2dp"
             android:maxLines="2"
             android:ellipsize="end"
-            android:textColor="@color/backpack_ink"
-            android:textSize="14.5sp" />
+            android:textColor="#FF1A1A1A"
+            android:textSize="16sp" />
 
         <LinearLayout
             android:layout_width="wrap_content"
@@ -351,12 +351,12 @@
                 android:id="@+id/sight_card_go"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/route_pill_background"
+                android:background="@drawable/card_button_background"
                 android:paddingHorizontal="14dp"
                 android:paddingVertical="7dp"
                 android:text="@string/main_card_go"
-                android:textColor="@color/backpack_ink"
-                android:textSize="15.5sp"
+                android:textColor="#FFB71C1C"
+                android:textSize="17sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -364,12 +364,12 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="10dp"
-                android:background="@drawable/route_pill_background"
+                android:background="@drawable/card_button_background"
                 android:paddingHorizontal="14dp"
                 android:paddingVertical="7dp"
                 android:text="@string/main_card_read"
-                android:textColor="@color/backpack_ink"
-                android:textSize="15.5sp"
+                android:textColor="#FF1A1A1A"
+                android:textSize="17sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </LinearLayout>
@@ -384,7 +384,7 @@
         android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="113dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="4dp"
         android:src="@drawable/ic_location_marker"
         android:background="@drawable/icon_backdrop"
         android:padding="8dp"
@@ -400,7 +400,7 @@
         android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="166dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="4dp"
         android:src="@drawable/ic_waypoint"
         android:background="@drawable/icon_backdrop"
         android:padding="5dp"
@@ -416,7 +416,7 @@
         android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="219dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="4dp"
         android:src="@drawable/ic_pref_fastest"
         android:background="@drawable/icon_backdrop"
         android:padding="5dp"
@@ -433,7 +433,7 @@
         android:layout_height="44dp"
         android:layout_gravity="top|start"
         android:layout_marginTop="272dp"
-        android:layout_marginStart="8dp"
+        android:layout_marginStart="4dp"
         android:src="@drawable/ic_route_options"
         android:background="@drawable/icon_backdrop"
         android:padding="7dp"
@@ -449,7 +449,7 @@
         android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="219dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="4dp"
         android:src="@drawable/ic_alt_route"
         android:background="@drawable/icon_backdrop"
         android:padding="7dp"
@@ -466,7 +466,7 @@
         android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="166dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="4dp"
         android:src="@drawable/ic_overview"
         android:background="@drawable/icon_backdrop"
         android:padding="7dp"
@@ -519,7 +519,7 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
             android:alpha="0.6"
-            android:background="@drawable/message_bubble_background"
+            android:background="@drawable/msg_info_background"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingHorizontal="8dp"
@@ -531,15 +531,15 @@
                 android:layout_height="14dp"
                 android:layout_marginEnd="6dp"
                 android:indeterminate="true"
-                android:indeterminateTint="@color/backpack_ink" />
+                android:indeterminateTint="#FF1A1A1A" />
 
             <TextView
                 android:id="@+id/searching_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Searching places…"
-                android:textColor="@color/backpack_ink"
-                android:textSize="13sp" />
+                android:textColor="#FF1A1A1A"
+                android:textSize="14.5sp" />
 
         </LinearLayout>
 
@@ -548,14 +548,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginBottom="4dp"
-            android:background="@drawable/message_bubble_background"
-            android:textColor="@color/backpack_ink"
-            android:textSize="16.5sp"
+            android:background="@drawable/msg_alert_background"
+            android:textColor="#FF1A1A1A"
+            android:textSize="18sp"
             android:gravity="center"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="3dp"
+            android:paddingHorizontal="11dp"
+            android:paddingVertical="4dp"
             android:maxLines="2"
-            android:maxWidth="308dp"
+            android:maxWidth="340dp"
             android:ellipsize="end"
             android:alpha="0"
             android:visibility="gone" />
@@ -564,14 +564,14 @@
             android:id="@+id/message_bubble"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/message_bubble_background"
-            android:textColor="@color/backpack_ink"
-            android:textSize="16.5sp"
+            android:background="@drawable/msg_info_background"
+            android:textColor="#FF1A1A1A"
+            android:textSize="18sp"
             android:gravity="center"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="3dp"
+            android:paddingHorizontal="11dp"
+            android:paddingVertical="4dp"
             android:maxLines="2"
-            android:maxWidth="308dp"
+            android:maxWidth="340dp"
             android:ellipsize="end"
             android:alpha="0"
             android:visibility="gone" />
@@ -597,9 +597,9 @@
     <LinearLayout
         android:id="@+id/bottom_bar"
         android:layout_width="match_parent"
-        android:layout_height="58dp"
+        android:layout_height="49dp"
         android:layout_gravity="bottom"
-        android:layout_marginBottom="14dp"
+        android:layout_marginBottom="20dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:orientation="horizontal">
@@ -613,8 +613,8 @@
             <ImageButton
                 android:id="@+id/clear_route_button"
                 android:scaleType="fitCenter"
-                android:layout_width="58dp"
-                android:layout_height="58dp"
+                android:layout_width="49dp"
+                android:layout_height="49dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_clear"
                 android:background="@drawable/icon_backdrop"
@@ -627,8 +627,8 @@
             <ImageButton
                 android:id="@+id/resume_button"
                 android:scaleType="fitCenter"
-                android:layout_width="58dp"
-                android:layout_height="58dp"
+                android:layout_width="49dp"
+                android:layout_height="49dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_resume"
                 android:background="@drawable/icon_backdrop"
@@ -649,8 +649,8 @@
             <ImageButton
                 android:id="@+id/nav_go_button"
                 android:scaleType="fitCenter"
-                android:layout_width="58dp"
-                android:layout_height="58dp"
+                android:layout_width="49dp"
+                android:layout_height="49dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_btn_go"
                 android:background="@drawable/icon_backdrop"
@@ -671,8 +671,8 @@
             <ImageButton
                 android:id="@+id/sound_button"
                 android:scaleType="fitCenter"
-                android:layout_width="58dp"
-                android:layout_height="58dp"
+                android:layout_width="49dp"
+                android:layout_height="49dp"
                 android:layout_gravity="center"
                 android:src="@drawable/ic_sound_alerts"
                 android:background="@drawable/icon_backdrop"
@@ -805,7 +805,7 @@
         android:layout_height="44dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="272dp"
-        android:layout_marginEnd="8dp"
+        android:layout_marginEnd="4dp"
         android:src="@drawable/ic_search"
         android:background="@drawable/icon_backdrop"
         android:padding="5dp"

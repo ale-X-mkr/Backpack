@@ -178,11 +178,14 @@ class MainActivity : AppCompatActivity() {
     private var columnsTop = 0
     private var columnsStep = 0
     private var columnsFor: Boolean? = null
-    private val BOTTOM_ROW_DP = 58
-    private val BOTTOM_ROW_BOTTOM_DP = 14
-    private val MESSAGES_BOTTOM_DP = 76
-    /** Edge + column + margin: what a side column takes (landscape messages / chips stay inside). */
-    private val COLUMN_ZONE_DP = 60
+    /** 1.8.0 (Alex): bottom row 15 % smaller (49 dp), fainter, clear of the credit line. */
+    private val BOTTOM_ROW_DP = 49
+    private val BOTTOM_ROW_BOTTOM_DP = 20
+    private val MESSAGES_BOTTOM_DP = 73
+    /** Edge + column + margin: what a side column takes (landscape messages / chips stay inside).
+     *  1.8.0: columns 4 dp from the screen edges. */
+    private val COLUMN_ZONE_DP = 56
+    private val COLUMN_EDGE_DP = 4
     private val SPEED_CIRCLE_DP = 70
     private val LIMIT_SIGN_DP = 36
     private val SPEED_WIDGET_W_DP = 70
@@ -575,6 +578,7 @@ class MainActivity : AppCompatActivity() {
         m.addOnCameraMoveStartedListener { reason ->
             if (overviewOn && reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) scheduleOverviewReturn()
             // 1.2.1: moving the map by hand while planning = looking around: no following.
+            if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) lastMapGestureMs = System.currentTimeMillis()
             if (!navUiActive && reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) stopPlanFollow()
         }
         // 1.4.2: the centre button follows the map's orientation (compass).
@@ -684,6 +688,7 @@ class MainActivity : AppCompatActivity() {
             }
             if (puckActive()) map?.locationComponent?.forceLocationUpdate(withHeading(location))
             keepArrowOnScreen(location)
+            maybeAutoFollow(location)
             // Car: SpeedGuard watches and reports (speedListener); else your speed only.
             if (currentMode != ModeUi.DRIVING && navUiActive) updateSpeedOnly(location)
             if (navUiActive) adaptTrackingZoom(location)
@@ -745,30 +750,48 @@ class MainActivity : AppCompatActivity() {
             showError(getString(if (LocationHub.isGpsEnabled(this)) R.string.main_waiting_fix else R.string.main_gps_off))
             return
         }
-        // 1.2.1 planning: north up (flat, recentred only near the edge) ->
-        // your direction up (3D) -> north up ...
-        val here = LatLng(current.latitude, current.longitude)
-        when (planFollow) {
-            PlanFollow.OFF -> {
-                flyFlat(here, maxOf(m.cameraPosition.zoom, 15.0), keepFollow = true)
-                setPlanFollow(PlanFollow.NORTH)
-                showMessage(getString(R.string.main_following_north))
-            }
-            PlanFollow.NORTH -> {
-                val lc = m.locationComponent
-                if (!puckActive()) return
-                lc.setCameraMode(CameraMode.TRACKING_GPS, 750L, maxOf(m.cameraPosition.zoom, 16.0), null,
-                    Prefs.navTilt(this, currentMode == ModeUi.DRIVING), null)
-                setPlanFollow(PlanFollow.HEADING)
-                showMessage(getString(R.string.main_following_heading))
-            }
-            PlanFollow.HEADING -> {
-                if (puckActive()) m.locationComponent.cameraMode = CameraMode.NONE
-                flyFlat(here, m.cameraPosition.zoom, keepFollow = true)
-                setPlanFollow(PlanFollow.NORTH)
-                showMessage(getString(R.string.main_following_north))
-            }
+        // 1.8.0 (Alex): two modes, both centred on your arrow: your direction
+        // up in 3D <-> north up flat. Map moved by hand: back to the last one.
+        val next = when (planFollow) {
+            PlanFollow.OFF -> lastPlanFollow
+            PlanFollow.NORTH -> PlanFollow.HEADING
+            PlanFollow.HEADING -> PlanFollow.NORTH
         }
+        if (!puckActive()) {
+            flyFlat(LatLng(current.latitude, current.longitude), maxOf(m.cameraPosition.zoom, 15.0))
+            return
+        }
+        startPlanFollow(next)
+        showMessage(getString(if (next == PlanFollow.NORTH) R.string.main_following_north else R.string.main_following_heading))
+    }
+
+    /** Planning / no route: follow your arrow, centred, in [f] (NORTH flat, HEADING 3D). */
+    private fun startPlanFollow(f: PlanFollow) {
+        val m = map ?: return
+        if (!puckActive() || f == PlanFollow.OFF) return
+        val lc = m.locationComponent
+        if (f == PlanFollow.NORTH) lc.setCameraMode(CameraMode.TRACKING_GPS_NORTH, 750L, maxOf(m.cameraPosition.zoom, 15.0), 0.0, 0.0, null)
+        else lc.setCameraMode(CameraMode.TRACKING_GPS, 750L, maxOf(m.cameraPosition.zoom, 16.0), null,
+            Prefs.navTilt(this, currentMode == ModeUi.DRIVING), null)
+        flattenOnIdle = false
+        setPlanFollow(f)
+    }
+
+    /** 1.8.0: the last follow mode chosen (Waze-like default: your direction up, 3D). */
+    private var lastPlanFollow = PlanFollow.HEADING
+    /** Last time the map was moved by hand (no automatic following for a while). */
+    private var lastMapGestureMs = 0L
+
+    /**
+     * 1.8.0 (Alex, as Waze does without a route): moving with no route and no
+     * navigation, the map follows your arrow again (centred, your last mode)
+     * 20 s after you last moved it by hand.
+     */
+    private fun maybeAutoFollow(location: Location) {
+        if (navUiActive || TripState.plan != null || planFollow != PlanFollow.OFF || searchOpen || altChoiceOpen) return
+        if (!location.hasSpeed() || location.speed < 2.5f) return
+        if (System.currentTimeMillis() - lastMapGestureMs < 20_000L) return
+        startPlanFollow(lastPlanFollow)
     }
 
     // ---------- 1.2.1 following you while planning (not navigating) ----------
@@ -780,6 +803,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setPlanFollow(f: PlanFollow) {
         planFollow = f
+        if (f != PlanFollow.OFF) lastPlanFollow = f
         findViewById<ImageButton>(R.id.locate_button)?.let { setIconActive(it, f != PlanFollow.OFF) }
         refreshNorthMark()
     }
@@ -827,31 +851,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val dotIcon by lazy { ContextCompat.getDrawable(this, R.drawable.ic_location_marker)!!.mutate() }
-    private val ringRotate by lazy { rotating(R.drawable.ic_location_ring) }
+    private val ringRotate by lazy { rotating(R.drawable.ic_compass_ring) }
     private val lettersRotate by lazy { rotating(R.drawable.compass_letters) }
     private val needleRotate by lazy { rotating(R.drawable.ic_compass_needle) }
 
-    /** Letters over the whole button; the arrow over the icon (7 dp padding). */
+    /** Letters over the whole button; the arrow inside the ring (1.8.0: bigger, 5 dp in). */
     private val compassLayer by lazy {
         android.graphics.drawable.LayerDrawable(arrayOf(
             lettersRotate,
-            android.graphics.drawable.InsetDrawable(needleRotate, dp(7))
+            android.graphics.drawable.InsetDrawable(needleRotate, dp(5))
         ))
     }
 
     /** Searching the map, choosing routes or places: no more following. */
     private fun stopPlanFollow() {
         if (planFollow == PlanFollow.OFF) return
-        if (planFollow == PlanFollow.HEADING && puckActive() && !navUiActive) {
+        if (puckActive() && !navUiActive) {
             map?.locationComponent?.cameraMode = CameraMode.NONE
-            flattenOnIdle = true
+            if (planFollow == PlanFollow.HEADING) flattenOnIdle = true
         }
-        setPlanFollow(PlanFollow.OFF)
+        // setPlanFollow(OFF) keeps lastPlanFollow (the mode to come back to).
+        planFollow = PlanFollow.OFF
+        findViewById<ImageButton>(R.id.locate_button)?.let { setIconActive(it, false) }
+        refreshNorthMark()
     }
 
     /** North up: the map moves only when the arrow nears the edge of the screen. */
     private fun keepArrowOnScreen(location: android.location.Location) {
-        if (planFollow != PlanFollow.NORTH || navUiActive) return
+        // 1.8.0: north up is centred tracking now; only without the arrow layer.
+        if (planFollow != PlanFollow.NORTH || navUiActive || puckActive()) return
         val m = map ?: return
         val here = LatLng(location.latitude, location.longitude)
         val pt = m.projection.toScreenLocation(here)
@@ -1036,7 +1064,7 @@ class MainActivity : AppCompatActivity() {
     private fun styleBottomButtons() {
         for (id in listOf(R.id.nav_go_button, R.id.clear_route_button, R.id.resume_button, R.id.sound_button)) {
             findViewById<ImageButton>(id).apply {
-                background = ContextCompat.getDrawable(this@MainActivity, R.drawable.icon_backdrop)
+                background = ContextCompat.getDrawable(this@MainActivity, R.drawable.icon_backdrop_faint)
                 // At rest: faint ("standby", waiting for the next action).
                 imageTintList = ColorStateList.valueOf(iconOff)
                 // Touched: the active colour 1 s, then 1 s back to faint (taps and holds alike).
@@ -2669,9 +2697,12 @@ class MainActivity : AppCompatActivity() {
         if (navigating) findViewById<View>(R.id.route_options_row).visibility = View.GONE
         else TripState.plan?.let { populateRouteOptionsRow(it.routes, TripState.selectedIndex) }
         redrawRouteLines()
-        // 1.0.4: navigating = left column hidden; right column = locate,
-        // overview, alternative route, magnifier (+ resume). All back on Stop / Clear.
-        findViewById<View>(R.id.mode_row).visibility = visibility
+        // 1.0.4: navigating = right column = locate, overview, alternative
+        // route, magnifier. 1.8.0 (Alex): the left column keeps travel mode
+        // and urgency (changing them recalculates from where you are); the
+        // services and settings come back on Stop / Clear.
+        findViewById<View>(R.id.mode_row).visibility = View.VISIBLE
+        findViewById<View>(R.id.poi_row).visibility = visibility
         findViewById<View>(R.id.route_options_button).visibility = visibility
         findViewById<View>(R.id.waypoint_button).visibility = visibility
         findViewById<View>(R.id.preference_toggle_button).visibility = visibility
@@ -2904,7 +2935,7 @@ class MainActivity : AppCompatActivity() {
         val w = if (land) FrameLayout.LayoutParams.WRAP_CONTENT else FrameLayout.LayoutParams.MATCH_PARENT
         if (lp.width != w) { lp.width = w; band.layoutParams = lp }
         val screenW = findViewById<View>(android.R.id.content).width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
-        val maxW = if (land) minOf(dp(308), screenW - 2 * dp(COLUMN_ZONE_DP)) else Int.MAX_VALUE
+        val maxW = if (land) minOf(dp(340), screenW - 2 * dp(COLUMN_ZONE_DP)) else Int.MAX_VALUE
         for (b in listOf(messageBubble, errorBubble)) {
             val blp = b.layoutParams
             if (blp.width != bw(land)) { blp.width = bw(land); b.layoutParams = blp }
@@ -3036,7 +3067,7 @@ class MainActivity : AppCompatActivity() {
         setMargins(R.id.urgency_row, top = gap)
         setMargins(R.id.poi_row, top = gap)
         setMargins(R.id.route_options_button, top = top0 + 3 * step)
-        val leftRows = if (navUiActive) 0 else 4
+        val leftRows = if (navUiActive) 2 else 4
 
         // Right column.
         setMargins(R.id.locate_button, top = top0)
@@ -3106,9 +3137,9 @@ class MainActivity : AppCompatActivity() {
 
         // Guards: columns (with a little margin around) and the bottom buttons.
         setMargins(R.id.guard_left, top = top0 - 6)
-        setSize(R.id.guard_left, height = if (leftRows == 0) 0 else leftRows * step + 4, width = 94)
+        setSize(R.id.guard_left, height = if (leftRows == 0) 0 else leftRows * step + 4, width = 90)
         setMargins(R.id.guard_right, top = top0 - 6)
-        setSize(R.id.guard_right, height = rightRows * step + 4, width = 62)
+        setSize(R.id.guard_right, height = rightRows * step + 4, width = 58)
         setSize(R.id.guard_bottom, height = if (keyboardOpen) 0 else BOTTOM_ROW_BOTTOM_DP + BOTTOM_ROW_DP + 2)
     }
 

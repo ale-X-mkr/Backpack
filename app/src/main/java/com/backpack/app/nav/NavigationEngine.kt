@@ -115,7 +115,16 @@ object NavigationEngine {
     fun switchRoute(plan: RoutePlan, selectedIndex: Int, newRequest: RouteRequest? = null) {
         if (!isActive) return
         // A changed preference / toll / urgency mid-trip also applies to later reroutes.
-        if (newRequest != null) request = newRequest
+        // 1.8.0: so does the travel mode (the GPS pace follows it).
+        if (newRequest != null) {
+            val c = app
+            if (c != null && newRequest.mode != request?.mode) LocationHub.setNavPace(c, when (newRequest.mode) {
+                com.backpack.app.core.TravelMode.WALKING -> 3000L
+                com.backpack.app.core.TravelMode.CYCLING -> 2000L
+                com.backpack.app.core.TravelMode.DRIVING -> 1000L
+            })
+            request = newRequest
+        }
         this.plan = plan
         planSelected = selectedIndex.coerceIn(0, plan.routes.size - 1)
         setRoute(plan.routes[planSelected])
