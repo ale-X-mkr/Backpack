@@ -62,7 +62,9 @@ class RouteResult(
     /** 1.3.0: height (m) of each point, walking / cycling (empty when not asked). */
     val elevations: List<Double> = emptyList(),
     val ascentM: Double = 0.0,
-    val descentM: Double = 0.0
+    val descentM: Double = 0.0,
+    /** 1.8.1: toll stretches, as point index ranges along [points]. */
+    val tollRanges: List<IntRange> = emptyList()
 ) {
     val line: Polyline by lazy { Polyline(points) }
 

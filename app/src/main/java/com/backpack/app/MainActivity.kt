@@ -410,6 +410,8 @@ class MainActivity : AppCompatActivity() {
         com.backpack.app.speed.SpeedGuard.start(this)
         com.backpack.app.speed.SpeedGuard.addListener(speedListener)
         com.backpack.app.speed.SpeedGuard.addSoundListener(speedSoundListener)
+        // 1.8.1: "last exit before the toll" also as a red alert line.
+        com.backpack.app.speed.TollExitWatch.ui = { text -> if (!isDestroyed) showError(text) }
         com.backpack.app.tourist.SightHeadsUp.ui = headsUpUi
         com.backpack.app.nav.AppRunning.onExit = { finishAndRemoveTask() }
         com.backpack.app.nav.AppRunning.markUiVisible(true)
@@ -490,6 +492,7 @@ class MainActivity : AppCompatActivity() {
         NavigationEngine.removeListener(navListener)
         com.backpack.app.speed.SpeedGuard.removeListener(speedListener)
         com.backpack.app.speed.SpeedGuard.removeSoundListener(speedSoundListener)
+        com.backpack.app.speed.TollExitWatch.ui = null
         if (com.backpack.app.tourist.SightHeadsUp.ui === headsUpUi) com.backpack.app.tourist.SightHeadsUp.ui = null
         // GPS keeps running only if navigation (or, by car, the background service) holds its own lease.
         LocationHub.release(this, LocationHub.LEASE_UI)
@@ -698,6 +701,8 @@ class MainActivity : AppCompatActivity() {
             if (puckActive()) map?.locationComponent?.forceLocationUpdate(withHeading(location))
             keepArrowOnScreen(location)
             maybeAutoFollow(location)
+            // 1.8.1: sights ahead without a route (by car SpeedGuard does it too, screen off).
+            com.backpack.app.tourist.FreeSightTips.onFix(this, location)
             // Car: SpeedGuard watches and reports (speedListener); else your speed only.
             if (currentMode != ModeUi.DRIVING && navUiActive) updateSpeedOnly(location)
             if (navUiActive) adaptTrackingZoom(location)

@@ -83,6 +83,10 @@ object SpeedGuard {
         val route = routeNow()
         val along = route?.let { alongOn(it, location) }
         SpeedCameraWatch.onFix(c, location, limit, route, along)
+        // 1.8.1: the last exit before a toll (with or without a route).
+        TollExitWatch.onFix(c, location, route, along)
+        // 1.8.1: sights ahead without a route (Weekend camera on), screen off too.
+        com.backpack.app.tourist.FreeSightTips.onFix(c, location)
     }
 
     private fun routeNow() = (if (NavigationEngine.isActive) NavigationEngine.route else null)

@@ -78,6 +78,8 @@ object Ors {
 
             val extras = properties.optJSONObject("extras")
             val tollDistance = sumExtra(extras, "tollways") { it == 1 }
+            // 1.8.1: where the toll stretches lie (point index ranges), for "last exit before the toll".
+            val tollRanges = rangesOf(extras, "tollways") { it == 1 }
             val unpavedDistance = sumExtra(extras, "surface") { it in UNPAVED_SURFACES }
 
             val steps = mutableListOf<NavStep>()
@@ -107,9 +109,26 @@ object Ors {
             }
             val elevations = if (heights.size == points.size) heights else emptyList()
             results.add(RouteResult(points, distanceMeters, durationSeconds, tollDistance, unpavedDistance, steps,
-                elevations, properties.optDouble("ascent", 0.0), properties.optDouble("descent", 0.0)))
+                elevations, properties.optDouble("ascent", 0.0), properties.optDouble("descent", 0.0), tollRanges))
         }
         return results
+    }
+
+    /** Point index ranges [from, to] whose extra value matches (ORS "values": [[from, to, value], ...]). */
+    fun rangesOf(extras: JSONObject?, key: String, match: (Int) -> Boolean): List<IntRange> {
+        val values = extras?.optJSONObject(key)?.optJSONArray("values") ?: return emptyList()
+        val out = ArrayList<IntRange>()
+        for (i in 0 until values.length()) {
+            val v = values.optJSONArray(i) ?: continue
+            if (v.length() < 3 || !match(v.optDouble(2, -1.0).toInt())) continue
+            val from = v.optDouble(0, -1.0).toInt()
+            val to = v.optDouble(1, -1.0).toInt()
+            if (from < 0 || to < from) continue
+            // Touching stretches count as one.
+            val range: IntRange = if (out.isNotEmpty() && out.last().last >= from) out.removeAt(out.size - 1).let { it.first..maxOf(to, it.last) } else from..to
+            out.add(range)
+        }
+        return out
     }
 
     private fun sumExtra(extras: JSONObject?, key: String, match: (Int) -> Boolean): Double {

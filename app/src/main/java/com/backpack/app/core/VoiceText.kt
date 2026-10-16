@@ -58,6 +58,9 @@ class VoiceText private constructor(val lang: String) {
 
     fun stopReached() = pick("You have reached your stop", "Llegó a su parada", "Vous êtes arrivé à votre étape", "Hai raggiunto la tappa", "Sie haben Ihren Zwischenstopp erreicht")
     /** 1.4.0: France: a speed-check zone ahead (never the camera's spot). */
+    /** 1.8.1: the exit to take to stay off the toll. */
+    fun lastExitBeforeToll() = pick("Last exit before the toll", "Última salida antes del peaje", "Dernière sortie avant le péage",
+        "Ultima uscita prima del casello", "Letzte Ausfahrt vor der Maut")
     /** 1.8.0: said a few seconds before your roundabout exit. */
     fun exitNow() = pick("Exit now", "Salga ahora", "Sortez maintenant", "Esci ora", "Jetzt ausfahren")
     fun dangerZone() = pick("Danger zone", "Zona de peligro", "Zone de danger", "Zona di pericolo", "Gefahrenzone")
