@@ -169,7 +169,7 @@ class MainActivity : AppCompatActivity() {
     /** 1.2.1: fixed top (dp) of both button columns. */
     private val COLUMNS_TOP_DP = 100
     /** 1.7.1: portrait columns under the box grown with the 70 dp circle. */
-    private val COLUMNS_TOP_PORTRAIT_DP = 106
+    private val COLUMNS_TOP_PORTRAIT_DP = 116
     /** 1.7.1: landscape on a short screen: never higher than this (speed circle above). */
     private val COLUMNS_MIN_TOP_DP = 86
     /** 1.7.1 (Alex): buttons 15 % bigger. */
@@ -185,7 +185,9 @@ class MainActivity : AppCompatActivity() {
     private val COLUMN_ZONE_DP = 60
     private val SPEED_CIRCLE_DP = 70
     private val LIMIT_SIGN_DP = 36
-    private val SPEED_WIDGET_W_DP = 106
+    private val SPEED_WIDGET_W_DP = 70
+    /** 1.8.0: a spoken instruction stays in the box this long, then the street name. */
+    private val INSTRUCTION_SHOWN_MS = 6000L
     /** The navigation box's top margin (layout). */
     private val NAV_BOX_TOP_DP = 4
     private var currentPreference = PreferenceUi.RECOMMENDED
@@ -499,7 +501,6 @@ class MainActivity : AppCompatActivity() {
         com.backpack.app.ui.KeyGuide.close()
         actionFades.values.forEach { it.cancel() }
         actionFades.clear()
-        handler.removeCallbacks(clockRunnable)
         // Leaving the app (not a rebuild): a place still waiting for GPS is dropped,
         // it must not come back unasked at the next start.
         if (isFinishing) {
@@ -1059,18 +1060,6 @@ class MainActivity : AppCompatActivity() {
         }
         actionFades[b.id] = a
         a.start()
-    }
-
-    /** 1.4.1: the time now in the box's last line, updated on the minute. */
-    private val clockRunnable = object : Runnable {
-        override fun run() {
-            val tv = findViewById<TextView>(R.id.route_info_clock) ?: return
-            if (!navUiActive) { tv.visibility = View.GONE; return }
-            tv.text = android.text.format.DateFormat.getTimeFormat(this@MainActivity).format(java.util.Date())
-            if (tv.visibility != View.VISIBLE) tv.visibility = View.VISIBLE
-            val now = System.currentTimeMillis()
-            handler.postDelayed(this, 60_000L - now % 60_000L + 50L)
-        }
     }
 
     /** 1.4.1: Android's status and navigation bars hidden while navigating (a swipe shows them for a moment). */
@@ -2356,10 +2345,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.overview_button).visibility = View.VISIBLE
         navInstructionBar.visibility = View.VISIBLE
         refreshNavBox()
-        // 1.4.1: full screen while navigating, the time in the box's last line.
+        // 1.4.1: full screen while navigating (1.8.0: no clock in the box).
         setFullScreen(true)
-        handler.removeCallbacks(clockRunnable)
-        clockRunnable.run()
+        navDistanceText.visibility = View.VISIBLE
         lastRealLocationAtMs = System.currentTimeMillis()
         handler.removeCallbacks(deadReckoningRunnable)
         handler.postDelayed(deadReckoningRunnable, 1000L)
@@ -2420,12 +2408,12 @@ class MainActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.nav_go_button).setImageResource(R.drawable.ic_btn_go)
         setNavigationDeclutter(false)
         statusStrip.text = ""
+        instructionShownUntil = 0L
         navDistanceText.text = ""
-        navInstructionIcon.visibility = View.GONE
+        navDistanceText.visibility = View.GONE
+        showTurnIcon(null)
         navInstructionBar.visibility = View.GONE
         setFullScreen(false)
-        handler.removeCallbacks(clockRunnable)
-        findViewById<View>(R.id.route_info_clock).visibility = View.GONE
         updateNavBarProximityColor(Double.MAX_VALUE) // planning: plain blue frame
         layers.setProgress(null)
         if (currentMode != ModeUi.DRIVING) speedWidget.visibility = View.GONE
@@ -2467,9 +2455,9 @@ class MainActivity : AppCompatActivity() {
             TripState.dropDetour()
             refreshResumeButton()
             navDistanceText.text = ""
+            instructionShownUntil = 0L
             statusStrip.text = getString(R.string.main_arrived)
-            navInstructionIcon.setImageResource(R.drawable.ic_nav_arrive)
-            navInstructionIcon.visibility = View.VISIBLE
+            showTurnIcon(R.drawable.ic_nav_arrive)
             wakeDisplay()
         }
         override fun onStopped() {
@@ -2502,12 +2490,12 @@ class MainActivity : AppCompatActivity() {
         refreshNorthMark() // the arrow shows your heading when north up
         if (p.arrived) return
         val step = if (p.nextStepIndex >= 0) route.steps.getOrNull(p.nextStepIndex) else null
+        // 1.8.0 (Alex): what is said shows in the box for a few seconds, then
+        // fades into the street name; never in the message area.
+        p.speech?.let { showInstruction(it) }
         updateNavBar(step, p.distanceToNextM)
         updateNavBarProximityColor(p.distanceToNextM)
-        if (p.anticipation) {
-            showMessage("${Speech.shortDistance(p.distanceToNextM, useMetric)}: ${step?.instruction ?: getString(R.string.main_next_change)}")
-            wakeDisplay()
-        }
+        if (p.anticipation || p.speech != null) wakeDisplay()
         if (p.stepAdvanced) wakeDisplay()
         // Remember the stops of the remembered trip you pass, for "resume".
         TripState.previous?.let { prev ->
@@ -2542,10 +2530,45 @@ class MainActivity : AppCompatActivity() {
             return
         }
         navDistanceText.text = Speech.shortDistance(distance ?: step.distanceMeters, useMetric).replace(" ", "")
-        // Street name when known; the turn itself is shown by the icon.
-        statusStrip.text = step.streetName.ifBlank { step.instruction }
-        navInstructionIcon.setImageResource(navIconFor(step.maneuver))
-        navInstructionIcon.visibility = View.VISIBLE
+        // Street name when known (the turn itself is shown by the icon); a
+        // spoken instruction keeps its place for a few seconds first.
+        if (System.currentTimeMillis() >= instructionShownUntil) {
+            val street = step.streetName.ifBlank { step.instruction }
+            if (statusStrip.text.toString() != street) {
+                if (instructionShownUntil > 0L) {
+                    // The instruction fades out, the street name fades in.
+                    instructionShownUntil = 0L
+                    statusStrip.animate().cancel()
+                    statusStrip.animate().alpha(0f).setDuration(400).withEndAction {
+                        statusStrip.text = street
+                        statusStrip.animate().alpha(1f).setDuration(400).start()
+                    }.start()
+                } else statusStrip.text = street
+            }
+        }
+        showTurnIcon(navIconFor(step.maneuver), if (step.maneuver == Maneuver.ROUNDABOUT_ENTER && step.exitNumber > 0) step.exitNumber else 0)
+    }
+
+    /** 1.8.0: the instruction just said, shown in the box this long before the street name. */
+    private var instructionShownUntil = 0L
+
+    private fun showInstruction(text: String) {
+        statusStrip.animate().cancel()
+        statusStrip.alpha = 1f
+        statusStrip.text = text
+        instructionShownUntil = System.currentTimeMillis() + INSTRUCTION_SHOWN_MS
+    }
+
+    /** The next action's circle: icon (null = hidden) and, for a roundabout, its exit number. */
+    private fun showTurnIcon(icon: Int?, exitNumber: Int = 0) {
+        val circle = findViewById<View>(R.id.nav_turn_circle)
+        if (icon == null) { circle.visibility = View.GONE; return }
+        navInstructionIcon.setImageResource(icon)
+        findViewById<TextView>(R.id.nav_exit_number).apply {
+            text = if (exitNumber > 0) exitNumber.toString() else ""
+            visibility = if (exitNumber > 0) View.VISIBLE else View.GONE
+        }
+        circle.visibility = View.VISIBLE
     }
 
     /** Maneuver type from the route data (not guessed from English text).
@@ -2703,11 +2726,14 @@ class MainActivity : AppCompatActivity() {
         )
         if (navUiActive) {
             routeInfo.background = null
-            // 1.7.2: clear of the box's round bottom corners.
-            routeInfo.setPadding(dp(12), 0, dp(12), 0)
+            // 1.8.0: the distance to the next action first, under its circle
+            // (end padding set in placeLayout, clear of the limit sign).
+            routeInfo.setPadding(0, 0, dp(12), 0)
+            (routeInfo as LinearLayout).gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
         } else {
             lp.topMargin = dp(4)
             lp.gravity = android.view.Gravity.CENTER_HORIZONTAL
+            (routeInfo as LinearLayout).gravity = android.view.Gravity.CENTER
             // 1.0.8: message background, the selected chip's red frame.
             routeInfo.background = GradientDrawable().apply {
                 cornerRadius = dp(12).toFloat()
@@ -2928,11 +2954,9 @@ class MainActivity : AppCompatActivity() {
         val circleInBox = navUiActive // 1.1.0: speed shown in every mode while navigating
         // 1.7.2: 16 dp sides, clear of the 39 dp corners.
         navBox.setPadding(dp(16), dp(4), dp(16), dp(4))
-        // 1.4.1: the circle (and the limit sign left of it, driving) sits beside
-        // the turn row only; the last line (time, distance, arrival, cost)
-        // takes the box's full width under them. 1.7.1: circle 70 dp; 1.7.2: the
-        // circle 4 dp from the box's top and right edges (widget 4..110 dp in).
-        navInstructionBar.setPadding(0, 0, if (!circleInBox) 0 else if (driving) dp(96) else dp(60), 0)
+        // 1.8.0: the speed circle (4..74 dp from the box's right edge) sits beside
+        // the turn row; the limit sign went down to the box's last line.
+        navInstructionBar.setPadding(0, 0, if (!circleInBox) 0 else dp(62), 0)
         navInstructionBar.minimumHeight = if (circleInBox) dp(SPEED_CIRCLE_DP) else 0
         // Planning while driving: box and chips centred left of the speed
         // circle (top right), never under it.
@@ -2941,7 +2965,8 @@ class MainActivity : AppCompatActivity() {
         // 4 dp inside the box's corner), with or without the box.
         val navBoxW = ((screenW - dp(8)) * (if (land) 0.8f else 1f)).toInt()
         val circleEnd = ((screenW - navBoxW) / 2 / density).toInt() + 4
-        setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) circleEnd + SPEED_WIDGET_W_DP + 6 else 0)
+        // Planning: the limit sign beside the circle's top (~70 dp more to the left).
+        setMargins(R.id.nav_box, start = if (circleTopRight) 8 else 0, end = if (circleTopRight) circleEnd + SPEED_CIRCLE_DP + 42 else 0)
         val boxShown = navBox.visibility == View.VISIBLE && navBox.height > 0
 
         // 1.7.1: the columns' top and spacing (bigger buttons): portrait under
@@ -2986,7 +3011,16 @@ class MainActivity : AppCompatActivity() {
         // centre line); 1.7.2: the same spot without the box.
         val boxTop = if (circleInBox && boxShown) (navBox.top / density).toInt() else NAV_BOX_TOP_DP
         setMargins(R.id.speed_widget, top = boxTop + 4, end = circleEnd)
-        placeLimitSign(signTopDp = 0)
+        // 1.8.0 (Alex): the limit sign at the bottom of the box, touching the
+        // speed circle and the box's frame; planning: beside the circle's top.
+        val signReserve = placeLimitSign(screenW, circleEnd, boxTop + 4,
+            if (circleInBox && boxShown) navBox.bottom / density - 4f else null)
+        // The box's last line keeps clear of the sign (driving: the sign's place
+        // is kept even while no limit is known, so the line never jumps).
+        if (routeInfo.parent === navBox) {
+            val end = if (driving && signReserve != null) dp(signReserve - 16 + 4) else dp(12)
+            if (routeInfo.paddingEnd != end || routeInfo.paddingStart != 0) routeInfo.setPadding(0, 0, end, 0)
+        }
 
         // 1.2.1 (Alex): the columns never move with the mode -- the same
         // height in every mode, planning or navigating (top0 / step above).
@@ -3080,20 +3114,35 @@ class MainActivity : AppCompatActivity() {
      * [signTopDp] 0 in the box, the box's top frame), never overlapping:
      * the two discs' centres are exactly one radius sum apart.
      */
-    private fun placeLimitSign(signTopDp: Int) {
+    /**
+     * 1.8.0: the limit sign touches the speed circle (centres exactly one radius
+     * sum apart), never overlapping. With the box ([innerBottomDp] = the frame's
+     * inner bottom edge) it sits on that edge, under-left of the circle;
+     * without it, level with the circle's top, to its left. Returns how far its
+     * left edge is from the circle's right margin line (dp), for the box's last line.
+     */
+    private fun placeLimitSign(screenW: Int, circleEndDp: Int, circleTopDp: Int, innerBottomDp: Float?): Int? {
+        val bigR = SPEED_CIRCLE_DP / 2f
+        val r = LIMIT_SIGN_DP / 2f
+        val cy = circleTopDp + bigR
+        // Centre of the sign, in dp from the top.
+        val sy = if (innerBottomDp != null) innerBottomDp - r else circleTopDp + r
+        val dy = Math.abs(sy - cy)
+        val dx = if (dy >= bigR + r) 0f else Math.sqrt(((bigR + r) * (bigR + r) - dy * dy).toDouble()).toFloat()
+        // dp from the screen's right edge to the sign's right edge (+0.5 dp: rounding never overlaps).
+        val endDp = circleEndDp + bigR + dx - r + 0.5f
         val d = resources.displayMetrics.density
-        val bigR = SPEED_CIRCLE_DP / 2f * d
-        val r = LIMIT_SIGN_DP / 2f * d
-        val dy = bigR - (signTopDp * d + r)
-        val dx = Math.sqrt(((bigR + r) * (bigR + r) - dy * dy).toDouble()).toFloat()
-        val left = Math.floor((SPEED_WIDGET_W_DP * d - bigR - dx - r).toDouble()).toInt().coerceAtLeast(0)
-        val top = Math.round(signTopDp * d)
         val lp = speedLimitSign.layoutParams as FrameLayout.LayoutParams
-        if (lp.marginStart != left || lp.topMargin != top) {
-            lp.marginStart = left
+        val end = Math.ceil((endDp * d).toDouble()).toInt()
+        val top = Math.round((sy - r) * d)
+        if (lp.gravity != (android.view.Gravity.TOP or android.view.Gravity.END) || lp.marginEnd != end || lp.topMargin != top) {
+            lp.gravity = android.view.Gravity.TOP or android.view.Gravity.END
+            lp.marginEnd = end
             lp.topMargin = top
             speedLimitSign.layoutParams = lp
         }
+        // From the box's outer right edge (circleEnd - 4) to the sign's left edge.
+        return if (innerBottomDp != null) Math.ceil((endDp + 2 * r - (circleEndDp - 4)).toDouble()).toInt() else null
     }
 
     /** Changes a view's gravity inside the main frame (no-op if unchanged). */

@@ -51,6 +51,8 @@
         android:background="@drawable/nav_bar_background"
         android:paddingHorizontal="12dp"
         android:paddingVertical="4dp"
+        android:clipToPadding="false"
+        android:clipChildren="false"
         android:clickable="true"
         android:visibility="gone">
 
@@ -62,34 +64,45 @@
         android:gravity="center_vertical"
         android:visibility="gone">
 
-        <ImageView
-            android:id="@+id/nav_instruction_icon"
-            android:layout_width="46dp"
-            android:layout_height="46dp"
+        <!-- 1.8.0: the next action in a circle as big as the speed circle
+             (white ring, thin black edge), 4 dp inside the box's left corner
+             (mirror of the speed circle); a roundabout shows its exit number. -->
+        <FrameLayout
+            android:id="@+id/nav_turn_circle"
+            android:layout_width="70dp"
+            android:layout_height="70dp"
+            android:layout_marginStart="-12dp"
             android:layout_marginEnd="8dp"
-            android:background="@drawable/nav_icon_backdrop"
-            android:padding="4dp"
-            android:src="@drawable/ic_nav_straight"
-            android:visibility="gone" />
+            android:background="@drawable/nav_turn_circle"
+            android:visibility="gone">
 
-        <TextView
-            android:id="@+id/nav_distance_text"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="1"
-            android:text=""
-            android:textColor="#FFFFFF"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-condensed"
-            android:letterSpacing="0.01" />
+            <ImageView
+                android:id="@+id/nav_instruction_icon"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:padding="13dp"
+                android:src="@drawable/ic_nav_straight" />
+
+            <TextView
+                android:id="@+id/nav_exit_number"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:includeFontPadding="false"
+                android:shadowColor="#FF000000"
+                android:shadowRadius="4"
+                android:text=""
+                android:textColor="#FFFFFFFF"
+                android:textSize="18dp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/status_strip"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="2"
+            android:layout_weight="1"
             android:maxLines="2"
             android:ellipsize="end"
             android:text=""
@@ -110,16 +123,21 @@
             android:paddingTop="2dp"
             android:visibility="gone">
 
-            <!-- 1.4.1: the time now (navigating only; the phone's 12 / 24 h setting).
-                 This line in dp, not sp: a fixed height keeps the box above the columns. -->
+            <!-- 1.8.0: distance to the next action, under its circle (navigating
+                 only). This line in dp, not sp: a fixed height keeps the box
+                 above the columns and the limit sign fitted in its corner. -->
             <TextView
-                android:id="@+id/route_info_clock"
-                android:layout_width="wrap_content"
+                android:id="@+id/nav_distance_text"
+                android:layout_width="70dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="12dp"
+                android:layout_marginStart="-12dp"
+                android:layout_marginEnd="8dp"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
                 android:text=""
-                android:textColor="#FFFFFFFF"
-                android:textSize="13dp"
+                android:textColor="#FFFFFF"
+                android:textSize="20dp"
                 android:textStyle="bold"
                 android:fontFamily="sans-serif-condensed"
                 android:visibility="gone" />
@@ -675,7 +693,7 @@
          box's top frame) without overlapping; placed in code. -->
     <FrameLayout
         android:id="@+id/speed_widget"
-        android:layout_width="106dp"
+        android:layout_width="70dp"
         android:layout_height="70dp"
         android:layout_gravity="top|end"
         android:layout_marginTop="12dp"
@@ -720,24 +738,27 @@
 
         </FrameLayout>
 
-        <TextView
-            android:id="@+id/speed_limit_sign"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_gravity="top|start"
-            android:layout_marginStart="0dp"
-            android:layout_marginTop="8dp"
-            android:background="@drawable/speed_limit_background"
-            android:elevation="2dp"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:text=""
-            android:textColor="#FF000000"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:visibility="gone" />
+
 
     </FrameLayout>
+
+    <!-- 1.8.0: the road's limit sign, its own view: at the bottom of the
+         navigation box touching the speed circle and the box's frame
+         (planning: beside the circle's top). Placed in code. -->
+    <TextView
+        android:id="@+id/speed_limit_sign"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_gravity="top|end"
+        android:background="@drawable/speed_limit_background"
+        android:elevation="3dp"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:text=""
+        android:textColor="#FF000000"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 
     <!-- 1.0.4: floating search box, hidden until the magnifier is tapped;
          floats just over the keyboard, 70 % opaque. Margins set in code. -->
