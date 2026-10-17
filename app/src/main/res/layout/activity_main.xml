@@ -371,7 +371,7 @@
                 android:paddingHorizontal="14dp"
                 android:paddingVertical="7dp"
                 android:text="@string/main_card_go"
-                android:textColor="#FFB71C1C"
+                android:textColor="@color/card_go_text"
                 android:textSize="17sp"
                 android:textStyle="bold" />
 

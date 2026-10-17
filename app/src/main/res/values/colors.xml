@@ -48,4 +48,5 @@
     <color name="msg_bg">#E6EEEEEE</color>
     <color name="msg_text">#FF1A1A1A</color>
     <color name="card_btn_bg">#FFFFFFFF</color>
+    <color name="card_go_text">#FFB71C1C</color>
 </resources>

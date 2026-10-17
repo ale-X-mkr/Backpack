@@ -1871,6 +1871,13 @@ class MainActivity : AppCompatActivity() {
             cardW = screenW - dp(startDp) - dp(COLUMN_ZONE_DP)
         }
         stackCardButtons(cardW - card.paddingLeft - card.paddingRight)
+        // 1.8.2: the card ends above the messages: if it would reach them, the detail line goes.
+        detail.visibility = View.VISIBLE
+        card.post {
+            val band = findViewById<View>(R.id.message_band)
+            if (card.visibility == View.VISIBLE && band.visibility == View.VISIBLE && band.height > 0 &&
+                card.bottom > band.top - dp(6) && card.right > band.left && card.left < band.right) detail.visibility = View.GONE
+        }
         card.layoutParams = lp
         card.visibility = View.VISIBLE
         wakeDisplay()
@@ -3140,7 +3147,8 @@ class MainActivity : AppCompatActivity() {
         // 1.2.1 (Alex): the columns never move with the mode -- the same
         // height in every mode, planning or navigating (top0 / step above).
         val gap = step - BTN_DP
-        fun shown(id: Int) = findViewById<View>(id).visibility == View.VISIBLE
+        // A view hidden only for the keyboard still counts (it comes back below).
+        fun shown(id: Int) = findViewById<View>(id).let { it.visibility == View.VISIBLE || it in hiddenForKeyboard }
 
         // Left column (planning), 1.2.0 four buttons: mode (+ toll), urgency
         // (+ sights camera in Weekend), backpack services, settings; resume.
