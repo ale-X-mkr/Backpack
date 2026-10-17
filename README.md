@@ -28,6 +28,9 @@ culture, parks and viewpoints, with your own detour and distance settings.
 
 ## Privacy
 - Position from the phone's GPS chip only. No Google Play Services.
+- My places (Home, Work, favourites), recent searches, recorded trips and
+  your routing key are encrypted on the phone (Android Keystore); an
+  optional fingerprint / PIN lock keeps them from other eyes.
 - Places are fetched per ~5 km map square and kept on the phone; searches
   are rounded to ~1 km. Recorded trips stay on the phone.
 - No account, no analytics, no ads.

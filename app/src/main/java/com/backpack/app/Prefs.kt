@@ -99,13 +99,22 @@ object Prefs {
     }
 
     /** 1.5.0: an own key is set (Settings ▸ Advanced or the first-start guide). */
-    fun hasOwnOrsKey(c: Context): Boolean = !settings(c).getString(Settings.KEY_ORS_KEY, "").isNullOrBlank()
+    fun hasOwnOrsKey(c: Context): Boolean = ownOrsKey(c).isNotBlank()
+
+    /** 1.9.0: your own routing key, encrypted on the phone. */
+    fun ownOrsKey(c: Context): String {
+        com.backpack.app.security.PrivateData.migrate(c)
+        return com.backpack.app.security.Vault.getString(c, com.backpack.app.security.PrivateData.ORS_KEY)?.trim().orEmpty()
+    }
+
+    fun setOwnOrsKey(c: Context, key: String) =
+        com.backpack.app.security.Vault.putString(c, com.backpack.app.security.PrivateData.ORS_KEY, key.trim().ifEmpty { null })
 
     /** Own key from Settings first, then the two built-in keys. The
      *  built-in keys are only ever sent to openrouteservice.org itself,
      *  never to a custom server set in Settings. */
     fun orsKeys(c: Context): List<String> {
-        val own = settings(c).getString(Settings.KEY_ORS_KEY, "")?.trim().orEmpty()
+        val own = ownOrsKey(c)
         val builtIn = if (orsBaseUrl(c) == DEFAULT_ORS_URL) listOf(BuildConfig.ORS_KEY_1, BuildConfig.ORS_KEY_2) else emptyList()
         return (listOf(own) + builtIn).filter { it.isNotEmpty() }.distinct()
     }

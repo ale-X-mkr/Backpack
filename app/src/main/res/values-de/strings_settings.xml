@@ -159,4 +159,7 @@
     <string name="set_cr_license">Backpack ist freie Software (GNU GPL v3): Quellcode auf GitHub.</string>
     <string name="set_card_time">Karte sichtbar</string>
     <string name="set_summary_read">Zusammenfassungen mit Vorlesen</string>
+    <string name="set_lock">Privates sperren (Fingerabdruck / PIN)</string>
+    <string name="set_lock_help">Meine Orte, letzte Suchen, Meine Fahrten und Einstellungen verlangen einmal pro Sitzung das Entsperren (erneut nach 5 Min.). Karte, Navigation und Warnungen warten nie. Private Daten sind auf dem Telefon immer verschlüsselt.</string>
+    <string name="set_lock_none">Zuerst eine Displaysperre (oder Fingerabdruck) am Telefon einrichten</string>
 </resources>

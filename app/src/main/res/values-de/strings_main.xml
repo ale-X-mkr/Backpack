@@ -195,4 +195,23 @@
     <string name="main_card_go">Hinfahren</string>
     <string name="main_card_read">▶ Vorlesen</string>
     <string name="main_card_stop">■ Stopp</string>
+    <string name="main_start_here">Hier starten</string>
+    <string name="main_save_as">Speichern als…</string>
+    <string name="main_save_home">Zuhause</string>
+    <string name="main_save_work">Arbeit</string>
+    <string name="main_save_fav">Favorit</string>
+    <string name="main_save">Speichern</string>
+    <string name="main_place_name">Name</string>
+    <string name="main_saved_place">%1$s gespeichert</string>
+    <string name="main_favs_full">Schon %1$d Favoriten: zuerst einen löschen</string>
+    <string name="main_my_places">Meine Orte</string>
+    <string name="main_home_not_set">Zuhause: nicht gesetzt (Karte lange drücken zum Speichern)</string>
+    <string name="main_work_not_set">Arbeit: nicht gesetzt (Karte lange drücken zum Speichern)</string>
+    <string name="main_no_favs">Noch keine Favoriten: Ort auf der Karte lange drücken</string>
+    <string name="main_save_dest">Ziel speichern als…</string>
+    <string name="main_edit_places">Meine Orte bearbeiten</string>
+    <string name="main_rename">Umbenennen</string>
+    <string name="main_move_up">↑ Nach oben</string>
+    <string name="lock_title">Backpack entsperren</string>
+    <string name="lock_subtitle">Ihre Orte, Fahrten und Einstellungen</string>
 </resources>

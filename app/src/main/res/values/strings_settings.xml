@@ -159,4 +159,7 @@
     <string name="set_cr_license">Backpack is free software under the GNU GPL version 3: source code on GitHub.</string>
     <string name="set_card_time">Sight card on screen</string>
     <string name="set_summary_read">Summaries with Read aloud</string>
+    <string name="set_lock">Lock my private things (fingerprint / PIN)</string>
+    <string name="set_lock_help">My places, recent searches, My trips and Settings ask to unlock once per session (again after 5 min away). Map, navigation and alerts never wait. Your private data is always encrypted on the phone.</string>
+    <string name="set_lock_none">Set a screen lock (or fingerprint) on the phone first</string>
 </resources>

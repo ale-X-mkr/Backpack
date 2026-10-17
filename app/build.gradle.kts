@@ -23,8 +23,8 @@ android {
         applicationId = "com.backpack.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 38
-        versionName = "1.8.2"
+        versionCode = 39
+        versionName = "1.9.0"
         buildConfigField("String", "ORS_KEY_1", "\"${localProp("ors.key1")}\"")
         buildConfigField("String", "ORS_KEY_2", "\"${localProp("ors.key2")}\"")
         // 1.7.0: shared starter key, only in the "share" build (trial for new users).
@@ -101,6 +101,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.0")
+    // 1.9.0: the optional lock (fingerprint / face / phone PIN), Android's own screen, no Play Services.
+    implementation("androidx.biometric:biometric:1.1.0")
     // MapLibre Native (BSD-2), OpenGL ES build: widest device support.
     implementation("org.maplibre.gl:android-sdk-opengl:13.6.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

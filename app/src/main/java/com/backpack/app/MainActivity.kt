@@ -189,6 +189,8 @@ class MainActivity : AppCompatActivity() {
     private val LIMIT_SIGN_DP = 36
     /** 1.8.0: a spoken instruction stays in the box this long, then the street name. */
     private val INSTRUCTION_SHOWN_MS = 6000L
+    /** 1.9.0 (Alex): shorter touches on the empty map do nothing. */
+    private val ACCIDENTAL_TOUCH_MS = 150L
     /** 1.8.2: the box's last line (distance / arrival), dp. */
     private val ROUTE_LINE_DP = 15.6f
     /** 1.8.0: full brightness this long after something to see; checked this often. */
@@ -339,7 +341,9 @@ class MainActivity : AppCompatActivity() {
                 true
             }
         }
-        findViewById<TextView>(R.id.credit_text).setOnClickListener { SettingsPopup.show(this, settingsHost, SettingsPopup.Page.CREDITS) }
+        findViewById<TextView>(R.id.credit_text).setOnClickListener {
+            com.backpack.app.security.AppLock.unlock(this) { SettingsPopup.show(this, settingsHost, SettingsPopup.Page.CREDITS) }
+        }
 
         setupAddressSearch()
         // 1.5.0: first start without any routing key: the key guide, once.
@@ -352,7 +356,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }, 1500L)
         }
-        setupWaypointToggle()
+        setupMyPlacesButton()
         setupNavigationButton()
         setupPoiToggle()
         setupSightsButton()
@@ -403,6 +407,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        com.backpack.app.security.AppLock.onForeground()
         mapView.onStart()
         LocationHub.addListener(uiFixListener)
         NavigationEngine.addListener(navListener)
@@ -491,6 +496,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        com.backpack.app.security.AppLock.onBackground()
         LocationHub.removeListener(uiFixListener)
         NavigationEngine.removeListener(navListener)
         com.backpack.app.speed.SpeedGuard.removeListener(speedListener)
@@ -584,7 +590,8 @@ class MainActivity : AppCompatActivity() {
             } else if (choosing && !waypointModeArmed && TripState.plan != null && layers.selectedRouteAt(m, screen)) {
                 // The selected route itself: never a new destination.
                 if (!NavigationEngine.isActive) showMessage(getString(R.string.main_route_selected_go, RouteLabels.letter(TripState.selectedIndex)))
-            } else if (!overviewOn) {
+            } else if (!overviewOn && lastTouchMs >= ACCIDENTAL_TOUCH_MS) {
+                // 1.9.0 (Alex): a touch shorter than 0.15 s on the empty map is an accident.
                 handleDestinationTap(LatLon(p.latitude, p.longitude))
             }
             true
@@ -599,8 +606,10 @@ class MainActivity : AppCompatActivity() {
         // 1.4.2: the centre button follows the map's orientation (compass).
         m.addOnCameraMoveListener { refreshNorthMark() }
         m.addOnCameraIdleListener { refreshNorthMark() }
+        // 1.9.0 (Alex): hold the map: one menu (go, stop, start, save).
         m.addOnMapLongClickListener { p ->
-            handleStartOverride(LatLon(p.latitude, p.longitude))
+            mapView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            showHoldMenu(LatLon(p.latitude, p.longitude))
             true
         }
         m.addOnCameraIdleListener {
@@ -1321,10 +1330,14 @@ class MainActivity : AppCompatActivity() {
             .hideSoftInputFromWindow(searchInput.windowToken, 0)
     }
 
-    // ---------- 1.1.1 Recent searches (phone only) ----------
+    // ---------- 1.1.1 Recent searches (phone only; 1.9.0 encrypted, behind the lock) ----------
 
-    private fun recentPlaces(): List<com.backpack.app.core.Place> = try {
-        val a = org.json.JSONArray(getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE).getString(Settings.KEY_RECENT_SEARCHES, "[]"))
+    private fun recentPlaces(forList: Boolean = false): List<com.backpack.app.core.Place> = try {
+        // 1.9.0: not listed while the app is locked (nobody else sees where you went);
+        // still kept up to date underneath.
+        if (forList && !com.backpack.app.security.AppLock.isOpen(this)) throw IllegalStateException()
+        com.backpack.app.security.PrivateData.migrate(this)
+        val a = org.json.JSONArray(com.backpack.app.security.Vault.getString(this, com.backpack.app.security.PrivateData.RECENT_SEARCHES) ?: "[]")
         (0 until a.length()).mapNotNull { i ->
             a.optJSONObject(i)?.let { o -> com.backpack.app.core.Place(o.optString("n"), o.optString("d"), LatLon(o.optDouble("a"), o.optDouble("o"))) }
         }
@@ -1333,7 +1346,7 @@ class MainActivity : AppCompatActivity() {
     private fun saveRecent(list: List<com.backpack.app.core.Place>) {
         val a = org.json.JSONArray()
         for (p in list.take(10)) a.put(org.json.JSONObject().put("n", p.name).put("d", p.detail).put("a", p.point.lat).put("o", p.point.lon))
-        getSharedPreferences(Settings.PREFS_NAME, MODE_PRIVATE).edit().putString(Settings.KEY_RECENT_SEARCHES, a.toString()).apply()
+        com.backpack.app.security.Vault.putString(this, com.backpack.app.security.PrivateData.RECENT_SEARCHES, a.toString())
     }
 
     /** Newest first, the same place once. */
@@ -1343,7 +1356,8 @@ class MainActivity : AppCompatActivity() {
 
     /** Empty search box: the last destinations (hold one to forget it). */
     private fun showRecent() {
-        val recent = recentPlaces()
+        if (!com.backpack.app.security.AppLock.isOpen(this)) { com.backpack.app.security.AppLock.unlock(this) { if (searchOpen) showRecent() }; return }
+        val recent = recentPlaces(forList = true)
         if (recent.isEmpty()) { hideSuggestions(); return }
         showSuggestions(recent, recent = true)
     }
@@ -2314,14 +2328,128 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- Stops (waypoints) ----------
 
-    private fun setupWaypointToggle() {
+    // ---------- 1.9.0 My places (Home, Work, favourites) and the hold menu ----------
+
+    /** The old "add a stop" slot: My places. Tap = the list, hold = edit. */
+    private fun setupMyPlacesButton() {
         val button = findViewById<ImageButton>(R.id.waypoint_button)
-        button.setOnClickListener {
-            waypointModeArmed = !waypointModeArmed
-            setIconActive(button, waypointModeArmed)
-            showMessage(if (waypointModeArmed) getString(R.string.main_stop_mode_on, maxWaypoints) else getString(R.string.main_stop_mode_off))
+        button.setImageResource(R.drawable.ic_my_places)
+        button.contentDescription = getString(R.string.main_my_places)
+        button.setOnClickListener { com.backpack.app.security.AppLock.unlock(this) { showMyPlaces() } }
+        button.setOnLongClickListener { com.backpack.app.security.AppLock.unlock(this) { editMyPlaces() }; true }
+        setIconActive(button, true)
+    }
+
+    private fun loadMyPlaces(): com.backpack.app.core.MyPlaces.All {
+        com.backpack.app.security.PrivateData.migrate(this)
+        return com.backpack.app.core.MyPlaces.decode(
+            com.backpack.app.security.Vault.getString(this, com.backpack.app.security.PrivateData.MY_PLACES))
+    }
+
+    private fun storeMyPlaces(a: com.backpack.app.core.MyPlaces.All) =
+        com.backpack.app.security.Vault.putString(this, com.backpack.app.security.PrivateData.MY_PLACES, com.backpack.app.core.MyPlaces.encode(a))
+
+    private fun spotLabel(s: com.backpack.app.core.MyPlaces.Spot): String {
+        val kind = when (s.kind) {
+            com.backpack.app.core.MyPlaces.Kind.HOME -> "\uD83C\uDFE0 " + getString(R.string.main_save_home)
+            com.backpack.app.core.MyPlaces.Kind.WORK -> "\uD83D\uDCBC " + getString(R.string.main_save_work)
+            com.backpack.app.core.MyPlaces.Kind.FAVOURITE -> "\u2605"
         }
-        setIconActive(button, false)
+        val here = currentPosition()
+        val dist = here?.let { " \u00b7 " + distanceLabel(Geo.distance(it, s.point)) }.orEmpty()
+        val name = if (s.kind == com.backpack.app.core.MyPlaces.Kind.FAVOURITE || s.name.isNotBlank() && s.name != getString(R.string.main_save_home) && s.name != getString(R.string.main_save_work)) " " + s.name else ""
+        return kind + name + dist
+    }
+
+    /** Tap: Home, Work, favourites; choosing one = the destination. */
+    private fun showMyPlaces() {
+        val all = loadMyPlaces()
+        val p = Popup(this, getString(R.string.main_my_places))
+        if (all.home == null) p.text(getString(R.string.main_home_not_set), 12f)
+        if (all.work == null) p.text(getString(R.string.main_work_not_set), 12f)
+        for (s in all.list) p.bodyButton(spotLabel(s)) { p.dismiss(); goToSpot(s) }
+        if (all.favourites.isEmpty()) p.text(getString(R.string.main_no_favs), 12f)
+        TripState.destination?.let { dest ->
+            p.bodyButton(getString(R.string.main_save_dest)) { p.dismiss(); askSaveAs(dest) }
+        }
+        p.button(getString(R.string.main_edit_places)) { p.dismiss(); editMyPlaces() }
+        p.button(getString(R.string.main_close), primary = true) { p.dismiss() }
+        p.show()
+    }
+
+    private fun goToSpot(s: com.backpack.app.core.MyPlaces.Spot) {
+        val name = s.name.ifBlank { getString(R.string.main_this_place) }
+        if (NavigationEngine.isActive) goHere(s.point, name)
+        else {
+            handleDestinationTap(s.point)
+            // Show where it goes.
+            map?.animateCamera(CameraUpdateFactory.newLatLng(LatLng(s.point.lat, s.point.lon)))
+        }
+    }
+
+    /** Hold the button: rename, delete, move up. */
+    private fun editMyPlaces() {
+        val all = loadMyPlaces()
+        val p = Popup(this, getString(R.string.main_edit_places))
+        if (all.list.isEmpty()) p.text(getString(R.string.main_no_favs), 12f)
+        for (s in all.list) {
+            p.section(spotLabel(s))
+            p.bodyButton(getString(R.string.main_rename)) { p.dismiss(); askName(s.name) { n -> storeMyPlaces(com.backpack.app.core.MyPlaces.rename(loadMyPlaces(), s, n)); editMyPlaces() } }
+            if (s.kind == com.backpack.app.core.MyPlaces.Kind.FAVOURITE && all.favourites.indexOf(s) > 0)
+                p.bodyButton(getString(R.string.main_move_up)) { p.dismiss(); storeMyPlaces(com.backpack.app.core.MyPlaces.moveUp(loadMyPlaces(), s)); editMyPlaces() }
+            p.bodyButton(getString(R.string.main_delete)) { p.dismiss(); storeMyPlaces(com.backpack.app.core.MyPlaces.remove(loadMyPlaces(), s)); editMyPlaces() }
+        }
+        p.button(getString(R.string.main_close), primary = true) { p.dismiss() }
+        p.show()
+    }
+
+    private fun askName(current: String, done: (String) -> Unit) {
+        val p = Popup(this, getString(R.string.main_place_name))
+        var value = current
+        p.field(getString(R.string.main_place_name), current) { value = it }
+        p.button(getString(R.string.main_cancel)) { p.dismiss() }
+        p.button(getString(R.string.main_save), primary = true) { p.dismiss(); done(value.trim().ifEmpty { current }) }
+        p.show()
+    }
+
+    /** Save [point] as Home, Work or a favourite (named). */
+    private fun askSaveAs(point: LatLon) {
+        val p = Popup(this, getString(R.string.main_save_as))
+        fun save(kind: com.backpack.app.core.MyPlaces.Kind, defaultName: String) {
+            p.dismiss()
+            askName(defaultName) { n ->
+                val next = com.backpack.app.core.MyPlaces.save(loadMyPlaces(), kind, n, point)
+                if (next == null) { showError(getString(R.string.main_favs_full, com.backpack.app.core.MyPlaces.MAX_FAVOURITES)); return@askName }
+                storeMyPlaces(next)
+                showMessage(getString(R.string.main_saved_place, n))
+            }
+        }
+        p.bodyButton("\uD83C\uDFE0 " + getString(R.string.main_save_home)) { save(com.backpack.app.core.MyPlaces.Kind.HOME, getString(R.string.main_save_home)) }
+        p.bodyButton("\uD83D\uDCBC " + getString(R.string.main_save_work)) { save(com.backpack.app.core.MyPlaces.Kind.WORK, getString(R.string.main_save_work)) }
+        p.bodyButton("\u2605 " + getString(R.string.main_save_fav)) {
+            save(com.backpack.app.core.MyPlaces.Kind.FAVOURITE, getString(R.string.main_save_fav) + " " + (loadMyPlaces().favourites.size + 1))
+        }
+        p.button(getString(R.string.main_cancel), primary = true) { p.dismiss() }
+        p.show()
+    }
+
+    /** 1.9.0: hold the map: go here, add as stop (with a route, max 2), start from here, save as. */
+    private fun showHoldMenu(point: LatLon) {
+        stopPlanFollow()
+        val p = Popup(this, getString(R.string.main_this_place))
+        val navigating = NavigationEngine.isActive
+        p.bodyButton(getString(R.string.main_go_here)) {
+            p.dismiss()
+            if (navigating) goHere(point, getString(R.string.main_this_place)) else handleDestinationTap(point)
+        }
+        if (TripState.destination != null) p.bodyButton(getString(R.string.main_add_stop)) {
+            p.dismiss()
+            if (navigating) addStopFlow(point, getString(R.string.main_this_place)) else addWaypoint(point)
+        }
+        if (!navigating) p.bodyButton(getString(R.string.main_start_here)) { p.dismiss(); handleStartOverride(point) }
+        p.bodyButton(getString(R.string.main_save_as)) { p.dismiss(); askSaveAs(point) }
+        p.button(getString(R.string.main_cancel), primary = true) { p.dismiss() }
+        p.show()
     }
 
     private fun addWaypoint(point: LatLon) {
@@ -3349,9 +3477,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** How long the last touch lasted (1.9.0: accidental touches on the map are ignored). */
+    private var touchDownMs = 0L
+    private var lastTouchMs = Long.MAX_VALUE
+
     /** A touch anywhere: full brightness for a while. */
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
-        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) wakeDisplay()
+        when (ev.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> { wakeDisplay(); touchDownMs = ev.eventTime }
+            android.view.MotionEvent.ACTION_UP -> lastTouchMs = ev.eventTime - touchDownMs
+        }
         return super.dispatchTouchEvent(ev)
     }
 
@@ -3960,7 +4095,8 @@ class MainActivity : AppCompatActivity() {
     /** Quick access to the Route page of Settings. */
     private fun setupRouteOptionsButton() {
         findViewById<ImageButton>(R.id.route_options_button).setOnClickListener {
-            SettingsPopup.show(this, settingsHost, SettingsPopup.Page.ROUTE)
+            // 1.9.0: Settings hold your key and places: behind the lock (when on).
+            com.backpack.app.security.AppLock.unlock(this) { SettingsPopup.show(this, settingsHost, SettingsPopup.Page.ROUTE) }
         }
         refreshRouteOptionsButton()
     }
@@ -3999,7 +4135,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        override fun onShowTrips() = showTrips()
+        override fun onShowTrips() = com.backpack.app.security.AppLock.unlock(this@MainActivity) { showTrips() }
         override fun onKeyGuide() = showKeyGuide()
         override fun onExitApp() {
             com.backpack.app.nav.NavigationService.exitApp(this@MainActivity)

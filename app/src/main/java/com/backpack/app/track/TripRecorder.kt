@@ -16,7 +16,8 @@ import java.io.File
 object TripRecorder {
 
     class Trip(val file: File, val startMs: Long, val name: String) {
-        val points: List<Gpx.Point> by lazy { try { Gpx.fromLines(file.readText()) } catch (e: Exception) { emptyList() } }
+        // 1.9.0: encrypted on the phone (plain trips from before are read too).
+        val points: List<Gpx.Point> by lazy { try { Gpx.fromLines(com.backpack.app.security.Vault.readFile(file)) } catch (e: Exception) { emptyList() } }
     }
 
     private var app: Context? = null
@@ -56,7 +57,7 @@ object TripRecorder {
         val c = app ?: return
         io.execute {
             if (copy.size < 2) { f.delete(); return@execute }
-            try { f.writeText(Gpx.toLines(copy)) } catch (e: Exception) { }
+            try { com.backpack.app.security.Vault.writeFile(f, Gpx.toLines(copy)) } catch (e: Exception) { }
             prune(c)
         }
     }
@@ -69,7 +70,7 @@ object TripRecorder {
         if (++unsaved >= 20) {
             unsaved = 0
             val copy = ArrayList(points)
-            io.execute { try { f.writeText(Gpx.toLines(copy)) } catch (e: Exception) { } }
+            io.execute { try { com.backpack.app.security.Vault.writeFile(f, Gpx.toLines(copy)) } catch (e: Exception) { } }
         }
     }
 
@@ -83,6 +84,7 @@ object TripRecorder {
     fun delete(t: Trip) { t.file.delete() }
 
     fun deleteAll(c: Context) { dir(c).listFiles()?.forEach { it.delete() } }
+
 
     private fun prune(c: Context) { trips(c).drop(MAX_TRIPS).forEach { it.file.delete() } }
 }

@@ -51,6 +51,8 @@ object Settings {
     val SIGHT_CARD_CHOICES = listOf(10, 15, 20)
     /** 1.7.1: summaries (start, arrival, 3+ ahead) as a card with Read aloud (default on). */
     const val KEY_SIGHT_SUMMARY_READ = "sight_summary_read"
+    /** 1.9.0: private things (places, recent searches, trips, settings) behind fingerprint / PIN. */
+    const val KEY_APP_LOCK = "app_lock"
     /** 1.1.1: last destinations searched (JSON, phone only) and the voice-input notice. */
     const val KEY_RECENT_SEARCHES = "recent_searches"
     /** 1.5.1: new text (FUTO Voice Input, no Sayboard): shown once again. */

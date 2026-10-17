@@ -195,4 +195,23 @@
     <string name="main_card_go">Ir allí</string>
     <string name="main_card_read">▶ Leer</string>
     <string name="main_card_stop">■ Parar</string>
+    <string name="main_start_here">Salir desde aquí</string>
+    <string name="main_save_as">Guardar como…</string>
+    <string name="main_save_home">Casa</string>
+    <string name="main_save_work">Trabajo</string>
+    <string name="main_save_fav">Favorito</string>
+    <string name="main_save">Guardar</string>
+    <string name="main_place_name">Nombre</string>
+    <string name="main_saved_place">%1$s guardado</string>
+    <string name="main_favs_full">Ya hay %1$d favoritos: borre uno antes</string>
+    <string name="main_my_places">Mis lugares</string>
+    <string name="main_home_not_set">Casa: sin definir (mantenga pulsado el mapa para guardarla)</string>
+    <string name="main_work_not_set">Trabajo: sin definir (mantenga pulsado el mapa para guardarlo)</string>
+    <string name="main_no_favs">Sin favoritos: mantenga pulsado el mapa en un lugar para guardarlo</string>
+    <string name="main_save_dest">Guardar el destino como…</string>
+    <string name="main_edit_places">Editar mis lugares</string>
+    <string name="main_rename">Renombrar</string>
+    <string name="main_move_up">↑ Subir</string>
+    <string name="lock_title">Desbloquear Backpack</string>
+    <string name="lock_subtitle">Sus lugares, viajes y ajustes</string>
 </resources>

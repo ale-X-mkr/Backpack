@@ -159,4 +159,7 @@
     <string name="set_cr_license">Backpack est un logiciel libre (GNU GPL v3) : code sur GitHub.</string>
     <string name="set_card_time">Carte à l\'écran</string>
     <string name="set_summary_read">Résumés avec Lire</string>
+    <string name="set_lock">Verrouiller le privé (empreinte / code)</string>
+    <string name="set_lock_help">Mes lieux, recherches récentes, Mes trajets et Réglages demandent un déverrouillage par session (de nouveau après 5 min d\'absence). Carte, navigation et alertes n\'attendent jamais. Vos données privées sont toujours chiffrées sur le téléphone.</string>
+    <string name="set_lock_none">Définissez d\'abord un verrouillage d\'écran (ou empreinte) sur le téléphone</string>
 </resources>

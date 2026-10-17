@@ -14,18 +14,21 @@ import org.json.JSONObject
 object LastTrip {
     data class Trip(val destination: LatLon, val stops: List<LatLon>, val mode: String)
 
-    private const val PREFS = "backpack_last_trip"
+    /** Before 1.9.0 (plain); now in the encrypted Vault. */
+    const val PREFS = "backpack_last_trip"
 
     fun save(c: Context, t: Trip) {
         val o = JSONObject().put("d", JSONArray().put(t.destination.lat).put(t.destination.lon)).put("m", t.mode)
         val s = JSONArray()
         for (p in t.stops) s.put(JSONArray().put(p.lat).put(p.lon))
         o.put("s", s)
-        c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("trip", o.toString()).apply()
+        com.backpack.app.security.PrivateData.migrate(c)
+        com.backpack.app.security.Vault.putString(c, com.backpack.app.security.PrivateData.LAST_TRIP, o.toString())
     }
 
     fun load(c: Context): Trip? = try {
-        val text = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("trip", null)
+        com.backpack.app.security.PrivateData.migrate(c)
+        val text = com.backpack.app.security.Vault.getString(c, com.backpack.app.security.PrivateData.LAST_TRIP)
         text?.let {
             val o = JSONObject(it)
             val d = o.getJSONArray("d")
@@ -37,6 +40,7 @@ object LastTrip {
     } catch (e: Exception) { null }
 
     fun clear(c: Context) {
+        com.backpack.app.security.Vault.putString(c, com.backpack.app.security.PrivateData.LAST_TRIP, null)
         c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove("trip").apply()
     }
 }

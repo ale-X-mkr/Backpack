@@ -159,4 +159,7 @@
     <string name="set_cr_license">Backpack es software libre (GNU GPL v3): código en GitHub.</string>
     <string name="set_card_time">Tarjeta en pantalla</string>
     <string name="set_summary_read">Resúmenes con Leer</string>
+    <string name="set_lock">Bloquear lo privado (huella / PIN)</string>
+    <string name="set_lock_help">Mis lugares, búsquedas recientes, Mis viajes y Ajustes piden desbloquear una vez por sesión (de nuevo tras 5 min fuera). Mapa, navegación y alertas nunca esperan. Sus datos privados siempre van cifrados en el teléfono.</string>
+    <string name="set_lock_none">Configure antes un bloqueo de pantalla (o huella) en el teléfono</string>
 </resources>

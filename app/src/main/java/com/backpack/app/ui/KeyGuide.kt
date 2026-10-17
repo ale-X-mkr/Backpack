@@ -82,7 +82,7 @@ object KeyGuide {
         val cm = c.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
         val text = try { cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(c) } catch (e: Exception) { null }
         val key = OrsKey.fromClipboard(text) ?: return
-        if (key == Prefs.settings(c).getString(Settings.KEY_ORS_KEY, "")?.trim()) return
+        if (key == Prefs.ownOrsKey(c)) return
         field?.setText(key)
         setStatus(c.getString(R.string.keyg_found))
         check(c, key)
@@ -124,6 +124,6 @@ object KeyGuide {
     }
 
     private fun save(c: Context, key: String) {
-        Prefs.settings(c).edit().putString(Settings.KEY_ORS_KEY, key).apply()
+        Prefs.setOwnOrsKey(c, key)
     }
 }

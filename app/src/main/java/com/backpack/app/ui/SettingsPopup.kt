@@ -342,6 +342,7 @@ object SettingsPopup {
         p.text(c.getString(R.string.set_saved_places_help), 11f)
         p.bodyButton(c.getString(R.string.set_clear_recent)) {
             prefs.edit().remove(Settings.KEY_RECENT_SEARCHES).apply()
+            com.backpack.app.security.Vault.putString(c, com.backpack.app.security.PrivateData.RECENT_SEARCHES, null)
             android.widget.Toast.makeText(c, c.getString(R.string.set_recent_cleared), android.widget.Toast.LENGTH_SHORT).show()
         }
         p.bodyButton(c.getString(R.string.set_clear_places)) {
@@ -417,6 +418,17 @@ object SettingsPopup {
     private fun serversPage(c: Context, p: Popup, prefs: android.content.SharedPreferences, host: Host) {
         p.section(c.getString(R.string.set_privacy))
         p.text(c.getString(R.string.set_privacy_help), 11f)
+        // 1.9.0 (Alex): your private things behind your fingerprint / PIN.
+        p.toggle(c.getString(R.string.set_lock), { com.backpack.app.security.AppLock.enabled(c) }) { on ->
+            if (on && !com.backpack.app.security.AppLock.available(c)) {
+                android.widget.Toast.makeText(c, c.getString(R.string.set_lock_none), android.widget.Toast.LENGTH_LONG).show()
+                return@toggle
+            }
+            prefs.edit().putBoolean(Settings.KEY_APP_LOCK, on).apply()
+            // Turned on from here: this session is already yours.
+            if (on) com.backpack.app.security.AppLock.markUnlocked()
+        }
+        p.text(c.getString(R.string.set_lock_help), 11f)
         p.link(c.getString(R.string.set_map_data_link), "https://www.openstreetmap.org/copyright")
 
         p.section(c.getString(R.string.set_servers_keys))
@@ -433,9 +445,9 @@ object SettingsPopup {
         p.into(folded) {
             p.section(c.getString(R.string.set_routing))
             urlField(c, p, prefs, c.getString(R.string.set_routing_server), Settings.KEY_ORS_URL, "https://...")
-            p.field(c.getString(R.string.set_own_ors_key), prefs.getString(Settings.KEY_ORS_KEY, "").orEmpty(),
+            p.field(c.getString(R.string.set_own_ors_key), com.backpack.app.Prefs.ownOrsKey(c),
                 c.getString(R.string.set_key_hint), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) {
-                prefs.edit().putString(Settings.KEY_ORS_KEY, it).apply()
+                com.backpack.app.Prefs.setOwnOrsKey(c, it)
             }
             p.bodyButton(c.getString(R.string.set_get_key)) { host.onKeyGuide() }
             help(c, p, c.getString(R.string.set_routing_help))
