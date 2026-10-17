@@ -10,5 +10,7 @@ Backpack is a private turn-by-turn navigation app for walking, cycling and drivi
 * Well-known places along your route (Wikipedia / Wikidata), voice tips and readings, add them as a stop.
 * Everyday services: fuel and charging, food, lodging, parking, toilets, water, pharmacy, emergency.
 * Resume a stopped navigation, record your track, save trips as GPX.
+* My places (Home, Work, favourites), encrypted on the phone with your trips and searches; optional fingerprint / PIN lock.
+* Last exit before the toll, "Exit now" at roundabouts, sight tips also without a route.
 * Places are fetched per ~5 km map square and kept on the phone: servers never see your route line.
 * No account, no tracking, no ads.

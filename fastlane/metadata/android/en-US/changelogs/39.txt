@@ -1,0 +1,5 @@
+* My places: Home, Work and up to 10 favourites (button with the house).
+* Hold the map: go here, add as stop, start from here, save as Home / Work / Favourite.
+* Private data encrypted on the phone; optional fingerprint / PIN lock.
+* Last exit before the toll; sight tips without a route.
+* Turn sign like a motorway sign, Exit now at roundabouts, clearer messages, brightness by situation.

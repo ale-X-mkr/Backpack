@@ -1,4 +1,4 @@
-# Backpack 1.7.2
+# Backpack 1.9.0
 
 Private GPS navigation for Android, for travellers and backpackers.
 OpenStreetMap maps, nothing from Google, no account, no tracking, no ads.
@@ -25,6 +25,10 @@ culture, parks and viewpoints, with your own detour and distance settings.
 - **Services:** fuel and charging, food, lodging, parking, toilets, water,
   pharmacy, emergency… along the route or around you.
 - **Trips:** resume a navigation you stopped, record your track, save as GPX.
+- **My places:** Home, Work and up to 10 favourites; hold the map to go,
+  add a stop, start from there or save the place.
+- **Toll and roundabouts:** "last exit before the toll" (with or without a
+  route), "Exit now" a few seconds before your roundabout exit.
 
 ## Privacy
 - Position from the phone's GPS chip only. No Google Play Services.
