@@ -23,8 +23,8 @@ android {
         applicationId = "com.backpack.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 37
-        versionName = "1.8.1"
+        versionCode = 38
+        versionName = "1.8.2"
         buildConfigField("String", "ORS_KEY_1", "\"${localProp("ors.key1")}\"")
         buildConfigField("String", "ORS_KEY_2", "\"${localProp("ors.key2")}\"")
         // 1.7.0: shared starter key, only in the "share" build (trial for new users).

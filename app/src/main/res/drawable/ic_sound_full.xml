@@ -1,11 +1,12 @@
 <!-- 1.4.1 Sound "Full": instructions, sight tips, readings ("volume up").
      Shapes: Material icons, (C) Google / The Android Open Source Project,
      Apache License 2.0 (http://www.apache.org/licenses/LICENSE-2.0). -->
+<!-- 1.8.2 (Alex): ring half as thick (r 9..10 instead of 8..10). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
     <group android:pivotX="12" android:pivotY="12" android:scaleX="1.15" android:scaleY="1.15">
-        <path android:fillColor="@android:color/white" android:fillAlpha="0.3" android:pathData="M12,4c-4.42,0 -8,3.58 -8,8s3.58,8 8,8 8,-3.58 8,-8 -3.58,-8 -8,-8z"/>
-        <path android:fillColor="@android:color/white" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,20c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8 8,3.58 8,8 -3.58,8 -8,8z"/>
+        <path android:fillColor="@android:color/white" android:fillAlpha="0.3" android:pathData="M12,3c-4.97,0 -9,4.03 -9,9s4.03,9 9,9 9,-4.03 9,-9 -4.03,-9 -9,-9z"/>
+        <path android:fillColor="@android:color/white" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM12,21c-4.97,0 -9,-4.03 -9,-9s4.03,-9 9,-9 9,4.03 9,9 -4.03,9 -9,9z"/>
         <group android:pivotX="12" android:pivotY="12" android:scaleX="0.6" android:scaleY="0.6" android:translateY="0">
             <path android:fillColor="@android:color/white" android:pathData="M3,9v6h4l5,5V4L7,9H3zM10,8.83v6.34L7.83,13H5v-2h2.83L10,8.83zM14,7.97v8.05c1.48,-0.73 2.5,-2.25 2.5,-4.02A4.5,4.5 0 0,0 14,7.97zM14,3.23v2.06c2.89,0.86 5,3.54 5,6.71s-2.11,5.85 -5,6.71v2.06c4.01,-0.91 7,-4.49 7,-8.77 0,-4.28 -2.99,-7.86 -7,-8.77z"/>
         </group>

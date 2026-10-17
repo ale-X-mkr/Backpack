@@ -181,7 +181,7 @@ class MainActivity : AppCompatActivity() {
     /** 1.8.0 (Alex): bottom row 15 % smaller (49 dp), fainter, clear of the credit line. */
     private val BOTTOM_ROW_DP = 49
     private val BOTTOM_ROW_BOTTOM_DP = 20
-    private val MESSAGES_BOTTOM_DP = 73
+    private val MESSAGES_BOTTOM_DP = 70
     /** Edge + column + margin: what a side column takes (landscape messages / chips stay inside).
      *  1.8.0: columns 4 dp from the screen edges. */
     private val COLUMN_ZONE_DP = 56
@@ -2534,9 +2534,9 @@ class MainActivity : AppCompatActivity() {
         if (key == nextTurnKey) return
         nextTurnKey = key
         val at = route.line.alongAt(step.wayStart)
-        // 1.5.1: short: ~30 m before the turn, ~25 m after it (arrowhead at the end).
-        val from = (at - 30.0).coerceAtLeast(0.0)
-        layers.setNextTurn(com.backpack.app.core.SpeedLimits.section(route.line, from, at + 25.0 - from))
+        // 1.5.1: short; 1.8.2 (Alex): shorter still, ~20 m before the turn and ~15 m after (arrowhead at the end), wider.
+        val from = (at - 20.0).coerceAtLeast(0.0)
+        layers.setNextTurn(com.backpack.app.core.SpeedLimits.section(route.line, from, at + 15.0 - from))
     }
 
     private fun onNavProgress(p: Progress, route: RouteResult) {
@@ -3011,8 +3011,10 @@ class MainActivity : AppCompatActivity() {
         if (boxLp.width != boxW) { boxLp.width = boxW; navBox.layoutParams = boxLp }
         // Room for the speed circle at the box's right end (driving, navigating).
         val circleInBox = navUiActive // 1.1.0: speed shown in every mode while navigating
-        // 1.7.2: 16 dp sides, clear of the 39 dp corners.
-        navBox.setPadding(dp(16), dp(4), dp(16), dp(4))
+        // 1.7.2: 16 dp on the right (the speed circle is placed on its own);
+        // 1.8.2: 4 dp on the left, so the turn circle sits exactly in the box's
+        // left corner, touching the frame like the speed circle (nothing cut).
+        navBox.setPadding(dp(4), dp(4), dp(16), dp(4))
         // 1.8.0: the speed circle (4..74 dp from the box's right edge) sits beside
         // the turn row; the limit sign went down to the box's last line.
         navInstructionBar.setPadding(0, 0, if (!circleInBox) 0 else dp(62), 0)
@@ -3035,7 +3037,8 @@ class MainActivity : AppCompatActivity() {
         // still needed, the columns start higher (never under the speed circle).
         // The keyboard shrinks the screen: the columns keep where they were.
         var top0 = if (land) COLUMNS_TOP_DP else COLUMNS_TOP_PORTRAIT_DP
-        var step = BTN_DP + if (land) 9 else 17
+        // 1.8.2 (Alex): 8 dp between the buttons, both orientations.
+        var step = BTN_DP + 8
         if (keyboardOpen && columnsFor == land) {
             top0 = columnsTop; step = columnsStep
         } else {

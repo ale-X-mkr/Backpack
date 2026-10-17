@@ -1,5 +1,6 @@
-<!-- 1.8.0: the next-action circle: dark disc, white ring with a thin black
-     edge (visible on light and dark maps), as big as the speed circle. -->
+<!-- 1.8.0: the next-action circle, as big as the speed circle.
+     1.8.2 (Alex): like a motorway sign: blue disc, white ring and white
+     arrow / roundabout; a thin black edge keeps it visible on light maps. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="oval">
@@ -8,7 +9,7 @@
     </item>
     <item android:left="1dp" android:top="1dp" android:right="1dp" android:bottom="1dp">
         <shape android:shape="oval">
-            <solid android:color="#E6202020" />
+            <solid android:color="#FF0057B8" />
             <stroke android:width="4dp" android:color="#FFFFFFFF" />
         </shape>
     </item>

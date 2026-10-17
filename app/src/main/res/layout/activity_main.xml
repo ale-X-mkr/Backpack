@@ -71,7 +71,6 @@
             android:id="@+id/nav_turn_circle"
             android:layout_width="70dp"
             android:layout_height="70dp"
-            android:layout_marginStart="-12dp"
             android:layout_marginEnd="8dp"
             android:background="@drawable/nav_turn_circle"
             android:visibility="gone">
@@ -81,6 +80,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:padding="13dp"
+                android:tint="#FFFFFFFF"
                 android:src="@drawable/ic_nav_straight" />
 
             <TextView
@@ -89,8 +89,8 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:includeFontPadding="false"
-                android:shadowColor="#FF000000"
-                android:shadowRadius="4"
+                android:shadowColor="#FF00305F"
+                android:shadowRadius="5"
                 android:text=""
                 android:textColor="#FFFFFFFF"
                 android:textSize="18dp"
@@ -105,9 +105,10 @@
             android:layout_weight="1"
             android:maxLines="2"
             android:ellipsize="end"
+            android:gravity="center"
             android:text=""
             android:textColor="#FFFFFF"
-            android:textSize="17sp"
+            android:textSize="20.4sp"
             android:fontFamily="sans-serif-condensed"
             android:letterSpacing="0.01" />
 
@@ -130,8 +131,8 @@
                 android:id="@+id/nav_distance_text"
                 android:layout_width="70dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="-12dp"
                 android:layout_marginEnd="8dp"
+                android:paddingBottom="3dp"
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:maxLines="1"
@@ -142,41 +143,52 @@
                 android:fontFamily="sans-serif-condensed"
                 android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/route_info_dist"
+            <!-- 1.8.2: distance / arrival / cost centred in the space left. -->
+            <LinearLayout
+                android:id="@+id/route_info_group"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:layout_marginEnd="12dp"
-                android:text=""
-                android:textColor="@color/eta_line_text"
-                android:textSize="13dp"
-                android:textStyle="bold"
-                android:fontFamily="sans-serif-condensed" />
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/route_info_eta"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:layout_marginEnd="12dp"
-                android:text=""
-                android:textColor="@color/eta_line_text"
-                android:textSize="13dp"
-                android:textStyle="bold"
-                android:fontFamily="sans-serif-condensed" />
+                <TextView
+                    android:id="@+id/route_info_dist"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:layout_marginEnd="12dp"
+                    android:text=""
+                    android:textColor="@color/eta_line_text"
+                    android:textSize="15.6dp"
+                    android:textStyle="bold"
+                    android:fontFamily="sans-serif-condensed" />
 
-            <TextView
-                android:id="@+id/route_info_cost"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=""
-                android:textColor="@color/eta_line_text"
-                android:textSize="13dp"
-                android:textStyle="bold"
-                android:fontFamily="sans-serif-condensed" />
+                <TextView
+                    android:id="@+id/route_info_eta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:layout_marginEnd="12dp"
+                    android:text=""
+                    android:textColor="@color/eta_line_text"
+                    android:textSize="15.6dp"
+                    android:textStyle="bold"
+                    android:fontFamily="sans-serif-condensed" />
+
+                <TextView
+                    android:id="@+id/route_info_cost"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textColor="@color/eta_line_text"
+                    android:textSize="15.6dp"
+                    android:textStyle="bold"
+                    android:fontFamily="sans-serif-condensed" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
@@ -521,7 +533,7 @@
             android:id="@+id/searching_line"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
+            android:layout_marginBottom="2dp"
             android:alpha="0.6"
             android:background="@drawable/msg_info_background"
             android:gravity="center_vertical"

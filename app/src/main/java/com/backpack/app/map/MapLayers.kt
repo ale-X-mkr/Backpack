@@ -151,15 +151,16 @@ class MapLayers(private val context: Context) {
         val turnFill = if (darkMap) 0xFFFFFFFF.toInt() else 0xFFB71C1C.toInt()
         val turnEdge = if (darkMap) 0xFFD32F2F.toInt() else 0xFF000000.toInt()
         add(LineLayer(LAYER_NEXT_EDGE, SRC_NEXT).withProperties(
-            PropertyFactory.lineColor(turnEdge), PropertyFactory.lineWidth(width(5.0f)),
+            PropertyFactory.lineColor(turnEdge), PropertyFactory.lineWidth(width(8.6f)), // 1.8.2: wider
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
         add(LineLayer(LAYER_NEXT, SRC_NEXT).withProperties(
-            PropertyFactory.lineColor(turnFill), PropertyFactory.lineWidth(width(3.2f)),
+            PropertyFactory.lineColor(turnFill), PropertyFactory.lineWidth(width(5.8f)),
             PropertyFactory.lineCap(Property.LINE_CAP_ROUND), PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)
         ))
         add(SymbolLayer(LAYER_NEXT_HEAD, SRC_NEXT).withProperties(
             PropertyFactory.iconImage(Expression.get("icon")),
+            PropertyFactory.iconSize(1.6f), // 1.8.2: matches the wider mark
             PropertyFactory.iconRotate(Expression.toNumber(Expression.get("bearing"))),
             PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
             PropertyFactory.iconAllowOverlap(true),
