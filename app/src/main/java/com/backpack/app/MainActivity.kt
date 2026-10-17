@@ -189,6 +189,8 @@ class MainActivity : AppCompatActivity() {
     private val LIMIT_SIGN_DP = 36
     /** 1.8.0: a spoken instruction stays in the box this long, then the street name. */
     private val INSTRUCTION_SHOWN_MS = 6000L
+    /** 1.8.2: the box's last line (distance / arrival), dp. */
+    private val ROUTE_LINE_DP = 15.6f
     /** 1.8.0: full brightness this long after something to see; checked this often. */
     private val WAKE_MS = 10_000L
     private val BRIGHTNESS_TICK_MS = 2000L
@@ -293,7 +295,6 @@ class MainActivity : AppCompatActivity() {
         speedLimitSign = findViewById(R.id.speed_limit_sign)
         messageBubble = findViewById(R.id.message_bubble)
         errorBubble = findViewById(R.id.error_bubble)
-        applyBubbleColors()
         var lastBarHeight = 0
         var lastBandHeight = 0
         findViewById<View>(R.id.message_band).addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
@@ -302,6 +303,8 @@ class MainActivity : AppCompatActivity() {
         navBox.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
             if (v.height != lastBarHeight) { lastBarHeight = v.height; v.post { placeLayout() } }
         }
+        // 1.8.2: the box's last line refitted when its width changes.
+        findViewById<View>(R.id.route_info_group).addOnLayoutChangeListener { _, l, _, r, _, ol, _, or, _ -> if (r - l != or - ol) fitRouteLine() }
         // Speed number centred on its digits, not on the font's line box.
         speedSignText.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> centerDigits(v as TextView) }
 
@@ -953,13 +956,6 @@ class MainActivity : AppCompatActivity() {
     // ---------- Messages ----------
 
     /** Bubbles: fixed dark, high-contrast scheme in day and night. */
-    private fun applyBubbleColors() {
-        for (b in listOf(messageBubble, errorBubble)) {
-            (b.background?.mutate() as? GradientDrawable)?.setColor(Color.parseColor("#B3333333"))
-            b.setTextColor(Color.WHITE)
-        }
-        (errorBubble.background as? GradientDrawable)?.setStroke(dp(2), activeColor)
-    }
 
     private var bubbleFadeOutRunnable: Runnable? = null
 
@@ -1851,10 +1847,20 @@ class MainActivity : AppCompatActivity() {
         // 1.8.0: the left column (planning: 4 buttons; navigating: travel mode,
         // urgency) always stays: the card beside it (1.8.2: also without a route).
         val startDp = COLUMN_ZONE_DP + 32
+        // 1.8.2: never over the box's last line (landscape: under it, one-line texts so
+        // the messages below stay clear); the buttons stacked when side by side would wrap.
+        val title = findViewById<TextView>(R.id.sight_card_title)
+        val detail = findViewById<TextView>(R.id.sight_card_detail)
+        title.maxLines = if (land) 1 else 2
+        detail.maxLines = if (land) 1 else 2
+        val cardW: Int
         if (land) {
-            lp.gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
-            lp.setMargins(dp(startDp), 0, 0, 0)
-            lp.width = (screenW * 0.36).toInt()
+            lp.gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            val top = if (navBox.visibility == View.VISIBLE) navBox.bottom + dp(8) else dp(NAV_BOX_TOP_DP + 4 + SPEED_CIRCLE_DP + 8)
+            lp.setMargins(dp(startDp), top, 0, 0)
+            // Wide enough for both buttons side by side (a short card stays above the messages).
+            lp.width = (screenW * 0.45).toInt()
+            cardW = lp.width
         } else {
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.START
             // 1.8.2: under the box, or under the speed circle (top right, 8..78 dp) without it.
@@ -1862,7 +1868,9 @@ class MainActivity : AppCompatActivity() {
             // 1.7.1: never under the right column.
             lp.setMargins(dp(startDp), boxBottom + dp(8), dp(COLUMN_ZONE_DP), 0)
             lp.width = FrameLayout.LayoutParams.WRAP_CONTENT
+            cardW = screenW - dp(startDp) - dp(COLUMN_ZONE_DP)
         }
+        stackCardButtons(cardW - card.paddingLeft - card.paddingRight)
         card.layoutParams = lp
         card.visibility = View.VISIBLE
         wakeDisplay()
@@ -1880,6 +1888,22 @@ class MainActivity : AppCompatActivity() {
             if (readAllActive && System.currentTimeMillis() < readAllLookupUntil) { handler.postDelayed(this, 2000L); return }
             readAllActive = false
             hideSightCard.run()
+        }
+    }
+
+    /** The two card buttons side by side when they fit at their size, else one under the other. */
+    private fun stackCardButtons(innerW: Int) {
+        val go = findViewById<TextView>(R.id.sight_card_go)
+        val read = findViewById<TextView>(R.id.sight_card_read)
+        val row = read.parent as LinearLayout
+        fun w(t: TextView) = if (t.visibility == View.VISIBLE) t.paint.measureText(t.text.toString()) + t.paddingLeft + t.paddingRight else 0f
+        val side = w(go) + w(read) + dp(10) <= innerW
+        val want = if (side) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        if (row.orientation != want) row.orientation = want
+        (read.layoutParams as LinearLayout.LayoutParams).let {
+            val start = if (side && go.visibility == View.VISIBLE) dp(10) else 0
+            val top = if (!side && go.visibility == View.VISIBLE) dp(6) else 0
+            if (it.marginStart != start || it.topMargin != top) { it.marginStart = start; it.topMargin = top; read.layoutParams = it }
         }
     }
 
@@ -2578,6 +2602,7 @@ class MainActivity : AppCompatActivity() {
         // Live remaining distance and arrival time.
         routeInfoDist.text = navInfo(getString(R.string.main_dist), navDistance(p.remainingM), " \u00b7")
         routeInfoEta.text = navInfo(getString(R.string.main_eta), etaLabel(p.remainingS).removePrefix(getString(R.string.main_eta) + " "))
+        fitRouteLine()
     }
 
     private fun updateNavBar(step: NavStep?, distance: Double?) {
@@ -2795,16 +2820,15 @@ class MainActivity : AppCompatActivity() {
             lp.topMargin = dp(4)
             lp.gravity = android.view.Gravity.CENTER_HORIZONTAL
             (routeInfo as LinearLayout).gravity = android.view.Gravity.CENTER
-            // 1.0.8: message background, the selected chip's red frame.
-            routeInfo.background = GradientDrawable().apply {
-                cornerRadius = dp(12).toFloat()
-                setColor(Color.parseColor("#B3333333"))
-                setStroke(Math.max(1, dp(3) / 2), activeColor)
-            }
-            routeInfo.setPadding(dp(10), dp(3), dp(10), dp(3))
+            // 1.8.2: an information message like the others (faint grey, blue frame).
+            routeInfo.background = ContextCompat.getDrawable(this, R.drawable.msg_info_background)
+            routeInfo.setPadding(dp(11), dp(4), dp(11), dp(4))
         }
-        // White like the messages; cost only before Go (the route is chosen after).
-        for (t in listOf(routeInfoDist, routeInfoEta, routeInfoCost)) t.setTextColor(Color.WHITE)
+        // White in the box; the message colour in the band. Cost only before Go.
+        val lineColor = if (navUiActive) Color.WHITE else ContextCompat.getColor(this, R.color.msg_text)
+        for (t in listOf(routeInfoDist, routeInfoEta, routeInfoCost)) t.setTextColor(lineColor)
+        // 1.8.2: no gap after the arrival time when it is the last item (navigating).
+        (routeInfoEta.layoutParams as LinearLayout.LayoutParams).let { if (it.marginEnd != (if (navUiActive) 0 else dp(12))) { it.marginEnd = if (navUiActive) 0 else dp(12); routeInfoEta.layoutParams = it } }
         routeInfoCost.visibility = if (navUiActive) View.GONE else View.VISIBLE
         if (selectedRoute() != null || NavigationEngine.lastProgress != null) refreshRouteInfoText()
         routeInfo.isClickable = true // a tap on it never reaches the map
@@ -2821,6 +2845,31 @@ class MainActivity : AppCompatActivity() {
             routeInfoDist.text = navInfo(getString(R.string.main_dist), navDistance(m), " \u00b7")
             routeInfoEta.text = navInfo(getString(R.string.main_eta), etaLabel(sec).removePrefix(getString(R.string.main_eta) + " "))
         } else r?.let { setRouteInfoText(it) }
+    }
+
+    /**
+     * 1.8.2: the box's last line at 15.6 dp, made smaller (down to 11 dp) only
+     * when distance + arrival would not fit the space left (narrow phones,
+     * long words): never cut.
+     */
+    private fun fitRouteLine() {
+        val group = findViewById<View>(R.id.route_info_group) ?: return
+        val avail = group.width - group.paddingLeft - group.paddingRight
+        val texts = listOf(routeInfoDist, routeInfoEta)
+        val d = resources.displayMetrics.density
+        if (!navUiActive) {
+            for (t in texts) if (Math.abs(t.textSize - ROUTE_LINE_DP * d) > 0.5f) t.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, ROUTE_LINE_DP)
+            return
+        }
+        if (avail <= 0) return
+        var need = 0f
+        for (t in texts) {
+            val p = android.text.TextPaint(t.paint).apply { textSize = ROUTE_LINE_DP * d }
+            need += android.text.Layout.getDesiredWidth(t.text, p)
+            (t.layoutParams as? android.view.ViewGroup.MarginLayoutParams)?.let { need += it.marginStart + it.marginEnd }
+        }
+        val size = if (need <= avail) ROUTE_LINE_DP else maxOf(11f, ROUTE_LINE_DP * avail / need * 0.98f)
+        for (t in texts) if (Math.abs(t.textSize - size * d) > 0.5f) t.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, size)
     }
 
     /** "96 km" (1 decimal under 10). */
@@ -3016,10 +3065,12 @@ class MainActivity : AppCompatActivity() {
         // 1.7.2: 16 dp on the right (the speed circle is placed on its own);
         // 1.8.2: 4 dp on the left, so the turn circle sits exactly in the box's
         // left corner, touching the frame like the speed circle (nothing cut).
-        navBox.setPadding(dp(4), dp(4), dp(16), dp(4))
+        // 8 dp at the bottom: the last line clear of the round bottom corners.
+        navBox.setPadding(dp(4), dp(4), dp(16), dp(8))
         // 1.8.0: the speed circle (4..74 dp from the box's right edge) sits beside
         // the turn row; the limit sign went down to the box's last line.
-        navInstructionBar.setPadding(0, 0, if (!circleInBox) 0 else dp(62), 0)
+        // Driving: also clear of the limit sign below-left of the circle (2-line street names).
+        navInstructionBar.setPadding(0, 0, if (!circleInBox) 0 else if (driving) dp(74) else dp(62), 0)
         navInstructionBar.minimumHeight = if (circleInBox) dp(SPEED_CIRCLE_DP) else 0
         // Planning while driving: box and chips centred left of the speed
         // circle (top right), never under it.
@@ -3125,7 +3176,11 @@ class MainActivity : AppCompatActivity() {
 
         // While typing, the bottom buttons and the credit step aside; only
         // what was shown is hidden, and only that comes back.
-        val under = listOf<View>(findViewById(R.id.bottom_bar), findViewById(R.id.credit_text))
+        // 1.8.2: the side columns too (the search box and its suggestions take their place).
+        val under = listOf<View>(findViewById(R.id.bottom_bar), findViewById(R.id.credit_text), findViewById(R.id.mode_row),
+            findViewById(R.id.route_options_button), findViewById(R.id.locate_button), findViewById(R.id.waypoint_button),
+            findViewById(R.id.preference_toggle_button), findViewById(R.id.alt_route_button), findViewById(R.id.overview_button),
+            findViewById(R.id.search_button))
         if (keyboardOpen) {
             for (v in under) if (v.visibility == View.VISIBLE) { v.visibility = View.INVISIBLE; hiddenForKeyboard.add(v) }
         } else {
@@ -3167,9 +3222,9 @@ class MainActivity : AppCompatActivity() {
 
         // Guards: columns (with a little margin around) and the bottom buttons.
         setMargins(R.id.guard_left, top = top0 - 6)
-        setSize(R.id.guard_left, height = if (leftRows == 0) 0 else leftRows * step + 4, width = 90)
+        setSize(R.id.guard_left, height = if (leftRows == 0 || keyboardOpen) 0 else leftRows * step + 4, width = 90)
         setMargins(R.id.guard_right, top = top0 - 6)
-        setSize(R.id.guard_right, height = rightRows * step + 4, width = 58)
+        setSize(R.id.guard_right, height = if (keyboardOpen) 0 else rightRows * step + 4, width = 58)
         setSize(R.id.guard_bottom, height = if (keyboardOpen) 0 else BOTTOM_ROW_BOTTOM_DP + BOTTOM_ROW_DP + 2)
     }
 

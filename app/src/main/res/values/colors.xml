@@ -44,4 +44,8 @@
     <!-- 1.4.2: compass letters on the centre button (north up). -->
     <color name="compass_n">#FFB71C1C</color>
     <color name="compass_other">#FF4E4E4E</color>
+    <!-- 1.8.2: messages, sight cards and their buttons (night: faint dark grey, light text). -->
+    <color name="msg_bg">#E6EEEEEE</color>
+    <color name="msg_text">#FF1A1A1A</color>
+    <color name="card_btn_bg">#FFFFFFFF</color>
 </resources>

@@ -1,6 +1,6 @@
 <!-- 1.8.0 (Alex): alerts (errors, sight cards): faint grey, readable dark text, our red frame. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#E6EEEEEE" />
+    <solid android:color="@color/msg_bg" />
     <stroke android:width="2dp" android:color="#FFB71C1C" />
     <corners android:radius="13dp" />
 </shape>

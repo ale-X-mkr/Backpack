@@ -37,4 +37,7 @@
     <!-- 1.4.2: compass letters on the centre button (north up). -->
     <color name="compass_n">#FFFF5252</color>
     <color name="compass_other">#B3FFFFFF</color>
+    <color name="msg_bg">#E62E2E2E</color>
+    <color name="msg_text">#FFF2F2F2</color>
+    <color name="card_btn_bg">#FF1E1E1E</color>
 </resources>
