@@ -1848,15 +1848,17 @@ class MainActivity : AppCompatActivity() {
         val land = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         val lp = card.layoutParams as FrameLayout.LayoutParams
         val screenW = findViewById<View>(android.R.id.content).width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
-        // 1.8.0: while navigating the left column (travel mode, urgency) stays: the card beside it.
-        val startDp = if (navUiActive) COLUMN_ZONE_DP + 32 else 10
+        // 1.8.0: the left column (planning: 4 buttons; navigating: travel mode,
+        // urgency) always stays: the card beside it (1.8.2: also without a route).
+        val startDp = COLUMN_ZONE_DP + 32
         if (land) {
             lp.gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
             lp.setMargins(dp(startDp), 0, 0, 0)
             lp.width = (screenW * 0.36).toInt()
         } else {
             lp.gravity = android.view.Gravity.TOP or android.view.Gravity.START
-            val boxBottom = if (navBox.visibility == View.VISIBLE) navBox.bottom else dp(60)
+            // 1.8.2: under the box, or under the speed circle (top right, 8..78 dp) without it.
+            val boxBottom = if (navBox.visibility == View.VISIBLE) navBox.bottom else dp(NAV_BOX_TOP_DP + 4 + SPEED_CIRCLE_DP)
             // 1.7.1: never under the right column.
             lp.setMargins(dp(startDp), boxBottom + dp(8), dp(COLUMN_ZONE_DP), 0)
             lp.width = FrameLayout.LayoutParams.WRAP_CONTENT
@@ -3131,7 +3133,7 @@ class MainActivity : AppCompatActivity() {
             hiddenForKeyboard.clear()
         }
 
-        // Bottom: the action row (14..72, 1.7.1) -> messages (76). The floating
+        // Bottom: the action row (20..69, 1.8.0) -> messages (70). The floating
         // search box sits in the messages' place (just over the keyboard while
         // typing), the messages and suggestions over it.
         val searchBottom = if (keyboardOpen) 8 else MESSAGES_BOTTOM_DP
@@ -3171,11 +3173,6 @@ class MainActivity : AppCompatActivity() {
         setSize(R.id.guard_bottom, height = if (keyboardOpen) 0 else BOTTOM_ROW_BOTTOM_DP + BOTTOM_ROW_DP + 2)
     }
 
-    /**
-     * 1.7.1 (Alex): the limit sign touches the speed circle's edge (and, at
-     * [signTopDp] 0 in the box, the box's top frame), never overlapping:
-     * the two discs' centres are exactly one radius sum apart.
-     */
     /**
      * 1.8.0: the limit sign touches the speed circle (centres exactly one radius
      * sum apart), never overlapping. With the box ([innerBottomDp] = the frame's
