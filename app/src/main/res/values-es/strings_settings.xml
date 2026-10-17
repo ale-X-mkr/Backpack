@@ -87,12 +87,12 @@
     <string name="set_services_detour">Servicios de la mochila en ruta: desvío máximo</string>
     <string name="set_work_detour">Modo Trabajo (min, ida y vuelta)</string>
     <string name="set_services_help">Con destino: los servicios marcados, en la ruta dentro de este desvío (Fin de semana: el de Turismo). Emergencia añade hospitales, policía y bomberos. Sin destino: alrededor del centro del mapa; Emergencia, alrededor de usted.</string>
-    <string name="set_saved_places">Lugares guardados</string>
+    <string name="set_saved_places">Lugares descargados</string>
     <string name="set_saved_places_help">Los lugares se guardan en este teléfono por zonas de ~5 km (3 días; turismo 2 semanas): una zona ya vista no necesita servidor.</string>
     <string name="set_clear_recent">Borrar búsquedas recientes</string>
     <string name="set_recent_cleared">Búsquedas borradas</string>
-    <string name="set_clear_places">Borrar lugares guardados</string>
-    <string name="set_places_cleared">Lugares borrados</string>
+    <string name="set_clear_places">Borrar lugares descargados</string>
+    <string name="set_places_cleared">Lugares descargados borrados</string>
     <string name="set_credits_intro">Backpack es gratis y usa estos proyectos abiertos. Si le sirve, apóyelos.</string>
     <string name="set_website">Sitio web</string>
     <string name="set_support_them">Apoyarlos</string>

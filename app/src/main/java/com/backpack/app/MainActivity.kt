@@ -210,7 +210,6 @@ class MainActivity : AppCompatActivity() {
     private var tollRatePerKm = Settings.DEFAULT_TOLL_RATE
     private var useMetric = true
 
-    private var waypointModeArmed = false
     private val maxWaypoints = Stops.MAX
 
     // Navigation screen state (the navigation itself lives in NavigationEngine).
@@ -587,7 +586,7 @@ class MainActivity : AppCompatActivity() {
                 // Touching a route only selects it (its figures in the route
                 // line); nothing is recalculated, Go starts it.
                 if (idx != TripState.selectedIndex) promoteRouteToPrimary(idx)
-            } else if (choosing && !waypointModeArmed && TripState.plan != null && layers.selectedRouteAt(m, screen)) {
+            } else if (choosing && TripState.plan != null && layers.selectedRouteAt(m, screen)) {
                 // The selected route itself: never a new destination.
                 if (!NavigationEngine.isActive) showMessage(getString(R.string.main_route_selected_go, RouteLabels.letter(TripState.selectedIndex)))
             } else if (!overviewOn && lastTouchMs >= ACCIDENTAL_TOUCH_MS) {
@@ -1195,6 +1194,7 @@ class MainActivity : AppCompatActivity() {
     private fun openSearch() {
         stopPlanFollow()
         searchOpen = true
+        recentHintShown = false
         val searchInput = findViewById<EditText>(R.id.search_input)
         searchInput.visibility = View.VISIBLE
         setIconActive(findViewById(R.id.search_button), true)
@@ -1291,10 +1291,6 @@ class MainActivity : AppCompatActivity() {
         }
         applyMode()
         // A destination, never a stop, even if stop mode was armed.
-        if (waypointModeArmed) {
-            waypointModeArmed = false
-            setIconActive(findViewById(R.id.waypoint_button), false)
-        }
         handleDestinationTap(point)
         showMessage(getString(R.string.main_check_route_go, label))
     }
@@ -1354,9 +1350,22 @@ class MainActivity : AppCompatActivity() {
         saveRecent(listOf(place) + recentPlaces().filter { Geo.distance(it.point, place.point) > 30.0 })
     }
 
+    /** The "unlock to see recent searches" line: once per search. */
+    private var recentHintShown = false
+
     /** Empty search box: the last destinations (hold one to forget it). */
     private fun showRecent() {
-        if (!com.backpack.app.security.AppLock.isOpen(this)) { com.backpack.app.security.AppLock.unlock(this) { if (searchOpen) showRecent() }; return }
+        // Locked: a tappable line instead of the unlock screen popping up while typing.
+        if (!com.backpack.app.security.AppLock.isOpen(this)) {
+            hideSuggestions()
+            if (!recentHintShown) {
+                recentHintShown = true
+                showMessage(getString(R.string.main_unlock_recents), onTap = {
+                    com.backpack.app.security.AppLock.unlock(this) { if (searchOpen) showRecent() }
+                }, showMs = 6000L)
+            }
+            return
+        }
         val recent = recentPlaces(forList = true)
         if (recent.isEmpty()) { hideSuggestions(); return }
         showSuggestions(recent, recent = true)
@@ -2255,10 +2264,6 @@ class MainActivity : AppCompatActivity() {
      *  before is kept for "Resume previous route"). */
     private fun goHere(point: LatLon, name: String) {
         // A destination, not a stop, even if stop mode was armed.
-        if (waypointModeArmed) {
-            waypointModeArmed = false
-            setIconActive(findViewById(R.id.waypoint_button), false)
-        }
         if (NavigationEngine.isActive) {
             val existing = NavigationEngine.remainingStops() ?: TripState.waypoints.toList()
             // Straight there: the detour (if any) is dropped, your own stops stay.
@@ -2392,12 +2397,13 @@ class MainActivity : AppCompatActivity() {
         val all = loadMyPlaces()
         val p = Popup(this, getString(R.string.main_edit_places))
         if (all.list.isEmpty()) p.text(getString(R.string.main_no_favs), 12f)
-        for (s in all.list) {
+        val homeWork = listOfNotNull(all.home, all.work).size
+        for ((i, s) in all.list.withIndex()) {
             p.section(spotLabel(s))
-            p.bodyButton(getString(R.string.main_rename)) { p.dismiss(); askName(s.name) { n -> storeMyPlaces(com.backpack.app.core.MyPlaces.rename(loadMyPlaces(), s, n)); editMyPlaces() } }
-            if (s.kind == com.backpack.app.core.MyPlaces.Kind.FAVOURITE && all.favourites.indexOf(s) > 0)
-                p.bodyButton(getString(R.string.main_move_up)) { p.dismiss(); storeMyPlaces(com.backpack.app.core.MyPlaces.moveUp(loadMyPlaces(), s)); editMyPlaces() }
-            p.bodyButton(getString(R.string.main_delete)) { p.dismiss(); storeMyPlaces(com.backpack.app.core.MyPlaces.remove(loadMyPlaces(), s)); editMyPlaces() }
+            p.bodyButton(getString(R.string.main_rename)) { p.dismiss(); askName(s.name) { n -> storeMyPlaces(com.backpack.app.core.MyPlaces.rename(loadMyPlaces(), i, n)); editMyPlaces() } }
+            if (s.kind == com.backpack.app.core.MyPlaces.Kind.FAVOURITE && i > homeWork)
+                p.bodyButton(getString(R.string.main_move_up)) { p.dismiss(); storeMyPlaces(com.backpack.app.core.MyPlaces.moveUp(loadMyPlaces(), i)); editMyPlaces() }
+            p.bodyButton(getString(R.string.main_delete)) { p.dismiss(); storeMyPlaces(com.backpack.app.core.MyPlaces.remove(loadMyPlaces(), i)); editMyPlaces() }
         }
         p.button(getString(R.string.main_close), primary = true) { p.dismiss() }
         p.show()
@@ -2447,7 +2453,7 @@ class MainActivity : AppCompatActivity() {
             if (navigating) addStopFlow(point, getString(R.string.main_this_place)) else addWaypoint(point)
         }
         if (!navigating) p.bodyButton(getString(R.string.main_start_here)) { p.dismiss(); handleStartOverride(point) }
-        p.bodyButton(getString(R.string.main_save_as)) { p.dismiss(); askSaveAs(point) }
+        p.bodyButton(getString(R.string.main_save_as)) { p.dismiss(); com.backpack.app.security.AppLock.unlock(this) { askSaveAs(point) } }
         p.button(getString(R.string.main_cancel), primary = true) { p.dismiss() }
         p.show()
     }
@@ -2463,8 +2469,6 @@ class MainActivity : AppCompatActivity() {
         refreshPins()
         if (Stops.ownCount(TripState.waypoints, TripState.detour) >= maxWaypoints) {
             // The natural next tap sets the destination, not a rejected 3rd stop.
-            waypointModeArmed = false
-            setIconActive(findViewById(R.id.waypoint_button), false)
             showMessage(getString(R.string.main_stop_added_dest))
         } else {
             showMessage(getString(R.string.main_stop_added_more))
@@ -4235,10 +4239,6 @@ class MainActivity : AppCompatActivity() {
             showMessage(getString(R.string.main_stop_nav_first_place))
             return
         }
-        if (waypointModeArmed) {
-            addWaypoint(point)
-            return
-        }
         // Your own choice wins over a place still waiting for GPS.
         TripState.pendingLink = null
         TripState.pendingLinkMode = null
@@ -4266,6 +4266,16 @@ class MainActivity : AppCompatActivity() {
     private fun handleStartOverride(point: LatLon) {
         if (NavigationEngine.isActive) {
             showMessage(getString(R.string.main_stop_nav_first))
+            return
+        }
+        // 1.9.0: a destination already chosen stays; the route is planned again from here.
+        val dest = TripState.destination
+        val stops = TripState.waypoints.toList()
+        if (dest != null) {
+            TripState.customStart = point
+            refreshPins()
+            showMessage(getString(R.string.main_finding_route))
+            requestBestRoute(point, dest, stops)
             return
         }
         clearRoute()

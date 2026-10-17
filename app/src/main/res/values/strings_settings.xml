@@ -87,12 +87,12 @@
     <string name="set_services_detour">Backpack services along a route: longest detour</string>
     <string name="set_work_detour">Work mode (min, there and back)</string>
     <string name="set_services_help">With a destination: the services you ticked in the backpack, along the route within this detour (Weekend mode: the detour in Settings &gt; Sights). Emergency adds hospitals, police and fire stations (15 min) and hides sights. Without a destination: within the reach time (Settings &gt; Sights) of the map centre; Emergency always around you.</string>
-    <string name="set_saved_places">Saved places</string>
+    <string name="set_saved_places">Downloaded places</string>
     <string name="set_saved_places_help">Places are fetched per square of about 5 km and kept on this phone (everyday places 3 days, sights 2 weeks), so an area already seen needs no server.</string>
     <string name="set_clear_recent">Clear recent searches</string>
     <string name="set_recent_cleared">Recent searches cleared</string>
-    <string name="set_clear_places">Clear saved places</string>
-    <string name="set_places_cleared">Saved places cleared</string>
+    <string name="set_clear_places">Clear downloaded places</string>
+    <string name="set_places_cleared">Downloaded places cleared</string>
     <string name="set_credits_intro">Backpack is free and built on these open projects. If it helps you, consider supporting them.</string>
     <string name="set_website">Website</string>
     <string name="set_support_them">Support them</string>

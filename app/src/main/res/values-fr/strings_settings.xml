@@ -87,12 +87,12 @@
     <string name="set_services_detour">Services du sac en route : détour maximal</string>
     <string name="set_work_detour">Mode Travail (min, aller-retour)</string>
     <string name="set_services_help">Avec destination : les services cochés, le long de l\'itinéraire dans ce détour (Week-end : celui de Visites). Urgence ajoute hôpitaux, police et pompiers. Sans destination : autour du centre de la carte ; Urgence autour de vous.</string>
-    <string name="set_saved_places">Lieux enregistrés</string>
+    <string name="set_saved_places">Lieux téléchargés</string>
     <string name="set_saved_places_help">Les lieux sont gardés sur ce téléphone par carrés de ~5 km (3 jours ; visites 2 semaines) : une zone déjà vue n\'a pas besoin de serveur.</string>
     <string name="set_clear_recent">Effacer les recherches</string>
     <string name="set_recent_cleared">Recherches effacées</string>
-    <string name="set_clear_places">Effacer les lieux</string>
-    <string name="set_places_cleared">Lieux effacés</string>
+    <string name="set_clear_places">Effacer les lieux téléchargés</string>
+    <string name="set_places_cleared">Lieux téléchargés effacés</string>
     <string name="set_credits_intro">Backpack est gratuit et repose sur ces projets ouverts. S\'il vous aide, soutenez-les.</string>
     <string name="set_website">Site web</string>
     <string name="set_support_them">Les soutenir</string>

@@ -116,8 +116,8 @@
     <string name="main_stop_mode_off">Modo parada apagado</string>
     <string name="main_this_place">Este lugar</string>
     <string name="main_max_stops">Máximo de %1$d paradas alcanzado</string>
-    <string name="main_stop_added_dest">Parada añadida. Tocar el mapa para el destino.</string>
-    <string name="main_stop_added_more">Parada añadida. Tocar para otra o fijar el destino.</string>
+    <string name="main_stop_added_dest">Parada añadida. Toque el mapa para el destino.</string>
+    <string name="main_stop_added_more">Parada añadida. Mantenga pulsado para otra o toque para el destino.</string>
     <string name="main_finding_route">Buscando ruta...</string>
     <string name="main_nav_stopped_cleared">Navegación detenida, ruta borrada</string>
     <string name="main_route_cleared">Ruta borrada</string>
@@ -202,7 +202,7 @@
     <string name="main_save_fav">Favorito</string>
     <string name="main_save">Guardar</string>
     <string name="main_place_name">Nombre</string>
-    <string name="main_saved_place">%1$s guardado</string>
+    <string name="main_saved_place">Guardado: %1$s</string>
     <string name="main_favs_full">Ya hay %1$d favoritos: borre uno antes</string>
     <string name="main_my_places">Mis lugares</string>
     <string name="main_home_not_set">Casa: sin definir (mantenga pulsado el mapa para guardarla)</string>
@@ -214,4 +214,5 @@
     <string name="main_move_up">↑ Subir</string>
     <string name="lock_title">Desbloquear Backpack</string>
     <string name="lock_subtitle">Sus lugares, viajes y ajustes</string>
+    <string name="main_unlock_recents">Toque para desbloquear sus búsquedas recientes</string>
 </resources>

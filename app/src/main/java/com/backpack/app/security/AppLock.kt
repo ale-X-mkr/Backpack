@@ -60,6 +60,8 @@ object AppLock {
         val prompt = BiometricPrompt(a, ContextCompat.getMainExecutor(a), object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 unlocked = true
+                // Turned or rebuilt meanwhile (day/night): the old screen is gone; tap again.
+                if (a.isDestroyed || a.isFinishing) return
                 then()
             }
         })

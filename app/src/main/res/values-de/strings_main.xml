@@ -117,7 +117,7 @@
     <string name="main_this_place">Dieser Ort</string>
     <string name="main_max_stops">Maximal %1$d Stopps erreicht</string>
     <string name="main_stop_added_dest">Stopp hinzugefügt. Karte antippen für das Ziel.</string>
-    <string name="main_stop_added_more">Stopp hinzugefügt. Noch einen oder das Ziel antippen.</string>
+    <string name="main_stop_added_more">Stopp hinzugefügt. Lange drücken für noch einen, antippen für das Ziel.</string>
     <string name="main_finding_route">Suche Route...</string>
     <string name="main_nav_stopped_cleared">Navigation beendet, Route gelöscht</string>
     <string name="main_route_cleared">Route gelöscht</string>
@@ -202,7 +202,7 @@
     <string name="main_save_fav">Favorit</string>
     <string name="main_save">Speichern</string>
     <string name="main_place_name">Name</string>
-    <string name="main_saved_place">%1$s gespeichert</string>
+    <string name="main_saved_place">Gespeichert: %1$s</string>
     <string name="main_favs_full">Schon %1$d Favoriten: zuerst einen löschen</string>
     <string name="main_my_places">Meine Orte</string>
     <string name="main_home_not_set">Zuhause: nicht gesetzt (Karte lange drücken zum Speichern)</string>
@@ -214,4 +214,5 @@
     <string name="main_move_up">↑ Nach oben</string>
     <string name="lock_title">Backpack entsperren</string>
     <string name="lock_subtitle">Ihre Orte, Fahrten und Einstellungen</string>
+    <string name="main_unlock_recents">Antippen, um letzte Suchen zu entsperren</string>
 </resources>

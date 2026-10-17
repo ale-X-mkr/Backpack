@@ -30,11 +30,15 @@ class MyPlacesTest {
         var a = MyPlaces.All()
         a = MyPlaces.save(a, MyPlaces.Kind.FAVOURITE, "A", p)!!
         a = MyPlaces.save(a, MyPlaces.Kind.FAVOURITE, "B", LatLon(1.0, 1.0))!!
-        a = MyPlaces.moveUp(a, a.favourites[1])
+        a = MyPlaces.moveUp(a, 1)
         assertEquals(listOf("B", "A"), a.favourites.map { it.name })
-        a = MyPlaces.rename(a, a.favourites[0], "Bee")
-        a = MyPlaces.remove(a, a.favourites[1])
+        a = MyPlaces.rename(a, 0, "Bee")
+        a = MyPlaces.remove(a, 1)
         assertEquals(listOf("Bee"), a.favourites.map { it.name })
+        // Two equal favourites: only the one chosen goes.
+        a = MyPlaces.save(a, MyPlaces.Kind.FAVOURITE, "Bee", p)!!
+        a = MyPlaces.save(a, MyPlaces.Kind.HOME, "H", p)!!
+        assertEquals(2, MyPlaces.remove(a, 2).list.size)
         assertEquals(0, MyPlaces.decode("garbage").list.size)
     }
 }

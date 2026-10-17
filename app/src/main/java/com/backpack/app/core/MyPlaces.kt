@@ -51,24 +51,33 @@ object MyPlaces {
         Kind.FAVOURITE -> if (a.favourites.size >= MAX_FAVOURITES) null else a.copy(favourites = a.favourites + Spot(Kind.FAVOURITE, name, p))
     }
 
-    fun remove(a: All, s: Spot): All = when (s.kind) {
-        Kind.HOME -> a.copy(home = null)
-        Kind.WORK -> a.copy(work = null)
-        Kind.FAVOURITE -> a.copy(favourites = a.favourites.filterNot { it == s })
+    /** [index] = position in [All.list] (Home, Work, then favourites): two equal favourites stay apart. */
+    private fun favIndex(a: All, index: Int) = index - listOfNotNull(a.home, a.work).size
+
+    fun remove(a: All, index: Int): All {
+        val s = a.list.getOrNull(index) ?: return a
+        return when (s.kind) {
+            Kind.HOME -> a.copy(home = null)
+            Kind.WORK -> a.copy(work = null)
+            Kind.FAVOURITE -> a.copy(favourites = a.favourites.filterIndexed { i, _ -> i != favIndex(a, index) })
+        }
     }
 
-    fun rename(a: All, s: Spot, name: String): All = when (s.kind) {
-        Kind.HOME -> a.copy(home = s.copy(name = name))
-        Kind.WORK -> a.copy(work = s.copy(name = name))
-        Kind.FAVOURITE -> a.copy(favourites = a.favourites.map { if (it == s) it.copy(name = name) else it })
+    fun rename(a: All, index: Int, name: String): All {
+        val s = a.list.getOrNull(index) ?: return a
+        return when (s.kind) {
+            Kind.HOME -> a.copy(home = s.copy(name = name))
+            Kind.WORK -> a.copy(work = s.copy(name = name))
+            Kind.FAVOURITE -> a.copy(favourites = a.favourites.mapIndexed { i, f -> if (i == favIndex(a, index)) f.copy(name = name) else f })
+        }
     }
 
     /** A favourite one place up in the list. */
-    fun moveUp(a: All, s: Spot): All {
-        val i = a.favourites.indexOf(s)
-        if (i <= 0) return a
+    fun moveUp(a: All, index: Int): All {
+        val i = favIndex(a, index)
+        if (a.list.getOrNull(index)?.kind != Kind.FAVOURITE || i <= 0) return a
         val m = a.favourites.toMutableList()
-        m.removeAt(i); m.add(i - 1, s)
+        val s = m.removeAt(i); m.add(i - 1, s)
         return a.copy(favourites = m)
     }
 }

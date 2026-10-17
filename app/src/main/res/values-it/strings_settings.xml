@@ -87,12 +87,12 @@
     <string name="set_services_detour">Servizi dello zaino lungo il percorso: deviazione massima</string>
     <string name="set_work_detour">Modalità Lavoro (min, andata e ritorno)</string>
     <string name="set_services_help">Con destinazione: i servizi scelti, lungo il percorso entro questa deviazione (Weekend: quella di Attrazioni). Emergenza aggiunge ospedali, polizia e pompieri. Senza destinazione: attorno al centro mappa; Emergenza attorno a te.</string>
-    <string name="set_saved_places">Luoghi salvati</string>
+    <string name="set_saved_places">Luoghi scaricati</string>
     <string name="set_saved_places_help">I luoghi restano su questo telefono a quadrati di ~5 km (3 giorni; attrazioni 2 settimane): una zona già vista non usa il server.</string>
     <string name="set_clear_recent">Cancella ricerche recenti</string>
     <string name="set_recent_cleared">Ricerche cancellate</string>
-    <string name="set_clear_places">Cancella luoghi salvati</string>
-    <string name="set_places_cleared">Luoghi cancellati</string>
+    <string name="set_clear_places">Cancella luoghi scaricati</string>
+    <string name="set_places_cleared">Luoghi scaricati cancellati</string>
     <string name="set_credits_intro">Backpack è gratuito e usa questi progetti aperti. Se ti aiuta, sostienili.</string>
     <string name="set_website">Sito web</string>
     <string name="set_support_them">Sostienili</string>

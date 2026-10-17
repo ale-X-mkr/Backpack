@@ -87,12 +87,12 @@
     <string name="set_services_detour">Rucksack-Dienste an der Route: max. Umweg</string>
     <string name="set_work_detour">Arbeitsmodus (Min., hin und zurück)</string>
     <string name="set_services_help">Mit Ziel: die gewählten Dienste an der Route in diesem Umweg (Wochenende: der unter Sehenswertes). Notfall fügt Kliniken, Polizei und Feuerwehr hinzu. Ohne Ziel: um die Kartenmitte; Notfall um Sie herum.</string>
-    <string name="set_saved_places">Gespeicherte Orte</string>
+    <string name="set_saved_places">Geladene Orte</string>
     <string name="set_saved_places_help">Orte bleiben in ~5-km-Quadraten auf diesem Telefon (3 Tage; Sehenswertes 2 Wochen): bekannte Gebiete brauchen keinen Server.</string>
     <string name="set_clear_recent">Letzte Suchen löschen</string>
     <string name="set_recent_cleared">Suchen gelöscht</string>
-    <string name="set_clear_places">Gespeicherte Orte löschen</string>
-    <string name="set_places_cleared">Orte gelöscht</string>
+    <string name="set_clear_places">Geladene Orte löschen</string>
+    <string name="set_places_cleared">Geladene Orte gelöscht</string>
     <string name="set_credits_intro">Backpack ist kostenlos und nutzt diese offenen Projekte. Wenn es hilft, unterstützen Sie sie.</string>
     <string name="set_website">Webseite</string>
     <string name="set_support_them">Unterstützen</string>

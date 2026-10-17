@@ -117,7 +117,7 @@
     <string name="main_this_place">Questo luogo</string>
     <string name="main_max_stops">Massimo di %1$d tappe raggiunto</string>
     <string name="main_stop_added_dest">Tappa aggiunta. Tocca la mappa per la destinazione.</string>
-    <string name="main_stop_added_more">Tappa aggiunta. Tocca per un\'altra o la destinazione.</string>
+    <string name="main_stop_added_more">Tappa aggiunta. Tieni premuto per un\'altra o tocca per la destinazione.</string>
     <string name="main_finding_route">Calcolo percorso...</string>
     <string name="main_nav_stopped_cleared">Navigazione fermata, percorso cancellato</string>
     <string name="main_route_cleared">Percorso cancellato</string>
@@ -202,7 +202,7 @@
     <string name="main_save_fav">Preferito</string>
     <string name="main_save">Salva</string>
     <string name="main_place_name">Nome</string>
-    <string name="main_saved_place">%1$s salvato</string>
+    <string name="main_saved_place">Salvato: %1$s</string>
     <string name="main_favs_full">Già %1$d preferiti: eliminane uno</string>
     <string name="main_my_places">I miei luoghi</string>
     <string name="main_home_not_set">Casa: non impostata (tieni premuto sulla mappa per salvarla)</string>
@@ -214,4 +214,5 @@
     <string name="main_move_up">↑ Su</string>
     <string name="lock_title">Sblocca Backpack</string>
     <string name="lock_subtitle">I tuoi luoghi, viaggi e impostazioni</string>
+    <string name="main_unlock_recents">Tocca per sbloccare le ricerche recenti</string>
 </resources>

@@ -117,7 +117,7 @@
     <string name="main_this_place">Ce lieu</string>
     <string name="main_max_stops">Maximum de %1$d étapes atteint</string>
     <string name="main_stop_added_dest">Étape ajoutée. Touchez la carte pour la destination.</string>
-    <string name="main_stop_added_more">Étape ajoutée. Touchez pour une autre ou la destination.</string>
+    <string name="main_stop_added_more">Étape ajoutée. Appui long pour une autre, ou touchez pour la destination.</string>
     <string name="main_finding_route">Calcul de l\'itinéraire...</string>
     <string name="main_nav_stopped_cleared">Navigation arrêtée, itinéraire effacé</string>
     <string name="main_route_cleared">Itinéraire effacé</string>
@@ -202,7 +202,7 @@
     <string name="main_save_fav">Favori</string>
     <string name="main_save">Enregistrer</string>
     <string name="main_place_name">Nom</string>
-    <string name="main_saved_place">%1$s enregistré</string>
+    <string name="main_saved_place">Enregistré : %1$s</string>
     <string name="main_favs_full">Déjà %1$d favoris : supprimez-en un</string>
     <string name="main_my_places">Mes lieux</string>
     <string name="main_home_not_set">Maison : non définie (appui long sur la carte pour l\'enregistrer)</string>
@@ -214,4 +214,5 @@
     <string name="main_move_up">↑ Monter</string>
     <string name="lock_title">Déverrouiller Backpack</string>
     <string name="lock_subtitle">Vos lieux, trajets et réglages</string>
+    <string name="main_unlock_recents">Touchez pour déverrouiller vos recherches récentes</string>
 </resources>

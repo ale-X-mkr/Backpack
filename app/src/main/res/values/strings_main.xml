@@ -117,7 +117,7 @@
     <string name="main_this_place">This place</string>
     <string name="main_max_stops">Maximum %1$d stops reached</string>
     <string name="main_stop_added_dest">Stop added. Tap the map to set your destination.</string>
-    <string name="main_stop_added_more">Stop added. Tap for one more, or set your destination.</string>
+    <string name="main_stop_added_more">Stop added. Hold the map for another, or tap to set your destination.</string>
     <string name="main_finding_route">Finding route...</string>
     <string name="main_nav_stopped_cleared">Navigation stopped, route cleared</string>
     <string name="main_route_cleared">Route cleared</string>
@@ -202,7 +202,7 @@
     <string name="main_save_fav">Favourite</string>
     <string name="main_save">Save</string>
     <string name="main_place_name">Name</string>
-    <string name="main_saved_place">%1$s saved</string>
+    <string name="main_saved_place">Saved: %1$s</string>
     <string name="main_favs_full">%1$d favourites already: delete one first</string>
     <string name="main_my_places">My places</string>
     <string name="main_home_not_set">Home: not set (hold the map on it to save it)</string>
@@ -214,4 +214,5 @@
     <string name="main_move_up">↑ Up</string>
     <string name="lock_title">Unlock Backpack</string>
     <string name="lock_subtitle">Your places, trips and settings</string>
+    <string name="main_unlock_recents">Tap to unlock your recent searches</string>
 </resources>
